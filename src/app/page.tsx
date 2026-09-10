@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import Header from "@/components/Header";
-import { getHomeLayout } from "@/lib/articles";
+import { getBigTake, getHomeLayout } from "@/lib/articles";
 import type { ArticleWithRelations } from "@/lib/types";
 import { formatPublishedAt, formatShortDate } from "@/lib/utils";
 
@@ -13,6 +13,7 @@ export default async function Home({ searchParams }: HomeProps) {
   const params = await searchParams;
   const category = params.category;
   const { featured, secondary, mostRead, latest } = await getHomeLayout(category);
+  const bigTake = await getBigTake(8);
 
   if (!featured) {
     return (
@@ -35,8 +36,8 @@ export default async function Home({ searchParams }: HomeProps) {
           </p>
         ) : null}
 
-        <section className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-0">
-          <article className="lg:col-span-6 lg:pr-6">
+        <section className="grid min-h-0 grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-0">
+          <article className="min-h-0 lg:col-span-6 lg:pr-6">
             <Link href={`/news/${featured.slug}`} className="group block">
               <div className="relative aspect-[16/10] overflow-hidden bg-neutral-100">
                 <Image
@@ -61,36 +62,40 @@ export default async function Home({ searchParams }: HomeProps) {
             </Link>
           </article>
 
-          <div className="divide-y divide-neutral-200 border-neutral-200 lg:col-span-3 lg:border-l lg:px-5">
-            {secondary.map((article) => (
-              <SecondaryCard key={article.id} article={article} />
-            ))}
-          </div>
+          <div className="grid min-h-0 grid-cols-1 items-stretch gap-6 lg:col-span-6 lg:grid-cols-2 lg:gap-0">
+            <div className="group relative h-[420px] min-h-0 overflow-hidden border-neutral-200 lg:h-0 lg:min-h-full lg:self-stretch lg:border-l lg:px-5">
+              <div className="absolute inset-0 overflow-hidden">
+                <div className="secondary-marquee">
+                  {[0, 1].flatMap((copy) =>
+                    secondary.map((article) => (
+                      <SecondaryCard
+                        key={`${article.id}-${copy}`}
+                        article={article}
+                      />
+                    )),
+                  )}
+                </div>
+                <div
+                  className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-white to-transparent"
+                  aria-hidden
+                />
+                <div
+                  className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-white to-transparent"
+                  aria-hidden
+                />
+              </div>
+            </div>
 
-          <aside className="lg:col-span-3 lg:border-l lg:border-neutral-200 lg:pl-5">
-            <h3 className="border-b border-neutral-200 pb-2 font-serif text-xl font-semibold tracking-tight">
-              Most Read
-            </h3>
-            <ol className="divide-y divide-neutral-200">
-              {mostRead.map((article, index) => (
-                <li key={article.id} className="py-3">
-                  <Link href={`/news/${article.slug}`} className="group flex gap-3">
-                    <span className="font-serif text-2xl font-semibold leading-none text-[#c41e3a]">
-                      {index + 1}
-                    </span>
-                    <span>
-                      <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500">
-                        {article.category.name}
-                      </span>
-                      <span className="mt-0.5 block text-sm font-semibold leading-5 text-neutral-950 group-hover:text-[#c41e3a]">
-                        {article.title}
-                      </span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ol>
-          </aside>
+            <aside className="min-h-0 lg:border-l lg:border-neutral-200 lg:pl-5">
+              <RankedRail title="Most Read" articles={mostRead} />
+              <RankedRail
+                title="The Big Take"
+                articles={bigTake}
+                className="mt-8"
+                scrollable
+              />
+            </aside>
+          </div>
         </section>
 
         {latest.length ? (
@@ -127,9 +132,59 @@ export default async function Home({ searchParams }: HomeProps) {
   );
 }
 
+function RankedRail({
+  title,
+  articles,
+  className,
+  scrollable = false,
+}: {
+  title: string;
+  articles: ArticleWithRelations[];
+  className?: string;
+  scrollable?: boolean;
+}) {
+  if (!articles.length) return null;
+
+  return (
+    <div className={className}>
+      <h3 className="border-b border-neutral-200 pb-2 font-serif text-xl font-semibold tracking-tight">
+        {title}
+      </h3>
+      <ol
+        className={
+          scrollable
+            ? "max-h-[380px] divide-y divide-neutral-200 overflow-y-auto scroll-smooth scrollbar-thin"
+            : "divide-y divide-neutral-200"
+        }
+      >
+        {articles.map((article, index) => (
+          <li key={article.id} className="py-3">
+            <Link href={`/news/${article.slug}`} className="group flex gap-3">
+              <span className="font-serif text-2xl font-semibold leading-none text-[#c41e3a]">
+                {index + 1}
+              </span>
+              <span>
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500">
+                  {article.category.name}
+                </span>
+                <span className="mt-0.5 block text-sm font-semibold leading-5 text-neutral-950 group-hover:text-[#c41e3a]">
+                  {article.title}
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function SecondaryCard({ article }: { article: ArticleWithRelations }) {
   return (
-    <Link href={`/news/${article.slug}`} className="group flex gap-3 py-3 first:pt-0">
+    <Link
+      href={`/news/${article.slug}`}
+      className="flex gap-3 border-b border-neutral-200 py-3 last:border-b-0 hover:[&_h3]:text-[#c41e3a]"
+    >
       <div className="relative h-[72px] w-[96px] shrink-0 overflow-hidden bg-neutral-100">
         <Image
           src={article.cover_image_url}
@@ -143,9 +198,12 @@ function SecondaryCard({ article }: { article: ArticleWithRelations }) {
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">
           {article.category.name}
         </p>
-        <h3 className="mt-0.5 font-serif text-[15px] font-semibold leading-snug tracking-tight text-neutral-950 group-hover:text-[#c41e3a]">
+        <h3 className="mt-0.5 font-serif text-[15px] font-semibold leading-snug tracking-tight text-neutral-950">
           {article.title}
         </h3>
+        <p className="mt-1 text-[11px] text-neutral-500">
+          {formatShortDate(article.published_at)}
+        </p>
       </div>
     </Link>
   );

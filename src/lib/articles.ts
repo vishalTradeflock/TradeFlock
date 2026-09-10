@@ -85,10 +85,27 @@ export async function getRelatedArticles(article: ArticleWithRelations, limit = 
   return [...sameDesk, ...filler].slice(0, limit);
 }
 
+export async function getBigTake(limit = 8) {
+  const articles = await getArticles();
+  const deepDives = articles.filter((article) =>
+    ["markets", "finance", "tech", "leadership"].includes(article.category.slug),
+  );
+  const source = deepDives.length >= 6 ? deepDives : articles;
+  return source.slice(0, limit);
+}
+
 export async function getHomeLayout(categorySlug?: string) {
   const articles = await getArticles(categorySlug);
   const featured = articles.find((article) => article.is_featured) ?? articles[0];
-  const secondary = articles.filter((article) => article.id !== featured?.id).slice(0, 4);
+  let secondary = articles.filter((article) => article.id !== featured?.id).slice(0, 10);
+  if (secondary.length < 8) {
+    const extras = (await getArticles()).filter(
+      (article) =>
+        article.id !== featured?.id &&
+        !secondary.some((item) => item.id === article.id),
+    );
+    secondary = [...secondary, ...extras].slice(0, 10);
+  }
   const mostRead = (await getMostRead(5)).filter((article) =>
     categorySlug ? article.category.slug === categorySlug : true,
   );

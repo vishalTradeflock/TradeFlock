@@ -1,4 +1,5 @@
 import Link from "next/link";
+import TradeFlockLogo from "@/components/TradeFlockLogo";
 import { NAV_CATEGORIES } from "@/lib/types";
 
 const SECTION_LINKS = [
@@ -7,7 +8,8 @@ const SECTION_LINKS = [
     href: `/?category=${category.slug}`,
     label: category.name,
   })),
-  { href: "/magazine", label: "TradeFlock Magazine" },
+  { href: "/success-insights", label: "Success Insights" },
+  { href: "/magazine", label: "Publication" },
 ];
 
 const COMPANY_LINKS = [
@@ -31,12 +33,9 @@ export default function Footer() {
     <footer className="mt-10 border-t border-neutral-200 bg-white">
       <div className="mx-auto grid max-w-[1240px] gap-8 px-4 py-8 sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <p className="font-serif text-2xl font-semibold tracking-tight">
-            TradeFlock
-            <span className="ml-1 font-sans text-[10px] font-bold tracking-[0.2em] text-[#c41e3a]">
-              USA
-            </span>
-          </p>
+          <Link href="/" className="inline-block">
+            <TradeFlockLogo className="text-2xl" />
+          </Link>
           <p className="mt-2 max-w-sm text-sm leading-6 text-neutral-600">
             An independent business desk covering markets, technology, finance,
             and the people who run American companies.

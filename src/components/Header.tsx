@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import TradeFlockLogo from "@/components/TradeFlockLogo";
 import { NAV_CATEGORIES } from "@/lib/types";
 import { getBreakingArticles } from "@/lib/articles";
 import { cn, formatDateline } from "@/lib/utils";
@@ -7,7 +8,7 @@ import { Search } from "lucide-react";
 
 type HeaderProps = {
   activeCategory?: string;
-  activePage?: "magazine";
+  activePage?: "magazine" | "success-insights";
 };
 
 export default async function Header({
@@ -59,14 +60,8 @@ export default async function Header({
 
       <div className="mx-auto flex max-w-[1240px] items-end justify-between px-4 pb-3 pt-4">
         <Link href="/" className="group block">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.42em] text-neutral-500">
-            Business &amp; Markets
-          </p>
-          <h1 className="font-serif text-4xl font-semibold tracking-tight text-neutral-950 sm:text-5xl">
-            TradeFlock
-            <span className="ml-2 align-top font-sans text-[11px] font-bold tracking-[0.28em] text-[#c41e3a]">
-              USA
-            </span>
+          <h1>
+            <TradeFlockLogo className="text-4xl sm:text-5xl" />
           </h1>
         </Link>
         <form
@@ -102,8 +97,14 @@ export default async function Header({
               {category.name}
             </NavLink>
           ))}
+          <NavLink
+            href="/success-insights"
+            active={activePage === "success-insights"}
+          >
+            Success Insights
+          </NavLink>
           <NavLink href="/magazine" active={activePage === "magazine"}>
-            TradeFlock Magazine
+            Publication
           </NavLink>
         </div>
       </nav>
