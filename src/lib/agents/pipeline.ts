@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import {
   EDITOR_IN_CHIEF_PROMPT,
+  PUBLISH_SCORE_MIN,
   WRITER_PROMPTS,
   resolveWriterDesk,
   type WriterDesk,
@@ -182,13 +183,13 @@ export async function processNewsLead(lead: NewsLead): Promise<PipelineResult> {
   const draft = await draftFromWriter(desk, lead);
   const verdict = await editWithEditor(desk, lead, draft);
 
-  if (!verdict.approved || verdict.score < 8) {
+  if (!verdict.approved || verdict.score < PUBLISH_SCORE_MIN) {
     return {
       published: false,
       score: verdict.score,
       desk,
       title: verdict.editedTitle,
-      reason: "Held by the editor-in-chief (score below 8 or not approved).",
+      reason: `Held by the editor-in-chief (score below ${PUBLISH_SCORE_MIN} or not approved).`,
     };
   }
 

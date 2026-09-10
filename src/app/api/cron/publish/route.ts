@@ -9,7 +9,8 @@ import { processNewsLead, type PipelineResult } from "@/lib/agents/pipeline";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-export const maxDuration = 120;
+// Default batch is 2 long-form drafts (writer + editor). 300s covers that and the max of 3.
+export const maxDuration = 300;
 
 const TEST_LEAD: IncomingLead = {
   topic: "U.S. chip equipment makers report a jump in export licenses for allied fabs",

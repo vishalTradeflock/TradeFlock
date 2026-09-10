@@ -1,18 +1,29 @@
-name: Hourly News Publishing Pipeline
+name: Weekday Newsroom Pipeline
 
 on:
   schedule:
-    - cron: "0 * * * *"
+    # Weekday U.S. newsroom window only — overnight and weekends are off.
+    #
+    # Target: Mon–Fri 7:00am–6:45pm America/New_York.
+    # GitHub Actions cron is UTC. In September (EDT, UTC-4):
+    #   7:00am ET = 11:00 UTC
+    #   6:45pm ET = 22:45 UTC
+    # So: every 15 minutes, 11:00–22:45 UTC, Monday–Friday.
+    #
+    # During EST (UTC-5) the same UTC clock is 6:00am–5:45pm ET.
+    # No overnight or weekend schedule (use workflow_dispatch for a one-off).
+    - cron: "*/15 11-22 * * 1-5"
   workflow_dispatch:
 
 jobs:
   publish:
     name: Run Gemini Newsroom
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     steps:
       - name: Trigger Publishing Endpoint
         run: |
-          response=$(curl -s -w "\n%{http_code}" -X GET "https://tradeflock-usa-nine.vercel.app/api/cron/publish" \
+          response=$(curl -s -w "\n%{http_code}" -m 310 -X GET "https://tradeflock-usa-nine.vercel.app/api/cron/publish" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
 
           body=$(echo "$response" | sed '$d')

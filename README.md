@@ -2,19 +2,47 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Newsroom pipeline
 
-Hourly GitHub Actions hits `GET /api/cron/publish` with `Authorization: Bearer $CRON_SECRET`. The route pulls one fresh item from a curated RSS list, drafts via the desk writers, and publishes only if the editor-in-chief scores it ≥ 8.
+Weekday GitHub Actions hits `GET /api/cron/publish` with `Authorization: Bearer $CRON_SECRET`. The route pulls fresh items from a curated RSS list, drafts via the desk writers, and publishes only if the editor-in-chief scores the piece **≥ 8.5**.
+
+### Schedule (U.S. Eastern newsroom window)
+
+- **When:** Monday–Friday, every **15 minutes**, about **7:00am–6:45pm America/New_York**.
+- **UTC cron:** `*/15 11-22 * * 1-5` (GitHub Actions cron is UTC).
+- **EDT (UTC-4, including September):** 11:00–22:45 UTC = 7:00am–6:45pm ET.
+- **EST (UTC-5):** the same UTC clock is 6:00am–5:45pm ET.
+- **Off:** overnight and weekends. Use `workflow_dispatch` for a one-off run. No Vercel cron.
+
+Auth is unchanged: the route still requires `Authorization: Bearer $CRON_SECRET`.
+
+### Editorial bar (Forbes / Entrepreneur)
+
+Prompts live in `src/lib/agents/prompts.ts`. The coded pipeline writes volume; this is not a chat bot.
+
+Score is 0–10 after the edit (`PUBLISH_SCORE_MIN = 8.5`). An **8.0** is a competent wire expansion and is **held**.
+
+| Score | Meaning |
+| --- | --- |
+| **8.5+** | Specific, attributed, operator-useful; news-first; no invented facts. Publishable. |
+| **8.0** | Close: soft lede, generic "so what," or press-release cadence. Hold. |
+| **<8** | Thin, fluffy, unsourced, or marketing voice. Hold. |
+
+An 8.5 requires named attribution from the RSS notes, no invented quotes/figures/analysts, a concrete stake for an operator or allocator, and tight newspaper English. HTML output is `<p>` body copy plus the required `<h3>` section heads.
+
+### Defaults
 
 **Required env vars:** `CRON_SECRET`, `GEMINI_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
 
 **Optional env vars:**
-- `NEWS_FEEDS_JSON` — JSON array that replaces the default feed list, e.g. `[{"name":"TechCrunch","url":"https://techcrunch.com/feed/","desk":"tech"}]`. Desk must be `tech`, `markets`, `ma`, `strategy`, `macro`, or `retail`.
-- `NEWS_LEAD_BATCH_SIZE` — how many leads to process per run (default `1`, max `3`).
+- `NEWS_FEEDS_JSON` — JSON array that replaces the default feed list, e.g. `[{"name":"TechCrunch","url":"https://techcrunch.com/feed/","desk":"tech"}]`. Desk must be `tech`, `markets`, `ma`, `strategy`, `macro`, or `retail`. Optional feeds may set `"optional": true` and `"timeoutMs": 18000`.
+- `NEWS_LEAD_BATCH_SIZE` — how many leads to process per run (default **`2`**, max **`3`**). Cron `maxDuration` is **300s** so a default batch of two long-form drafts (writer + editor) can finish.
 - `NEWS_LEAD_DEDUPE_DAYS` — skip titles/URLs seen in this window (default `7`).
 - `USE_TEST_LEAD=1` — local-only fallback that skips RSS and uses the old fixture lead.
 
-Default feeds live in `src/lib/agents/feeds.ts` (TechCrunch, CNBC tech/finance/economy/retail, Federal Reserve, SEC, NPR Business, PR Newswire M&A). A dead feed is logged and skipped; the cron keeps going.
+Default feeds live in `src/lib/agents/feeds.ts` (TechCrunch, CNBC tech/finance/economy/retail, Federal Reserve, SEC, NPR Business, PR Newswire M&A). A dead feed is logged and skipped; the cron keeps going. Per-feed timeout is **12s** (was 8s). **PR Newswire M&A** is marked `optional` with an **18s** budget so a timeout cannot fail the run.
 
-Dedupe checks recent Supabase `articles` (normalized title, slug prefix, source URL in body) plus `processed_leads` so held stories are not retried every hour. Apply the `processed_leads` table from `supabase/schema.sql` in the Supabase SQL editor. If that table is missing, intake still runs and falls back to article-only dedupe.
+Intake prefers a **least-recently-used desk rotation**: when several fresh leads exist, a tech feed does not take every slot. The picker round-robins desks, starting with those that have not published recently (`processed_leads`).
+
+Dedupe checks recent Supabase `articles` (normalized title, slug prefix, source URL in body) plus `processed_leads` so held stories are not retried every run. Apply the `processed_leads` table from `supabase/schema.sql` in the Supabase SQL editor. If that table is missing, intake still runs and falls back to article-only dedupe.
 
 Attribution is source name + URL + a short RSS summary in `rawSource` notes. The pipeline does not scrape article HTML.
 
