@@ -6,6 +6,9 @@ import { getBigTake, getHomeLayout } from "@/lib/articles";
 import type { ArticleWithRelations } from "@/lib/types";
 import { formatPublishedAt, formatShortDate, formatTimeAgo } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type HomeProps = {
   searchParams: Promise<{ category?: string; q?: string }>;
 };
