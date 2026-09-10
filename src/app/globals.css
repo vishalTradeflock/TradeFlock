@@ -1,0 +1,54 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --news-red: #c41e3a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-news-red: var(--news-red);
+  --font-sans: var(--font-source-sans);
+  --font-serif: var(--font-playfair);
+}
+
+html {
+  background: #ffffff;
+}
+
+body {
+  background: #ffffff;
+  color: #171717;
+  font-family: var(--font-source-sans), "Source Sans 3", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker 42s linear infinite;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.prose-article {
+  --tw-prose-body: #262626;
+  --tw-prose-headings: #171717;
+  --tw-prose-links: #c41e3a;
+  --tw-prose-bold: #171717;
+  --tw-prose-quotes: #404040;
+  --tw-prose-quote-borders: #e5e5e5;
+}

@@ -1,0 +1,68 @@
+# TradeFlock USA — Editorial Design System
+
+TradeFlock USA is a U.S. business publication in the tradition of IBTimes:
+a clean white canvas, hairline rules, dense multi-column news pages, and
+serif headlines that read as journalism — not as a SaaS marketing site.
+
+Prefer Next.js App Router Server Components. Fetch on the server. Keep
+client components small and only for interaction (mobile menu, ticker
+pause). Do not introduce a global client wrapper.
+
+## Color & surface
+
+- Page background is always `bg-white`. Body text is near-black (`text-neutral-900`).
+- Do not use dark mode, zinc/slate page backgrounds, gradients, or glassmorphism.
+- Hairline borders only: `border-neutral-200` (1px). No thick rules except the
+  masthead underline (`border-b` / `border-t`) and the category bar.
+- Accent is spare: a single newsroom red (`#c41e3a`) for BREAKING, kicker labels,
+  and "Most Read" numerals. Links hover to this red; they are otherwise inherited.
+- Do not use drop shadows, `rounded-xl` cards, or colored section backgrounds.
+  Thumbnails may be `rounded-none`.
+
+## Typography
+
+- Display / headlines: Playfair Display (`font-serif`). Tight tracking on the
+  masthead; slightly tight tracking on story headlines (`tracking-tight`).
+- UI, kickers, bylines, body: Source Sans 3 (`font-sans`).
+- Kickers (section labels) are 11–12px, uppercase, letterspaced (`tracking-widest`),
+  `font-semibold`, often red or `text-neutral-500`.
+- Headlines scale down quickly. Homepage hero can be `text-3xl`–`text-5xl`;
+  secondary cards `text-lg`–`text-xl`; rails and lists `text-sm`–`text-base`.
+- Body copy on article pages uses `@tailwindcss/typography` (`prose prose-neutral`)
+  with a readable measure (`max-w-3xl`), not full-bleed paragraphs.
+- Datelines and timestamps use tabular, compact sans (`text-xs text-neutral-500`).
+
+## Layout density
+
+- Desktop homepages are a 3-column asymmetric grid: a wide hero, a stacked
+  secondary column of thumbnail + headline cards, and a narrow right rail
+  for numbered Most Read (1–5).
+- Gutters are tight: `gap-4` / `gap-6` and `px-4` / `max-w-[1240px]`.
+- Stack columns below `lg`. Do not hide the Most Read rail on tablet if it
+  can wrap below the hero.
+- Article pages: reading column + right rail of related stories, divided by
+  a hairline (`border-l border-neutral-200`).
+- Prefer dividing lines between stacked items (`divide-y divide-neutral-200`)
+  over cards-in-a-card.
+
+## Components & data
+
+- `Header` includes: breaking ticker, New York dateline, wordmark, category nav.
+- Categories are Tech, Markets, Leadership, Finance. Do not invent a consumer
+  tabloid taxonomy.
+- Read from Supabase in Server Components via `src/lib/supabase/server.ts`.
+  Fall back to `src/lib/data/seed.ts` when env vars are missing so the UI
+  remains populated in local/dev builds.
+- Dynamic article routes live at `/news/[slug]` and must export
+  `generateMetadata` (title, description, Open Graph).
+- Images: `next/image` with explicit `sizes`. Remote hosts must be allowlisted
+  in `next.config.ts`.
+
+## Code defaults
+
+- TypeScript strict. No `any`.
+- Use the `cn()` helper (`clsx` + `tailwind-merge`) for conditional classes.
+- Server Components by default; add `"use client"` only when hooks or
+  browser APIs are required.
+- Do not add authentication UI, dashboards, or CRUD unless explicitly asked.
+  This is a reader-facing publication.
