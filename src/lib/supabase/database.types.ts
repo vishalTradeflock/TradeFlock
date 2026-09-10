@@ -132,6 +132,39 @@ export type Database = {
           },
         ];
       };
+      processed_leads: {
+        Row: {
+          id: string;
+          title: string;
+          title_key: string;
+          source_url: string | null;
+          source_name: string | null;
+          desk: string | null;
+          outcome: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          title_key: string;
+          source_url?: string | null;
+          source_name?: string | null;
+          desk?: string | null;
+          outcome?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          title_key?: string;
+          source_url?: string | null;
+          source_name?: string | null;
+          desk?: string | null;
+          outcome?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
