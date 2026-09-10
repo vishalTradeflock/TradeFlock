@@ -100,7 +100,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             <p className="mt-2 text-[11px] text-neutral-500">{article.cover_image_alt}</p>
 
             <div
-              className="prose-article prose prose-neutral mt-8 max-w-3xl prose-p:text-[17px] prose-p:leading-8"
+              className="prose-article prose prose-neutral mt-8 max-w-none prose-p:mb-5 prose-p:leading-relaxed prose-h3:mt-8 prose-h3:mb-3"
               dangerouslySetInnerHTML={{ __html: article.body }}
             />
           </article>

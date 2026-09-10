@@ -24,11 +24,14 @@ export async function completeLlmChat(options: {
   user: string;
   temperature?: number;
   json?: boolean;
+  maxTokens?: number;
 }) {
   const client = getLlmClient();
+  const maxTokens = options.maxTokens ?? 2048;
   const completion = await client.chat.completions.create({
     model: process.env.GEMINI_MODEL || "gemini-3.6-flash",
     temperature: options.temperature ?? 0.4,
+    max_tokens: maxTokens,
     ...(options.json ? { response_format: { type: "json_object" as const } } : {}),
     messages: [
       { role: "system", content: options.system },

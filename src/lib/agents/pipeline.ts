@@ -92,7 +92,7 @@ function slugify(title: string) {
 }
 
 function toHtmlBody(content: string) {
-  if (content.includes("<p>")) return content;
+  if (content.includes("<p>") || content.includes("<h3>")) return content;
   return content
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.trim())
@@ -105,7 +105,8 @@ async function draftFromWriter(desk: WriterDesk, lead: NewsLead) {
   return completeLlmChat({
     system: WRITER_PROMPTS[desk],
     temperature: 0.45,
-    user: `Write a 400-word TradeFlock USA news piece.
+    maxTokens: 2048,
+    user: `Write a 600-to-800-word TradeFlock USA analysis (5–7 substantial paragraphs) with the required <h3> section heads.
 
 Topic: ${lead.topic}
 Assigned category: ${lead.category}
@@ -120,6 +121,7 @@ async function editWithEditor(desk: WriterDesk, lead: NewsLead, draft: string) {
     system: EDITOR_IN_CHIEF_PROMPT,
     temperature: 0.2,
     json: true,
+    maxTokens: 4096,
     user: `Desk: ${desk}
 Topic: ${lead.topic}
 Category: ${lead.category}
