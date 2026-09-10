@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import {
   collectFreshLeads,
   leadBatchSize,
+  leadWasRecentlySeen,
   markLeadProcessed,
   type IncomingLead,
 } from "@/lib/agents/leads";
 import { processNewsLead, type PipelineResult } from "@/lib/agents/pipeline";
+import { isLlmQuotaError } from "@/lib/llm";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -30,10 +32,21 @@ function isAuthorized(request: Request) {
 }
 
 function shouldUseTestLead() {
+  // The fixture is for local/preview only. Production always reads RSS so a
+  // leftover USE_TEST_LEAD=1 cannot reprint the chip-export stub every tick.
+  if (process.env.VERCEL_ENV === "production") return false;
   return process.env.USE_TEST_LEAD === "1";
 }
 
 function errorResponse(err: unknown) {
+  if (isLlmQuotaError(err)) {
+    return NextResponse.json({
+      ok: true,
+      reason: "llm_quota_exhausted",
+      error: err.message,
+      results: [],
+    });
+  }
   const message = err instanceof Error ? err.message : "Pipeline failed";
   return NextResponse.json({ ok: false, error: message }, { status: 500 });
 }
@@ -48,6 +61,17 @@ function summarizeResult(lead: IncomingLead, result: PipelineResult) {
   };
 }
 
+function failureMessage(err: unknown): string {
+  if (isLlmQuotaError(err)) return err.message;
+  return err instanceof Error ? err.message : "Pipeline failed";
+}
+
+function isQuotaFailure(message: string): boolean {
+  return /quota exhausted|RESOURCE_EXHAUSTED|(?:^|\D)429(?:\D|$)|exceeded your current quota/i.test(
+    message,
+  );
+}
+
 async function runLead(lead: IncomingLead) {
   const result = await processNewsLead(lead);
   await markLeadProcessed(lead, result.published ? "published" : "held");
@@ -60,6 +84,15 @@ async function runPipeline(request: Request) {
   }
 
   if (shouldUseTestLead()) {
+    if (await leadWasRecentlySeen(TEST_LEAD)) {
+      return NextResponse.json({
+        ok: true,
+        mode: "test_lead",
+        reason: "already_processed",
+        results: [],
+      });
+    }
+
     const result = await runLead(TEST_LEAD);
     return NextResponse.json({
       ok: true,
@@ -87,29 +120,48 @@ async function runPipeline(request: Request) {
 
   const results: ReturnType<typeof summarizeResult>[] = [];
   const failures: { topic: string; error: string }[] = [];
+  let quotaExhausted = false;
 
   for (const lead of intake.leads) {
     try {
       results.push(await runLead(lead));
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Pipeline failed";
+      const message = failureMessage(err);
       failures.push({ topic: lead.topic, error: message });
+      if (isLlmQuotaError(err) || isQuotaFailure(message)) {
+        quotaExhausted = true;
+        break;
+      }
     }
   }
 
+  const intakeSummary = {
+    feedsAttempted: intake.feedsAttempted,
+    feedErrors: intake.feedErrors,
+    feedWarning: intake.feedWarning,
+    candidates: intake.candidates,
+    skipped: intake.skipped,
+  };
+
   if (results.length === 0 && failures.length > 0) {
+    if (quotaExhausted || failures.every((item) => isQuotaFailure(item.error))) {
+      return NextResponse.json({
+        ok: true,
+        mode: "rss",
+        reason: "llm_quota_exhausted",
+        error: failures[0]?.error ?? "Gemini quota exhausted.",
+        intake: intakeSummary,
+        failures,
+        results,
+      });
+    }
+
     return NextResponse.json(
       {
         ok: false,
         mode: "rss",
         error: failures[0]?.error ?? "Pipeline failed",
-        intake: {
-          feedsAttempted: intake.feedsAttempted,
-          feedErrors: intake.feedErrors,
-          feedWarning: intake.feedWarning,
-          candidates: intake.candidates,
-          skipped: intake.skipped,
-        },
+        intake: intakeSummary,
         failures,
         results,
       },
@@ -120,13 +172,8 @@ async function runPipeline(request: Request) {
   return NextResponse.json({
     ok: true,
     mode: "rss",
-    intake: {
-      feedsAttempted: intake.feedsAttempted,
-      feedErrors: intake.feedErrors,
-      feedWarning: intake.feedWarning,
-      candidates: intake.candidates,
-      skipped: intake.skipped,
-    },
+    ...(quotaExhausted ? { reason: "llm_quota_exhausted" } : {}),
+    intake: intakeSummary,
     failures,
     results,
   });

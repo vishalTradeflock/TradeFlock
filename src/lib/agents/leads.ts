@@ -1,5 +1,6 @@
 import { pickBalancedLeads } from "@/lib/agents/desk-balance";
 import { resolveNewsFeeds, type NewsFeed } from "@/lib/agents/feeds";
+import { isUsableLeadItem, titlesAreNearDuplicate } from "@/lib/agents/lead-filters";
 import type { NewsLead } from "@/lib/agents/pipeline";
 import { resolveWriterDesk, type WriterDesk } from "@/lib/agents/prompts";
 import { parseFeedItems } from "@/lib/agents/rss";
@@ -18,8 +19,6 @@ const MACRO_RE =
   /\b(federal reserve|\bfed\b|fomc|interest rate|inflation|consumer price|cpi|payrolls|nonfarm|gdp|treasury yield)\b/i;
 const STRATEGY_RE =
   /\b(named ceo|steps down|resigns as|chief executive|board chair|succession)\b/i;
-const SKIP_TITLE_RE =
-  /\b(stocks to (buy|watch)|what to watch|our \d+-stock portfolio|best (credit cards|savings accounts)|these \d+ stocks)\b/i;
 
 export type IncomingLead = NewsLead & {
   sourceName: string;
@@ -153,10 +152,6 @@ function toIncomingLead(candidate: Candidate): IncomingLead {
   };
 }
 
-function isUsableItem(title: string, link: string): boolean {
-  return title.length >= 16 && /^https?:\/\//i.test(link) && !SKIP_TITLE_RE.test(title);
-}
-
 function isMissingTableError(error: { message: string; code?: string }): boolean {
   const message = error.message.toLowerCase();
   return (
@@ -193,7 +188,7 @@ async function fetchFeedXml(feed: NewsFeed): Promise<string> {
 
 function candidatesFromFeed(feed: NewsFeed, xml: string): Candidate[] {
   return parseFeedItems(xml).flatMap((item) => {
-    if (!isUsableItem(item.title, item.link)) return [];
+    if (!isUsableLeadItem(item.title, item.link)) return [];
     const titleKey = normalizeTitleKey(item.title);
     if (!titleKey) return [];
     return [
@@ -266,7 +261,31 @@ function isTaken(candidate: Candidate, taken: TakenKeys): boolean {
     return true;
   }
 
+  for (const key of taken.titleKeys) {
+    if (titlesAreNearDuplicate(candidate.titleKey, key)) return true;
+  }
+
   return false;
+}
+
+export async function leadWasRecentlySeen(lead: IncomingLead): Promise<boolean> {
+  const since = new Date(
+    Date.now() - envInt("NEWS_LEAD_DEDUPE_DAYS", DEFAULT_DEDUPE_DAYS) * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const taken = await loadTakenKeys(since);
+  return isTaken(
+    {
+      title: lead.topic,
+      link: lead.sourceUrl,
+      summary: "",
+      publishedAt: 0,
+      sourceName: lead.sourceName,
+      desk: resolveWriterDesk(lead.category),
+      titleKey: lead.titleKey,
+      normalizedUrl: normalizeUrl(lead.sourceUrl),
+    },
+    taken,
+  );
 }
 
 function dedupeCandidates(items: Candidate[]): Candidate[] {
