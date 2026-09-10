@@ -72,6 +72,7 @@ export type Database = {
           is_featured: boolean;
           is_breaking: boolean;
           view_count: number;
+          status: "draft" | "review" | "published";
           published_at: string;
           created_at: string;
           updated_at: string;
@@ -90,6 +91,7 @@ export type Database = {
           is_featured?: boolean;
           is_breaking?: boolean;
           view_count?: number;
+          status?: "draft" | "review" | "published";
           published_at?: string;
           created_at?: string;
           updated_at?: string;
@@ -108,6 +110,7 @@ export type Database = {
           is_featured?: boolean;
           is_breaking?: boolean;
           view_count?: number;
+          status?: "draft" | "review" | "published";
           published_at?: string;
           created_at?: string;
           updated_at?: string;

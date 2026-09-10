@@ -42,11 +42,16 @@ create table if not exists public.articles (
   is_featured boolean not null default false,
   is_breaking boolean not null default false,
   view_count integer not null default 0 check (view_count >= 0),
+  status text not null default 'published',
   published_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint articles_slug_format check (slug ~ '^[a-z0-9-]+$')
+  constraint articles_slug_format check (slug ~ '^[a-z0-9-]+$'),
+  constraint articles_status_allowed check (status in ('draft', 'review', 'published'))
 );
+
+alter table public.articles
+  add column if not exists status text not null default 'published';
 
 -- ---------------------------------------------------------------------------
 -- updated_at trigger
