@@ -1,6 +1,6 @@
-import Image from "next/image";
 import Link from "next/link";
 import Header from "@/components/Header";
+import SafeArticleImage from "@/components/SafeArticleImage";
 import { getBigTake, getHomeLayout } from "@/lib/articles";
 import type { ArticleWithRelations } from "@/lib/types";
 import { formatPublishedAt, formatShortDate } from "@/lib/utils";
@@ -40,7 +40,7 @@ export default async function Home({ searchParams }: HomeProps) {
           <article className="min-h-0 lg:col-span-6 lg:pr-6">
             <Link href={`/news/${featured.slug}`} className="group block">
               <div className="relative aspect-[16/10] overflow-hidden bg-neutral-100">
-                <Image
+                <SafeArticleImage
                   src={featured.cover_image_url}
                   alt={featured.cover_image_alt}
                   fill
@@ -186,12 +186,11 @@ function SecondaryCard({ article }: { article: ArticleWithRelations }) {
       className="flex gap-3 border-b border-neutral-200 py-3 last:border-b-0 hover:[&_h3]:text-[#c41e3a]"
     >
       <div className="relative h-[72px] w-[96px] shrink-0 overflow-hidden bg-neutral-100">
-        <Image
+        <SafeArticleImage
           src={article.cover_image_url}
           alt={article.cover_image_alt}
           fill
           sizes="96px"
-          className="object-cover"
         />
       </div>
       <div className="min-w-0">

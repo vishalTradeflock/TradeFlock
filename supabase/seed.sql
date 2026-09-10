@@ -81,7 +81,7 @@ insert into public.articles (
 <p>The political economy is awkward. The same companies writing nine-figure purchase orders to Nvidia are briefing their own boards on silicon that reduces that bill. None of them can afford to be wrong about supply. All of them would prefer not to be a captive buyer.</p>
 <p>"This is what a healthy customer looks like when the vendor has 80 percent share," said a semiconductor banker in Menlo Park. "You do not storm the castle. You build a side door and keep paying rent until the door works."</p>
 <p>The near-term risk to Nvidia is not lost revenue. It is multiple compression if investors decide the monopoly is a phase rather than a permanent feature of the industry. The company's networking and software moat is real. So is the incentive, inside every hyperscaler, to make sure it is not the only moat that exists.</p>$$,
-    $$https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1600&q=80$$,
+    $$https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1600&q=80$$,
     $$Abstract visualization of artificial intelligence networks$$,
     $$11111111-1111-1111-1111-111111111111$$,
     $$aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2$$,
@@ -139,7 +139,7 @@ insert into public.articles (
 <p>U.S. shale, once the swing producer of folklore, is behaving more like a cash-flow machine than a growth engine. Public independents remain under orders from shareholders to return capital, not to out-drill Riyadh. That discipline supports prices. It also means the United States is less able to flood the market if geopolitics tightens the Strait of Hormuz for a week.</p>
 <p>Refiners are the quiet winners of the range. Crack spreads have been respectable without inviting a political backlash at the pump, and inventory draws have been orderly. The risk case is a cold Northern Hemisphere winter overlapping with another OPEC+ surprise. The base case is more of this: a price that is high enough to fund budgets and low enough to keep Washington from giving speeches about it.</p>
 <p>Energy equities have noticed. The sector is no longer priced as a relic, nor as a moonshot. It is priced as a cash business with a geopolitical option attached — which, for a U.S. business desk, is the honest description.</p>$$,
-    $$https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1600&q=80$$,
+    $$https://images.unsplash.com/photo-1497436072909-60f360e1d4b0?auto=format&fit=crop&w=1600&q=80$$,
     $$Offshore oil platform on the horizon$$,
     $$22222222-2222-2222-2222-222222222222$$,
     $$aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1$$,
@@ -236,7 +236,7 @@ insert into public.articles (
 <p>The operational bet is almost industrial. Smaller stores, more pickup, fewer customized bottlenecks, and equipment that does not require a barista to be a short-order savant at 8:12 a.m. Franchisees and company-store managers have heard versions of this speech before. What is different is the willingness to close or shrink locations that look good on a real-estate map and bad on a ticket-time dashboard.</p>
 <p>Labor is the slower variable. National bargaining has been stop-start, and a generation of workers learned to organize on the same app that used to order a latte. A durable settlement would not just take lawyers off the P&amp;L. It would take a boycott narrative off the brand. That is worth more than a 50-basis-point labor-cost swing, even if it photographs as a concession.</p>
 <p>Rivals at the value end and the third-wave end will keep nibbling. Starbucks still has the most valuable morning real estate in American retail. The question is whether it can run that real estate like a network instead of a collection of stages.</p>$$,
-    $$https://images.unsplash.com/photo-1445116572660-236099ec97a9?auto=format&fit=crop&w=1600&q=80$$,
+    $$https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1600&q=80$$,
     $$Coffee bar with espresso machine in a busy cafe$$,
     $$33333333-3333-3333-3333-333333333333$$,
     $$aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4$$,

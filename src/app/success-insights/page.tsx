@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import Header from "@/components/Header";
+import SafeArticleImage from "@/components/SafeArticleImage";
 import { getArticles } from "@/lib/articles";
 import { formatPublishedAt, formatShortDate } from "@/lib/utils";
 
@@ -55,7 +55,7 @@ export default async function SuccessInsightsPage() {
               className="group lg:col-span-7 lg:pr-10"
             >
               <div className="relative aspect-[16/10] overflow-hidden bg-neutral-100">
-                <Image
+                <SafeArticleImage
                   src={featured.cover_image_url}
                   alt={featured.cover_image_alt}
                   fill
@@ -111,12 +111,11 @@ export default async function SuccessInsightsPage() {
                   className="group border-t border-neutral-200 pt-4"
                 >
                   <div className="relative aspect-[16/10] overflow-hidden bg-neutral-100">
-                    <Image
+                    <SafeArticleImage
                       src={article.cover_image_url}
                       alt={article.cover_image_alt}
                       fill
                       sizes="(min-width: 640px) 33vw, 100vw"
-                      className="object-cover"
                     />
                   </div>
                   <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
+import SafeArticleImage from "@/components/SafeArticleImage";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import { getArticleBySlug, getArticles, getRelatedArticles } from "@/lib/articles";
@@ -89,13 +89,12 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             </div>
 
             <div className="relative mt-5 aspect-[16/9] overflow-hidden bg-neutral-100">
-              <Image
+              <SafeArticleImage
                 src={article.cover_image_url}
                 alt={article.cover_image_alt}
                 fill
                 priority
                 sizes="(min-width: 1024px) 66vw, 100vw"
-                className="object-cover"
               />
             </div>
             <p className="mt-2 text-[11px] text-neutral-500">{article.cover_image_alt}</p>
@@ -115,12 +114,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                 <li key={item.id} className="py-4">
                   <Link href={`/news/${item.slug}`} className="group flex gap-3">
                     <div className="relative h-16 w-24 shrink-0 overflow-hidden bg-neutral-100">
-                      <Image
+                      <SafeArticleImage
                         src={item.cover_image_url}
                         alt={item.cover_image_alt}
                         fill
                         sizes="96px"
-                        className="object-cover"
                       />
                     </div>
                     <div>
