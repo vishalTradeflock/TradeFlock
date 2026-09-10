@@ -2,7 +2,7 @@ name: Hourly News Publishing Pipeline
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -14,7 +14,7 @@ jobs:
         run: |
           response=$(curl -s -w "\n%{http_code}" -X GET "https://tradeflock-usa-nine.vercel.app/api/cron/publish" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
-          
+
           body=$(echo "$response" | sed '$d')
           status=$(echo "$response" | tail -n 1)
 

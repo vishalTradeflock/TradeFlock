@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { processNewsLead } from "@/lib/agents/pipeline";
 
+export const maxDuration = 60;
+
 const TEST_LEAD = {
   topic: "U.S. chip equipment makers report a jump in export licenses for allied fabs",
   category: "tech",
@@ -15,24 +17,32 @@ function isAuthorized(request: Request) {
   return header === `Bearer ${secret}`;
 }
 
+function errorResponse(err: unknown) {
+  const message = err instanceof Error ? err.message : "Pipeline failed";
+  return NextResponse.json({ ok: false, error: message }, { status: 500 });
+}
+
 async function runPipeline(request: Request) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  try {
-    const result = await processNewsLead(TEST_LEAD);
-    return NextResponse.json({ ok: true, result });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Pipeline failed";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
-  }
+  const result = await processNewsLead(TEST_LEAD);
+  return NextResponse.json({ ok: true, result });
 }
 
 export async function GET(request: Request) {
-  return runPipeline(request);
+  try {
+    return await runPipeline(request);
+  } catch (err) {
+    return errorResponse(err);
+  }
 }
 
 export async function POST(request: Request) {
-  return runPipeline(request);
+  try {
+    return await runPipeline(request);
+  } catch (err) {
+    return errorResponse(err);
+  }
 }
