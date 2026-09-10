@@ -1,5 +1,5 @@
 import { SEED_ARTICLES } from "@/lib/data/seed";
-import { resolveCoverImage } from "@/lib/images";
+import { assignDistinctCovers, resolveCoverImage } from "@/lib/images";
 import { createClient } from "@/lib/supabase/server";
 import type { ArticleWithRelations, Author, Category } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/utils";
@@ -62,8 +62,10 @@ export async function getArticles(categorySlug?: string) {
     cover_image_url: resolveCoverImage(article.cover_image_url),
   }));
   const published = [...rows].sort(sortByPublished);
-  if (!categorySlug) return published;
-  return published.filter((article) => article.category.slug === categorySlug);
+  const scoped = categorySlug
+    ? published.filter((article) => article.category.slug === categorySlug)
+    : published;
+  return assignDistinctCovers(scoped);
 }
 
 export async function getArticleBySlug(slug: string) {
