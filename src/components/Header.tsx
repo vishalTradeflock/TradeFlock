@@ -7,9 +7,13 @@ import { Search } from "lucide-react";
 
 type HeaderProps = {
   activeCategory?: string;
+  activePage?: "magazine";
 };
 
-export default async function Header({ activeCategory }: HeaderProps) {
+export default async function Header({
+  activeCategory,
+  activePage,
+}: HeaderProps) {
   const breaking = await getBreakingArticles();
   const dateline = formatDateline();
   const tickerItems = [...breaking, ...breaking];
@@ -86,7 +90,7 @@ export default async function Header({ activeCategory }: HeaderProps) {
         aria-label="Sections"
       >
         <div className="mx-auto flex max-w-[1240px] items-center gap-0 overflow-x-auto px-2 sm:px-4">
-          <NavLink href="/" active={!activeCategory}>
+          <NavLink href="/" active={!activeCategory && !activePage}>
             Home
           </NavLink>
           {NAV_CATEGORIES.map((category) => (
@@ -98,6 +102,9 @@ export default async function Header({ activeCategory }: HeaderProps) {
               {category.name}
             </NavLink>
           ))}
+          <NavLink href="/magazine" active={activePage === "magazine"}>
+            TradeFlock Magazine
+          </NavLink>
         </div>
       </nav>
     </header>

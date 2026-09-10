@@ -1,10 +1,35 @@
 import Link from "next/link";
 import { NAV_CATEGORIES } from "@/lib/types";
 
+const SECTION_LINKS = [
+  { href: "/", label: "Home" },
+  ...NAV_CATEGORIES.map((category) => ({
+    href: `/?category=${category.slug}`,
+    label: category.name,
+  })),
+  { href: "/magazine", label: "TradeFlock Magazine" },
+];
+
+const COMPANY_LINKS = [
+  { href: "/about", label: "About Us" },
+  { href: "/contact", label: "Contact Us" },
+];
+
+const SOCIAL_LINKS = [
+  {
+    href: "https://www.linkedin.com/company/tradeflock-usa",
+    label: "LinkedIn",
+  },
+  {
+    href: "https://www.linkedin.com/company/tradeflock",
+    label: "LinkedIn Global",
+  },
+];
+
 export default function Footer() {
   return (
     <footer className="mt-10 border-t border-neutral-200 bg-white">
-      <div className="mx-auto flex max-w-[1240px] flex-col gap-6 px-4 py-8 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mx-auto grid max-w-[1240px] gap-8 px-4 py-8 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <p className="font-serif text-2xl font-semibold tracking-tight">
             TradeFlock
@@ -17,16 +42,28 @@ export default function Footer() {
             and the people who run American companies.
           </p>
         </div>
-        <nav className="flex flex-wrap gap-x-5 gap-y-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-neutral-600">
-          {NAV_CATEGORIES.map((category) => (
-            <Link
-              key={category.slug}
-              href={`/?category=${category.slug}`}
-              className="hover:text-[#c41e3a]"
-            >
-              {category.name}
-            </Link>
-          ))}
+
+        <FooterNav title="Sections" links={SECTION_LINKS} />
+        <FooterNav title="Company" links={COMPANY_LINKS} />
+
+        <nav aria-label="Social">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+            Follow
+          </p>
+          <ul className="mt-3 space-y-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-neutral-600">
+            {SOCIAL_LINKS.map((link) => (
+              <li key={link.href}>
+                <a
+                  href={link.href}
+                  className="hover:text-[#c41e3a]"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
         </nav>
       </div>
       <div className="border-t border-neutral-200">
@@ -35,5 +72,30 @@ export default function Footer() {
         </p>
       </div>
     </footer>
+  );
+}
+
+function FooterNav({
+  title,
+  links,
+}: {
+  title: string;
+  links: readonly { href: string; label: string }[];
+}) {
+  return (
+    <nav aria-label={title}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+        {title}
+      </p>
+      <ul className="mt-3 space-y-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-neutral-600">
+        {links.map((link) => (
+          <li key={link.href}>
+            <Link href={link.href} className="hover:text-[#c41e3a]">
+              {link.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
