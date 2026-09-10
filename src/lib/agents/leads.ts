@@ -124,18 +124,21 @@ function toRawSource(candidate: Candidate): string {
     : "unknown";
   const summary = clipSummary(candidate.summary);
 
-  return [
+  const lines = [
     `Source: ${candidate.sourceName}`,
     `URL: ${candidate.link}`,
     `Published: ${published}`,
     "",
     `Headline: ${candidate.title}`,
-    summary ? `\nSummary:\n${summary}` : "",
+  ];
+  if (summary) {
+    lines.push("", "Summary:", summary);
+  }
+  lines.push(
     "",
     "Attribute the originating outlet and link. Use only the facts above as notes — do not invent quotes, figures, or a full reprint of the source article.",
-  ]
-    .filter((line) => line !== "")
-    .join("\n");
+  );
+  return lines.join("\n");
 }
 
 function toIncomingLead(candidate: Candidate): IncomingLead {
