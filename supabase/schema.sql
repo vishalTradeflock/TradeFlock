@@ -133,3 +133,37 @@ create policy "Public read published articles"
 
 grant usage on schema public to anon, authenticated;
 grant select on public.categories, public.authors, public.articles to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- processed_leads
+-- Cron intake fingerprint so held or recently published RSS items are not
+-- re-sent to the newsroom every hour. Service-role only (no public grants).
+-- Safe to apply on an existing project; the cron path degrades to article-only
+-- dedupe if this table has not been created yet.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.processed_leads (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  title_key text not null,
+  source_url text,
+  source_name text,
+  desk text,
+  outcome text,
+  created_at timestamptz not null default now(),
+  constraint processed_leads_outcome_allowed check (
+    outcome is null or outcome in ('published', 'held')
+  )
+);
+
+create index if not exists processed_leads_title_key_idx
+  on public.processed_leads (title_key);
+
+create index if not exists processed_leads_created_at_idx
+  on public.processed_leads (created_at desc);
+
+create unique index if not exists processed_leads_source_url_key
+  on public.processed_leads (source_url)
+  where source_url is not null and source_url <> '';
+
+alter table public.processed_leads enable row level security;
