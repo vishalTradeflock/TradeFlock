@@ -1,13 +1,14 @@
+import { pickBalancedLeads } from "@/lib/agents/desk-balance";
 import { resolveNewsFeeds, type NewsFeed } from "@/lib/agents/feeds";
 import type { NewsLead } from "@/lib/agents/pipeline";
-import type { WriterDesk } from "@/lib/agents/prompts";
+import { resolveWriterDesk, type WriterDesk } from "@/lib/agents/prompts";
 import { parseFeedItems } from "@/lib/agents/rss";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const FEED_TIMEOUT_MS = 8_000;
+const FEED_TIMEOUT_MS = 12_000;
 const SUMMARY_LIMIT = 700;
 const DEFAULT_DEDUPE_DAYS = 7;
-const DEFAULT_BATCH_SIZE = 1;
+const DEFAULT_BATCH_SIZE = 2;
 const MAX_BATCH_SIZE = 3;
 const FEED_USER_AGENT = "TradeFlock USA newsroom@tradeflock-usa-nine.vercel.app";
 
@@ -144,7 +145,7 @@ function toRawSource(candidate: Candidate): string {
 function toIncomingLead(candidate: Candidate): IncomingLead {
   return {
     topic: candidate.title,
-    category: refineDesk(candidate.desk, candidate.title, candidate.summary),
+    category: candidate.desk,
     rawSource: toRawSource(candidate),
     sourceName: candidate.sourceName,
     sourceUrl: candidate.link,
@@ -169,9 +170,10 @@ function isMissingTableError(error: { message: string; code?: string }): boolean
 }
 
 async function fetchFeedXml(feed: NewsFeed): Promise<string> {
+  const timeoutMs = feed.timeoutMs ?? FEED_TIMEOUT_MS;
   const response = await fetch(feed.url, {
     cache: "no-store",
-    signal: AbortSignal.timeout(FEED_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       "User-Agent": FEED_USER_AGENT,
       Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
@@ -201,7 +203,7 @@ function candidatesFromFeed(feed: NewsFeed, xml: string): Candidate[] {
         summary: item.summary,
         publishedAt: item.publishedAt,
         sourceName: feed.name,
-        desk: feed.desk,
+        desk: refineDesk(feed.desk, item.title, item.summary),
         titleKey,
         normalizedUrl: normalizeUrl(item.link),
       },
@@ -282,6 +284,44 @@ function dedupeCandidates(items: Candidate[]): Candidate[] {
   return unique;
 }
 
+function requiredFeedsFailed(feeds: NewsFeed[], feedErrors: FeedFetchError[]): boolean {
+  const required = feeds.filter((feed) => !feed.optional);
+  if (required.length === 0) {
+    return feeds.length > 0 && feedErrors.length === feeds.length;
+  }
+  return required.every((feed) =>
+    feedErrors.some((error) => error.name === feed.name && error.url === feed.url),
+  );
+}
+
+async function loadRecentPublishedDesks(): Promise<WriterDesk[]> {
+  try {
+    const admin = createAdminClient();
+    const processed = await admin
+      .from("processed_leads")
+      .select("desk")
+      .eq("outcome", "published")
+      .order("created_at", { ascending: false })
+      .limit(30);
+
+    if (processed.error) {
+      if (!isMissingTableError(processed.error)) {
+        console.error(`[leads] recent desk query failed: ${processed.error.message}`);
+      }
+      return [];
+    }
+
+    return (processed.data ?? []).flatMap((row) => {
+      if (!row.desk) return [];
+      return [resolveWriterDesk(row.desk)];
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error(`[leads] recent desk query failed: ${message}`);
+    return [];
+  }
+}
+
 export async function collectFreshLeads(limit = leadBatchSize()): Promise<LeadIntakeReport> {
   const { feeds, warning } = resolveNewsFeeds();
   const feedErrors: FeedFetchError[] = [];
@@ -306,9 +346,9 @@ export async function collectFreshLeads(limit = leadBatchSize()): Promise<LeadIn
     console.error(`[leads] ${feed.name} failed: ${error}`);
   });
 
-  if (gathered.length === 0 && feedErrors.length === feeds.length) {
+  if (gathered.length === 0 && requiredFeedsFailed(feeds, feedErrors)) {
     throw new Error(
-      `All news feeds failed: ${feedErrors.map((item) => `${item.name} (${item.error})`).join("; ")}`,
+      `Required news feeds failed: ${feedErrors.map((item) => `${item.name} (${item.error})`).join("; ")}`,
     );
   }
 
@@ -316,9 +356,9 @@ export async function collectFreshLeads(limit = leadBatchSize()): Promise<LeadIn
   const since = new Date(
     Date.now() - envInt("NEWS_LEAD_DEDUPE_DAYS", DEFAULT_DEDUPE_DAYS) * 24 * 60 * 60 * 1000,
   ).toISOString();
-  const taken = await loadTakenKeys(since);
+  const [taken, recentDesks] = await Promise.all([loadTakenKeys(since), loadRecentPublishedDesks()]);
   const fresh = unique.filter((item) => !isTaken(item, taken));
-  const leads = fresh.slice(0, Math.max(1, limit)).map(toIncomingLead);
+  const leads = pickBalancedLeads(fresh, Math.max(1, limit), recentDesks).map(toIncomingLead);
 
   return {
     feedsAttempted: feeds.length,

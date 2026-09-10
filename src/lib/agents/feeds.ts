@@ -4,6 +4,10 @@ export type NewsFeed = {
   name: string;
   url: string;
   desk: WriterDesk;
+  /** When true, a timeout or HTTP error is logged and skipped — it never fails the run. */
+  optional?: boolean;
+  /** Per-feed fetch budget. Defaults to the intake timeout in leads.ts. */
+  timeoutMs?: number;
 };
 
 /**
@@ -58,6 +62,9 @@ export const DEFAULT_NEWS_FEEDS: readonly NewsFeed[] = [
     name: "PR Newswire M&A",
     url: "https://www.prnewswire.com/rss/mergers-and-acquisitions-list.rss",
     desk: "ma",
+    // This host has timed out in production; keep it on the roster but never fail the run.
+    optional: true,
+    timeoutMs: 18_000,
   },
 ];
 
@@ -65,7 +72,9 @@ function isWriterDesk(value: string): value is WriterDesk {
   return (WRITER_DESKS as readonly string[]).includes(value);
 }
 
-function isFeedRecord(value: unknown): value is { name: unknown; url: unknown; desk: unknown } {
+function isFeedRecord(
+  value: unknown,
+): value is { name: unknown; url: unknown; desk: unknown; optional?: unknown; timeoutMs?: unknown } {
   return typeof value === "object" && value !== null && "name" in value && "url" in value && "desk" in value;
 }
 
@@ -93,7 +102,12 @@ export function parseNewsFeedsJson(raw: string): NewsFeed[] {
       throw new Error(`NEWS_FEEDS_JSON[${index}] url must start with http(s)`);
     }
 
-    return { name, url, desk };
+    const feed: NewsFeed = { name, url, desk };
+    if (entry.optional === true) feed.optional = true;
+    if (typeof entry.timeoutMs === "number" && Number.isFinite(entry.timeoutMs) && entry.timeoutMs > 0) {
+      feed.timeoutMs = Math.floor(entry.timeoutMs);
+    }
+    return feed;
   });
 }
 
