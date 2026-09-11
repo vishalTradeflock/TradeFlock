@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test src/lib/agents/lead-filters.test.ts"
+    "test": "node --experimental-strip-types --test src/lib/agents/lead-filters.test.ts src/lib/sanitize-article-body.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

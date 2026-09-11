@@ -93,6 +93,62 @@ function stripLeadingChrome(html: string, title: string) {
   return stripLeadingEmpty(out);
 }
 
+const DISPLAY_CLASS = /\b(?:block|inline-block|flex|inline-flex|grid)\b/g;
+
+function stripAnchorDisplayClasses(html: string) {
+  return html.replace(/<a\b([^>]*)>/gi, (_full, attrs: string) => {
+    const next = attrs.replace(/\sclass\s*=\s*(["'])([^"']*)\1/gi, (_m, quote: string, cls: string) => {
+      const cleaned = cls.replace(DISPLAY_CLASS, " ").replace(/\s+/g, " ").trim();
+      return cleaned ? ` class=${quote}${cleaned}${quote}` : "";
+    });
+    return `<a${next}>`;
+  });
+}
+
+function compactAnchorText(html: string) {
+  return html.replace(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi, (_full, attrs: string, inner: string) => {
+    const compact = inner.replace(/\s+/g, " ").trim();
+    return `<a${attrs}>${compact}</a>`;
+  });
+}
+
+function collapsePunctuationSpacing(html: string) {
+  return html
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/\s+(['’])s\b/g, "$1s")
+    .replace(/ {2,}/g, " ")
+    .replace(/<p>\s+/gi, "<p>")
+    .replace(/\s+<\/p>/gi, "</p>");
+}
+
+/** Keep names like <a>Jane</a>'s in one sentence instead of split <p> wrappers. */
+export function repairInlineAnchors(html: string) {
+  let out = html;
+
+  out = out.replace(/\s*\n\s*(<a\b[^>]*>)/gi, " $1");
+  out = out.replace(/(<\/a>)\s*\n\s*/gi, "$1 ");
+  out = out.replace(/(?:<br\s*\/?>\s*)+(<a\b)/gi, " $1");
+  out = out.replace(/(<\/a>)(?:\s*<br\s*\/?>)+/gi, "$1 ");
+
+  for (let i = 0; i < 8; i += 1) {
+    const next = out.replace(
+      /<\/p>\s*<p>\s*(<a\b[^>]*>[\s\S]*?<\/a>)\s*<\/p>\s*<p>/gi,
+      " $1 ",
+    );
+    if (next === out) break;
+    out = next;
+  }
+
+  out = out.replace(
+    /<p>\s*(<a\b[^>]*>[\s\S]*?<\/a>)\s*<\/p>\s*<p>(\s*['’]s|[,.;:!?])/gi,
+    "<p>$1$2",
+  );
+
+  out = stripAnchorDisplayClasses(out);
+  out = compactAnchorText(out);
+  return collapsePunctuationSpacing(out);
+}
+
 export function sanitizeArticleBody(
   body: string,
   options: { title: string; coverImageUrl?: string | null },
@@ -107,5 +163,6 @@ export function sanitizeArticleBody(
 
   html = stripLeadingChrome(html, options.title);
   html = html.replace(/\s*style\s*=\s*(["'])[\s\S]*?\1/gi, "");
+  html = repairInlineAnchors(html);
   return html;
 }

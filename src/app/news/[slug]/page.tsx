@@ -117,7 +117,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             ) : null}
 
             <div
-              className="prose-article prose prose-neutral mt-8 max-w-none prose-p:mb-5 prose-p:leading-relaxed prose-h3:mt-8 prose-h3:mb-3"
+              className="prose-article prose prose-neutral mt-8 max-w-none prose-p:mb-5 prose-p:leading-relaxed prose-h3:mt-8 prose-h3:mb-3 prose-a:inline prose-a:font-normal [&_a]:inline [&_a]:font-normal [&_a]:underline [&_a]:text-[#c41e3a] hover:[&_a]:text-[#9f1830]"
               dangerouslySetInnerHTML={{ __html: body }}
             />
           </article>

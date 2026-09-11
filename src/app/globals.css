@@ -98,3 +98,14 @@ body {
   --tw-prose-quotes: #404040;
   --tw-prose-quote-borders: #e5e5e5;
 }
+
+.prose-article a {
+  display: inline !important;
+  font-weight: 400;
+  text-decoration: underline;
+  color: #c41e3a;
+}
+
+.prose-article a:hover {
+  color: #9f1830;
+}
