@@ -35,8 +35,12 @@ An 8.5 requires named attribution from the RSS notes, no invented quotes/figures
 **Optional env vars:**
 - `NEWS_FEEDS_JSON` — JSON array that replaces the default feed list, e.g. `[{"name":"TechCrunch","url":"https://techcrunch.com/feed/","desk":"tech"}]`. Desk must be `tech`, `markets`, `ma`, `strategy`, `macro`, or `retail`. Optional feeds may set `"optional": true` and `"timeoutMs": 18000`.
 - `NEWS_LEAD_BATCH_SIZE` — how many leads to process per run (default **`2`**, max **`3`**). Cron `maxDuration` is **300s** so a default batch of two long-form drafts (writer + editor) can finish.
-- `NEWS_LEAD_DEDUPE_DAYS` — skip titles/URLs seen in this window (default `7`).
-- `USE_TEST_LEAD=1` — local-only fallback that skips RSS and uses the old fixture lead.
+- `NEWS_LEAD_DEDUPE_DAYS` — skip titles/URLs seen in this window (default `7`). Near-duplicate titles (rewritten chip-export fixtures, same story different headline) are also skipped.
+- `GEMINI_MODEL` — primary writer/editor model (default `gemini-3.6-flash`). Free-tier Flash is **20 requests/day**; a 15-minute batch of 2 long-form stories needs 4 calls per tick.
+- `GEMINI_FALLBACK_MODEL` — used when the primary model returns 429 (default `gemini-3.5-flash-lite`, ~500 RPD on free tier). Set to empty to disable fallback. Enable Gemini billing (Tier 1+) if you want sustained `gemini-3.6-flash` volume.
+- `USE_TEST_LEAD=1` — local/preview fallback that skips RSS and uses the old fixture lead. Ignored when `VERCEL_ENV=production`.
+
+If Gemini quota is exhausted on every configured model, the cron returns **200** with `reason: "llm_quota_exhausted"` so the weekday Action stays green. Auth is unchanged: missing/invalid `CRON_SECRET` is still **401**.
 
 Default feeds live in `src/lib/agents/feeds.ts` (TechCrunch, CNBC tech/finance/economy/retail, Federal Reserve, SEC, NPR Business, PR Newswire M&A). A dead feed is logged and skipped; the cron keeps going. Per-feed timeout is **12s** (was 8s). **PR Newswire M&A** is marked `optional` with an **18s** budget so a timeout cannot fail the run.
 

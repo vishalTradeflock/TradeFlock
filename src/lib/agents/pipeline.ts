@@ -8,7 +8,7 @@ import {
 } from "@/lib/agents/prompts";
 import { FALLBACK_COVER_IMAGE } from "@/lib/images";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { completeLlmChat } from "@/lib/llm";
+import { completeLlmChat, isLlmQuotaError } from "@/lib/llm";
 
 export type NewsLead = {
   topic: string;
@@ -70,6 +70,14 @@ function isEditorVerdict(value: unknown): value is EditorVerdict {
   );
 }
 
+function isUnusableEditorPayload(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : "";
+  return (
+    err instanceof SyntaxError ||
+    /invalid JSON payload|Unterminated string|Unexpected token|empty completion/i.test(message)
+  );
+}
+
 function parseEditorVerdict(raw: string): EditorVerdict {
   const stripped = raw
     .trim()
@@ -122,7 +130,7 @@ async function editWithEditor(desk: WriterDesk, lead: NewsLead, draft: string) {
     system: EDITOR_IN_CHIEF_PROMPT,
     temperature: 0.2,
     json: true,
-    maxTokens: 4096,
+    maxTokens: 8192,
     user: `Desk: ${desk}
 Topic: ${lead.topic}
 Category: ${lead.category}
@@ -170,7 +178,8 @@ async function publishArticle(insert: ArticleInsert) {
     throw new Error(withStatus.error.message);
   }
 
-  const { status: _status, ...withoutStatus } = insert;
+  const { status, ...withoutStatus } = insert;
+  void status;
   const fallback = await admin.from("articles").insert(withoutStatus).select("slug").single();
   if (fallback.error) {
     throw new Error(fallback.error.message);
@@ -181,7 +190,21 @@ async function publishArticle(insert: ArticleInsert) {
 export async function processNewsLead(lead: NewsLead): Promise<PipelineResult> {
   const desk = resolveWriterDesk(lead.category);
   const draft = await draftFromWriter(desk, lead);
-  const verdict = await editWithEditor(desk, lead, draft);
+
+  let verdict: EditorVerdict;
+  try {
+    verdict = await editWithEditor(desk, lead, draft);
+  } catch (err) {
+    if (isLlmQuotaError(err)) throw err;
+    if (!isUnusableEditorPayload(err)) throw err;
+    const message = err instanceof Error ? err.message : "Editor verdict unusable";
+    return {
+      published: false,
+      score: 0,
+      desk,
+      reason: `Held — editor returned unusable JSON (${message}).`,
+    };
+  }
 
   if (!verdict.approved || verdict.score < PUBLISH_SCORE_MIN) {
     return {
