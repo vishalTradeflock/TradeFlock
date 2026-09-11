@@ -25,8 +25,9 @@ export default function LatestScroller({
   const [page, setPage] = useState(0);
   if (!articles.length) return null;
 
-  const atStart = page <= 0;
-  const atEnd = page >= pages.length - 1;
+  const safePage = Math.min(page, pages.length - 1);
+  const atStart = safePage <= 0;
+  const atEnd = safePage >= pages.length - 1;
 
   return (
     <section>
@@ -67,7 +68,7 @@ export default function LatestScroller({
           className="flex transition-transform duration-500 ease-out"
           style={{
             width: `${pages.length * 100}%`,
-            transform: `translateX(-${page * (100 / pages.length)}%)`,
+            transform: `translateX(-${safePage * (100 / pages.length)}%)`,
           }}
         >
           {pages.map((chunk, pageIndex) => (

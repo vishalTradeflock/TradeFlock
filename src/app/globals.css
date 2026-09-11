@@ -46,25 +46,27 @@ body {
   }
 }
 
-.secondary-marquee {
-  animation: secondary-marquee 38s linear infinite;
+.scroll-up-track {
+  display: flex;
+  flex-direction: column;
+  animation: scrollUp 35s linear infinite;
 }
 
-.group:hover .secondary-marquee {
+.group:hover .scroll-up-track {
   animation-play-state: paused;
 }
 
-@keyframes secondary-marquee {
-  from {
+@keyframes scrollUp {
+  0% {
     transform: translateY(0);
   }
-  to {
+  100% {
     transform: translateY(-50%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .secondary-marquee {
+  .scroll-up-track {
     animation: none;
   }
 }

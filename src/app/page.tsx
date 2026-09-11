@@ -2,6 +2,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import HeroCarousel from "@/components/HeroCarousel";
 import LatestScroller from "@/components/LatestScroller";
+import MiddleScroller from "@/components/MiddleScroller";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import {
   getBigTake,
@@ -23,17 +24,12 @@ type HomeProps = {
 export default async function Home({ searchParams }: HomeProps) {
   const params = await searchParams;
   const category = params.category;
-  const [{ featured, mostRead, articles }, bigTake, dedicatedInsights] = await Promise.all([
+  const [{ featured, mostRead, articles }, bigTake, successInsightsArticles] = await Promise.all([
     getHomeLayout(category),
     getBigTake(8),
-    getSuccessInsightsArticles(16),
+    getSuccessInsightsArticles(20),
   ]);
-  const partitioned = partitionHomeArticles(articles);
-  const editorialArticles = partitioned.editorialArticles;
-  const successInsightsArticles =
-    partitioned.successInsightsArticles.length > 0
-      ? partitioned.successInsightsArticles
-      : dedicatedInsights;
+  const editorialArticles = partitionHomeArticles(articles).editorialArticles;
 
   const heroArticles = editorialArticles.slice(0, 8);
   const lead = heroArticles[0] ?? featured;
@@ -45,7 +41,7 @@ export default async function Home({ searchParams }: HomeProps) {
   const middleRail =
     successInsightsArticles.length > 0
       ? successInsightsArticles
-      : editorialArticles.slice(14, 24);
+      : editorialArticles.slice(14, 34);
 
   if (!lead && !heroArticles.length) {
     return (
@@ -125,28 +121,7 @@ export default async function Home({ searchParams }: HomeProps) {
           </div>
 
           <div className="grid min-h-0 grid-cols-1 items-stretch gap-6 lg:col-span-6 lg:grid-cols-2 lg:gap-0">
-            <div className="group relative h-[420px] min-h-0 overflow-hidden border-neutral-200 lg:h-0 lg:min-h-full lg:self-stretch lg:border-l lg:px-5">
-              <div className="absolute inset-0 overflow-hidden">
-                <div className="secondary-marquee">
-                  {[0, 1].flatMap((copy) =>
-                    middleRail.map((article) => (
-                      <SecondaryCard
-                        key={`${article.id}-${copy}`}
-                        article={article}
-                      />
-                    )),
-                  )}
-                </div>
-                <div
-                  className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-white to-transparent"
-                  aria-hidden
-                />
-                <div
-                  className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-white to-transparent"
-                  aria-hidden
-                />
-              </div>
-            </div>
+            <MiddleScroller articles={middleRail} />
 
             <aside className="min-h-0 lg:border-l lg:border-neutral-200 lg:pl-5">
               <RankedRail title="Most Read" articles={editorialMostRead} />
@@ -214,34 +189,5 @@ function RankedRail({
         ))}
       </ol>
     </div>
-  );
-}
-
-function SecondaryCard({ article }: { article: ArticleWithRelations }) {
-  return (
-    <Link
-      href={`/news/${article.slug}`}
-      className="flex gap-3 border-b border-neutral-200 py-3 last:border-b-0 hover:[&_h3]:text-[#c41e3a]"
-    >
-      <div className="relative h-[72px] w-[96px] shrink-0 overflow-hidden bg-neutral-100">
-        <SafeArticleImage
-          src={article.cover_image_url}
-          alt={article.cover_image_alt}
-          fill
-          sizes="96px"
-        />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">
-          {article.category.name}
-        </p>
-        <h3 className="mt-0.5 font-serif text-[15px] font-semibold leading-snug tracking-tight text-neutral-950">
-          {article.title}
-        </h3>
-        <p className="mt-1 text-[11px] text-neutral-500">
-          {formatShortDate(article.published_at)}
-        </p>
-      </div>
-    </Link>
   );
 }
