@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import SafeArticleImage from "@/components/SafeArticleImage";
+import { FALLBACK_COVER_IMAGE } from "@/lib/images";
 import type { ArticleWithRelations } from "@/lib/types";
 import { formatPublishedAt } from "@/lib/utils";
 
@@ -36,6 +37,8 @@ export default function HeroCarousel({
   const article = slides[safeIndex] ?? slides[0];
   if (!article) return null;
 
+  const imageUrl = article.cover_image_url || FALLBACK_COVER_IMAGE;
+
   return (
     <article
       className="group"
@@ -47,7 +50,8 @@ export default function HeroCarousel({
       <Link href={`/news/${article.slug}`} className="block">
         <div className="relative aspect-[16/10] overflow-hidden rounded bg-neutral-100">
           <SafeArticleImage
-            src={article.cover_image_url}
+            key={article.id}
+            src={imageUrl}
             alt={article.cover_image_alt}
             fill
             priority={safeIndex === 0}

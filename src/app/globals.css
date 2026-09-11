@@ -30,10 +30,11 @@ body {
 .ticker-track {
   display: flex;
   width: max-content;
-  animation: ticker 42s linear infinite;
+  animation: ticker 75s linear infinite;
 }
 
-.ticker-track:hover {
+.ticker-track:hover,
+.group:hover .ticker-track {
   animation-play-state: paused;
 }
 
@@ -66,6 +67,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ticker-track,
   .scroll-up-track {
     animation: none;
   }

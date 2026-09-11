@@ -32,8 +32,11 @@ export default async function Header({
           <span className="shrink-0 bg-[#c41e3a] px-2 py-0.5 text-[10px] font-bold tracking-[0.16em]">
             BREAKING
           </span>
-          <div className="relative min-w-0 flex-1 overflow-hidden">
-            <div className="ticker-track gap-10 text-[12px] leading-5 text-neutral-100">
+          <div className="group relative min-w-0 flex-1 overflow-hidden">
+            <div
+              className="ticker-track gap-10 text-[12px] leading-5 text-neutral-100 hover:[animation-play-state:paused]"
+              style={{ animation: "ticker 75s linear infinite" }}
+            >
               {tickerItems.map((article, index) => (
                 <Link
                   key={`${article.id}-${index}`}

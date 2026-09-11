@@ -5,20 +5,25 @@ import LatestScroller from "@/components/LatestScroller";
 import MiddleScroller from "@/components/MiddleScroller";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { LATEST_SCROLLER_LIMIT } from "@/lib/cache";
-import { getHomeLayout } from "@/lib/articles";
+import { getHomeLayout, getSuccessInsightsArticles } from "@/lib/articles";
 import type { ArticleWithRelations } from "@/lib/types";
 import { formatShortDate, formatTimeAgo } from "@/lib/utils";
 
 export const revalidate = 120;
 
 export default async function Home() {
-  const {
-    featured,
-    mostRead,
-    bigTake,
-    editorialArticles,
+  const [
+    {
+      featured,
+      mostRead,
+      bigTake,
+      editorialArticles,
+    },
     successInsightsArticles,
-  } = await getHomeLayout();
+  ] = await Promise.all([
+    getHomeLayout(),
+    getSuccessInsightsArticles(20),
+  ]);
 
   const heroArticles = editorialArticles.slice(0, 8);
   const lead = heroArticles[0] ?? featured;
@@ -111,7 +116,6 @@ export default async function Home() {
                 title="The Big Take"
                 articles={bigTake}
                 className="mt-8"
-                scrollable
               />
             </aside>
           </div>

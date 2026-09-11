@@ -3,7 +3,7 @@ import SafeArticleImage from "@/components/SafeArticleImage";
 import type { ArticleWithRelations } from "@/lib/types";
 import { formatShortDate } from "@/lib/utils";
 
-const LOOP_MAX = 10;
+const LOOP_MAX = 20;
 
 function loopSource(articles: ArticleWithRelations[]) {
   const seen = new Set<string>();

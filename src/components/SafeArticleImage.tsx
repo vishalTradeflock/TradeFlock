@@ -2,7 +2,7 @@
 
 import Image, { type ImageProps } from "next/image";
 import { Newspaper } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { resolveCoverImage } from "@/lib/images";
 import { cn } from "@/lib/utils";
 
@@ -11,16 +11,34 @@ type SafeArticleImageProps = Omit<ImageProps, "src" | "alt"> & {
   alt: string;
 };
 
+function skipOptimizer(url: string) {
+  try {
+    const host = new URL(url).hostname;
+    return (
+      host === "tradeflockusa.com" ||
+      host === "www.tradeflockusa.com" ||
+      host.endsWith(".tradeflockusa.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export default function SafeArticleImage({
   src,
   alt,
   className,
   priority,
   loading,
+  unoptimized,
   ...props
 }: SafeArticleImageProps) {
   const [failed, setFailed] = useState(false);
   const resolved = resolveCoverImage(src);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [resolved]);
 
   if (failed) {
     return (
@@ -41,6 +59,7 @@ export default function SafeArticleImage({
       onError={() => setFailed(true)}
       priority={priority}
       loading={priority ? undefined : loading ?? "lazy"}
+      unoptimized={unoptimized ?? skipOptimizer(resolved)}
       {...props}
     />
   );
