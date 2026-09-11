@@ -40,3 +40,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env.local
+
+# local dumps and one-off seed helpers (do not ship)
+wp_articles.json
+src/app/api/seed/
+supabase/scripts/

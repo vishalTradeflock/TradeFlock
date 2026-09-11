@@ -7,7 +7,9 @@ import {
   type WriterDesk,
 } from "@/lib/agents/prompts";
 import { FALLBACK_COVER_IMAGE } from "@/lib/images";
+import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Database } from "@/lib/supabase/database.types";
 import { completeLlmChat, isLlmQuotaError } from "@/lib/llm";
 
 export type NewsLead = {
@@ -145,22 +147,108 @@ ${draft}`,
   return parseEditorVerdict(raw);
 }
 
-type ArticleInsert = {
+type ArticleInsert = Pick<
+  Database["public"]["Tables"]["articles"]["Insert"],
+  | "slug"
+  | "title"
+  | "dek"
+  | "excerpt"
+  | "body"
+  | "cover_image_url"
+  | "cover_image_alt"
+  | "category_id"
+  | "author_id"
+  | "is_featured"
+  | "is_breaking"
+  | "view_count"
+  | "status"
+  | "published_at"
+>;
+
+function categoryKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+async function resolveCategoryId(
+  admin: ReturnType<typeof createAdminClient>,
+  desk: WriterDesk,
+  leadCategory: string,
+) {
+  const { data: categories, error } = await admin
+    .from("categories")
+    .select("id, slug, name");
+
+  if (error || !categories?.length) {
+    throw new Error(`Unable to load categories: ${error?.message ?? "empty table"}`);
+  }
+
+  const wanted = [
+    categoryKey(leadCategory),
+    SITE_CATEGORY[desk],
+  ].filter((slug, index, all) => slug && all.indexOf(slug) === index);
+
+  for (const slug of wanted) {
+    const bySlug = categories.find((row) => row.slug === slug);
+    if (bySlug) return bySlug.id;
+  }
+
+  const leadName = leadCategory.trim().toLowerCase();
+  const byName = categories.find((row) => row.name.trim().toLowerCase() === leadName);
+  if (byName) return byName.id;
+
+  throw new Error(
+    `No matching categories.id for lead "${leadCategory}" (desk ${desk}). Known: ${categories
+      .map((row) => row.slug)
+      .join(", ")}`,
+  );
+}
+
+async function resolveAuthorId(
+  admin: ReturnType<typeof createAdminClient>,
+  desk: WriterDesk,
+) {
+  const { data: author, error } = await admin
+    .from("authors")
+    .select("id")
+    .eq("slug", DESK_AUTHOR[desk])
+    .maybeSingle();
+
+  if (error || !author) {
+    throw new Error(`Missing desk author "${DESK_AUTHOR[desk]}"`);
+  }
+  return author.id;
+}
+
+function toArticleRow(input: {
   slug: string;
   title: string;
-  dek: string;
   excerpt: string;
   body: string;
-  cover_image_url: string;
-  cover_image_alt: string;
   category_id: string;
   author_id: string;
-  is_featured: false;
-  is_breaking: false;
-  view_count: number;
-  status: "published";
-  published_at: string;
-};
+}): ArticleInsert {
+  return {
+    slug: input.slug,
+    title: input.title,
+    dek: input.excerpt,
+    excerpt: input.excerpt,
+    body: input.body,
+    cover_image_url: FALLBACK_COVER_IMAGE,
+    cover_image_alt: input.title,
+    category_id: input.category_id,
+    author_id: input.author_id,
+    is_featured: false,
+    is_breaking: false,
+    view_count: 0,
+    status: "published",
+    published_at: new Date().toISOString(),
+  };
+}
 
 async function publishArticle(insert: ArticleInsert) {
   const admin = createAdminClient();
@@ -217,41 +305,29 @@ export async function processNewsLead(lead: NewsLead): Promise<PipelineResult> {
   }
 
   const admin = createAdminClient();
-  const siteCategory = SITE_CATEGORY[desk];
-
-  const [{ data: category, error: categoryError }, { data: author, error: authorError }] =
-    await Promise.all([
-      admin.from("categories").select("id").eq("slug", siteCategory).single(),
-      admin.from("authors").select("id").eq("slug", DESK_AUTHOR[desk]).single(),
-    ]);
-
-  if (categoryError || !category) {
-    throw new Error(`Missing site category "${siteCategory}"`);
-  }
-  if (authorError || !author) {
-    throw new Error(`Missing desk author "${DESK_AUTHOR[desk]}"`);
-  }
+  const [categoryId, authorId] = await Promise.all([
+    resolveCategoryId(admin, desk, lead.category),
+    resolveAuthorId(admin, desk),
+  ]);
 
   const title = verdict.editedTitle.trim();
   const excerpt = verdict.excerpt.trim().slice(0, 280);
   const slug = slugify(title);
-
-  await publishArticle({
-    slug,
+  const body = sanitizeArticleBody(toHtmlBody(verdict.editedContent), {
     title,
-    dek: excerpt,
-    excerpt,
-    body: toHtmlBody(verdict.editedContent),
-    cover_image_url: FALLBACK_COVER_IMAGE,
-    cover_image_alt: title,
-    category_id: category.id,
-    author_id: author.id,
-    is_featured: false,
-    is_breaking: false,
-    view_count: 0,
-    status: "published",
-    published_at: new Date().toISOString(),
+    coverImageUrl: FALLBACK_COVER_IMAGE,
   });
+
+  await publishArticle(
+    toArticleRow({
+      slug,
+      title,
+      excerpt,
+      body,
+      category_id: categoryId,
+      author_id: authorId,
+    }),
+  );
 
   revalidatePath("/");
   revalidatePath("/news/[slug]", "page");

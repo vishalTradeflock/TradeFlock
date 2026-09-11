@@ -80,6 +80,9 @@ execute procedure public.set_updated_at();
 create index if not exists articles_published_at_idx
   on public.articles (published_at desc);
 
+create index if not exists idx_articles_published_at
+  on public.articles (published_at desc);
+
 create index if not exists articles_category_id_idx
   on public.articles (category_id);
 

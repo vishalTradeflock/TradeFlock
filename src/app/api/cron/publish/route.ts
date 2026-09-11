@@ -15,13 +15,13 @@ export const revalidate = 0;
 export const maxDuration = 300;
 
 const TEST_LEAD: IncomingLead = {
-  topic: "U.S. chip equipment makers report a jump in export licenses for allied fabs",
-  category: "tech",
+  topic: "Treasury 10-year auction stop-out forces dealers to widen concessions",
+  category: "markets",
   rawSource:
-    "Source: Local test fixture\nURL: https://example.com/test-lead\n\nHeadline: U.S. chip equipment makers report a jump in export licenses for allied fabs\n\nSummary:\nCommerce officials said licenses for lithography tools and deposition gear bound for Japan, the Netherlands, and South Korea rose in the latest quarter. Two unnamed supplier executives said order books firmed after customers locked multi-year tool slots. No dollar total was disclosed. Rival Chinese toolmakers were not named in the briefing.",
+    "Source: Local test fixture\nURL: https://example.com/test-lead-10y-auction\n\nHeadline: Treasury 10-year auction stop-out forces dealers to widen concessions\n\nSummary:\nThe U.S. Treasury sold a 10-year note at a stop-out yield that dealers said required wider concessions than the when-issued mid. Two primary dealers, speaking on the condition they not be named, said real-money bids were thinner after the latest Beige Book described a pullback in factory overtime. No allotment totals beyond the standard auction size were disclosed. The 10-year yield moved after the stop-out, according to the same desks.",
   sourceName: "Local test fixture",
-  sourceUrl: "https://example.com/test-lead",
-  titleKey: "u s chip equipment makers report a jump in export licenses for allied fabs",
+  sourceUrl: "https://example.com/test-lead-10y-auction",
+  titleKey: "treasury 10 year auction stop out forces dealers to widen concessions",
 };
 
 function isAuthorized(request: Request) {
@@ -103,6 +103,23 @@ async function runPipeline(request: Request) {
 
   const intake = await collectFreshLeads(leadBatchSize());
   if (intake.leads.length === 0) {
+    if (process.env.VERCEL_ENV !== "production" && !(await leadWasRecentlySeen(TEST_LEAD))) {
+      const result = await runLead(TEST_LEAD);
+      return NextResponse.json({
+        ok: true,
+        mode: "rss",
+        reason: "no_fresh_leads_local_fixture",
+        intake: {
+          feedsAttempted: intake.feedsAttempted,
+          feedErrors: intake.feedErrors,
+          feedWarning: intake.feedWarning,
+          candidates: intake.candidates,
+          skipped: intake.skipped,
+        },
+        results: [result],
+      });
+    }
+
     return NextResponse.json({
       ok: true,
       mode: "rss",
