@@ -6,7 +6,11 @@ import {
   markLeadProcessed,
   type IncomingLead,
 } from "@/lib/agents/leads";
-import { processNewsLead, type PipelineResult } from "@/lib/agents/pipeline";
+import {
+  processNewsLead,
+  publishHighestScoringHold,
+  type PipelineResult,
+} from "@/lib/agents/pipeline";
 import { isLlmQuotaError } from "@/lib/llm";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +35,13 @@ function isAuthorized(request: Request) {
   return header === `Bearer ${secret}`;
 }
 
+function shouldForcePublish(request: Request) {
+  const force = new URL(request.url).searchParams.get("force");
+  const forceParam = force === "true" || force === "1";
+  if (forceParam) return true;
+  return process.env.NODE_ENV === "development" && process.env.VERCEL_ENV !== "production";
+}
+
 function shouldUseTestLead() {
   // The fixture is for local/preview only. Production always reads RSS so a
   // leftover USE_TEST_LEAD=1 cannot reprint the chip-export stub every tick.
@@ -51,13 +62,48 @@ function errorResponse(err: unknown) {
   return NextResponse.json({ ok: false, error: message }, { status: 500 });
 }
 
+function publicResult(result: PipelineResult): PipelineResult {
+  if (result.published) return result;
+  const { verdict: _verdict, ...rest } = result;
+  void _verdict;
+  return rest;
+}
+
 function summarizeResult(lead: IncomingLead, result: PipelineResult) {
   return {
     topic: lead.topic,
     sourceName: lead.sourceName,
     sourceUrl: lead.sourceUrl,
     category: lead.category,
-    ...result,
+    ...publicResult(result),
+  };
+}
+
+type LeadOutcome = {
+  lead: IncomingLead;
+  result: PipelineResult;
+};
+
+async function runLead(lead: IncomingLead): Promise<LeadOutcome> {
+  const result = await processNewsLead(lead);
+  await markLeadProcessed(lead, result.published ? "published" : "held");
+  return { lead, result };
+}
+
+async function applyForcePublish(outcomes: LeadOutcome[]) {
+  if (outcomes.some((outcome) => outcome.result.published)) return { outcomes, forcePublished: false };
+
+  const forced = await publishHighestScoringHold(outcomes);
+  if (!forced) return { outcomes, forcePublished: false };
+
+  await markLeadProcessed(forced.lead as IncomingLead, "published");
+  return {
+    forcePublished: true,
+    outcomes: outcomes.map((outcome) =>
+      outcome.lead.topic === forced.lead.topic && outcome.lead.rawSource === forced.lead.rawSource
+        ? { lead: outcome.lead, result: forced.result }
+        : outcome,
+    ),
   };
 }
 
@@ -72,16 +118,12 @@ function isQuotaFailure(message: string): boolean {
   );
 }
 
-async function runLead(lead: IncomingLead) {
-  const result = await processNewsLead(lead);
-  await markLeadProcessed(lead, result.published ? "published" : "held");
-  return summarizeResult(lead, result);
-}
-
 async function runPipeline(request: Request) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const force = shouldForcePublish(request);
 
   if (shouldUseTestLead()) {
     if (await leadWasRecentlySeen(TEST_LEAD)) {
@@ -89,26 +131,38 @@ async function runPipeline(request: Request) {
         ok: true,
         mode: "test_lead",
         reason: "already_processed",
+        force,
         results: [],
       });
     }
 
-    const result = await runLead(TEST_LEAD);
+    let outcome = await runLead(TEST_LEAD);
+    if (force && !outcome.result.published) {
+      const forced = await applyForcePublish([outcome]);
+      outcome = forced.outcomes[0] ?? outcome;
+    }
+
     return NextResponse.json({
       ok: true,
       mode: "test_lead",
-      results: [result],
+      force,
+      results: [summarizeResult(outcome.lead, outcome.result)],
     });
   }
 
   const intake = await collectFreshLeads(leadBatchSize());
   if (intake.leads.length === 0) {
     if (process.env.VERCEL_ENV !== "production" && !(await leadWasRecentlySeen(TEST_LEAD))) {
-      const result = await runLead(TEST_LEAD);
+      let outcome = await runLead(TEST_LEAD);
+      if (force && !outcome.result.published) {
+        const forced = await applyForcePublish([outcome]);
+        outcome = forced.outcomes[0] ?? outcome;
+      }
       return NextResponse.json({
         ok: true,
         mode: "rss",
         reason: "no_fresh_leads_local_fixture",
+        force,
         intake: {
           feedsAttempted: intake.feedsAttempted,
           feedErrors: intake.feedErrors,
@@ -116,7 +170,7 @@ async function runPipeline(request: Request) {
           candidates: intake.candidates,
           skipped: intake.skipped,
         },
-        results: [result],
+        results: [summarizeResult(outcome.lead, outcome.result)],
       });
     }
 
@@ -124,6 +178,7 @@ async function runPipeline(request: Request) {
       ok: true,
       mode: "rss",
       reason: "no_fresh_leads",
+      force,
       intake: {
         feedsAttempted: intake.feedsAttempted,
         feedErrors: intake.feedErrors,
@@ -135,13 +190,13 @@ async function runPipeline(request: Request) {
     });
   }
 
-  const results: ReturnType<typeof summarizeResult>[] = [];
+  const outcomes: LeadOutcome[] = [];
   const failures: { topic: string; error: string }[] = [];
   let quotaExhausted = false;
 
   for (const lead of intake.leads) {
     try {
-      results.push(await runLead(lead));
+      outcomes.push(await runLead(lead));
     } catch (err) {
       const message = failureMessage(err);
       failures.push({ topic: lead.topic, error: message });
@@ -152,6 +207,14 @@ async function runPipeline(request: Request) {
     }
   }
 
+  let forcePublished = false;
+  if (force && outcomes.length > 0) {
+    const forced = await applyForcePublish(outcomes);
+    forcePublished = forced.forcePublished;
+    outcomes.splice(0, outcomes.length, ...forced.outcomes);
+  }
+
+  const results = outcomes.map((outcome) => summarizeResult(outcome.lead, outcome.result));
   const intakeSummary = {
     feedsAttempted: intake.feedsAttempted,
     feedErrors: intake.feedErrors,
@@ -167,6 +230,7 @@ async function runPipeline(request: Request) {
         mode: "rss",
         reason: "llm_quota_exhausted",
         error: failures[0]?.error ?? "Gemini quota exhausted.",
+        force,
         intake: intakeSummary,
         failures,
         results,
@@ -178,6 +242,7 @@ async function runPipeline(request: Request) {
         ok: false,
         mode: "rss",
         error: failures[0]?.error ?? "Pipeline failed",
+        force,
         intake: intakeSummary,
         failures,
         results,
@@ -189,6 +254,8 @@ async function runPipeline(request: Request) {
   return NextResponse.json({
     ok: true,
     mode: "rss",
+    force,
+    ...(forcePublished ? { reason: "force_published_highest_score" } : {}),
     ...(quotaExhausted ? { reason: "llm_quota_exhausted" } : {}),
     intake: intakeSummary,
     failures,

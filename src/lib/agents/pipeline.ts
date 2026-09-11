@@ -40,7 +40,15 @@ export type PipelineResult =
       desk: WriterDesk;
       reason: string;
       title?: string;
+      verdict?: EditorVerdict;
     };
+
+export type ProcessLeadOptions = {
+  minScore?: number;
+  requireApproved?: boolean;
+};
+
+export const FORCE_PUBLISH_SCORE_MIN = 6;
 
 const SITE_CATEGORY: Record<WriterDesk, string> = {
   tech: "tech",
@@ -275,35 +283,11 @@ async function publishArticle(insert: ArticleInsert) {
   return fallback.data.slug;
 }
 
-export async function processNewsLead(lead: NewsLead): Promise<PipelineResult> {
-  const desk = resolveWriterDesk(lead.category);
-  const draft = await draftFromWriter(desk, lead);
-
-  let verdict: EditorVerdict;
-  try {
-    verdict = await editWithEditor(desk, lead, draft);
-  } catch (err) {
-    if (isLlmQuotaError(err)) throw err;
-    if (!isUnusableEditorPayload(err)) throw err;
-    const message = err instanceof Error ? err.message : "Editor verdict unusable";
-    return {
-      published: false,
-      score: 0,
-      desk,
-      reason: `Held — editor returned unusable JSON (${message}).`,
-    };
-  }
-
-  if (!verdict.approved || verdict.score < PUBLISH_SCORE_MIN) {
-    return {
-      published: false,
-      score: verdict.score,
-      desk,
-      title: verdict.editedTitle,
-      reason: `Held by the editor-in-chief (score below ${PUBLISH_SCORE_MIN} or not approved).`,
-    };
-  }
-
+async function commitVerdict(
+  lead: NewsLead,
+  desk: WriterDesk,
+  verdict: EditorVerdict,
+): Promise<Extract<PipelineResult, { published: true }>> {
   const admin = createAdminClient();
   const [categoryId, authorId] = await Promise.all([
     resolveCategoryId(admin, desk, lead.category),
@@ -339,4 +323,71 @@ export async function processNewsLead(lead: NewsLead): Promise<PipelineResult> {
     score: verdict.score,
     desk,
   };
+}
+
+export async function processNewsLead(
+  lead: NewsLead,
+  options: ProcessLeadOptions = {},
+): Promise<PipelineResult> {
+  const desk = resolveWriterDesk(lead.category);
+  const minScore = options.minScore ?? PUBLISH_SCORE_MIN;
+  const requireApproved = options.requireApproved ?? true;
+  const draft = await draftFromWriter(desk, lead);
+
+  let verdict: EditorVerdict;
+  try {
+    verdict = await editWithEditor(desk, lead, draft);
+  } catch (err) {
+    if (isLlmQuotaError(err)) throw err;
+    if (!isUnusableEditorPayload(err)) throw err;
+    const message = err instanceof Error ? err.message : "Editor verdict unusable";
+    return {
+      published: false,
+      score: 0,
+      desk,
+      reason: `Held — editor returned unusable JSON (${message}).`,
+    };
+  }
+
+  const belowBar =
+    verdict.score < minScore || (requireApproved && !verdict.approved);
+
+  if (belowBar) {
+    return {
+      published: false,
+      score: verdict.score,
+      desk,
+      title: verdict.editedTitle,
+      reason: `Held by the editor-in-chief (score below ${minScore} or not approved).`,
+      verdict,
+    };
+  }
+
+  return commitVerdict(lead, desk, verdict);
+}
+
+export async function publishHighestScoringHold(
+  outcomes: { lead: NewsLead; result: PipelineResult }[],
+  floor = FORCE_PUBLISH_SCORE_MIN,
+): Promise<{ lead: NewsLead; result: PipelineResult } | null> {
+  const ranked = outcomes
+    .filter(
+      (
+        outcome,
+      ): outcome is {
+        lead: NewsLead;
+        result: Extract<PipelineResult, { published: false }> & { verdict: EditorVerdict };
+      } =>
+        !outcome.result.published &&
+        Boolean(outcome.result.verdict) &&
+        outcome.result.score >= floor,
+    )
+    .sort((a, b) => b.result.score - a.result.score);
+
+  const winner = ranked[0];
+  if (!winner?.result.verdict) return null;
+
+  const desk = winner.result.desk;
+  const published = await commitVerdict(winner.lead, desk, winner.result.verdict);
+  return { lead: winner.lead, result: published };
 }
