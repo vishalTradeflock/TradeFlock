@@ -3,7 +3,7 @@ import { HOME_ARTICLE_LIMIT } from "@/lib/cache";
 import { SEED_ARTICLES } from "@/lib/data/seed";
 import { assignDistinctCovers, resolveCoverImage } from "@/lib/images";
 import { createPublicClient } from "@/lib/supabase/public";
-import type { ArticleWithRelations, Author, Category } from "@/lib/types";
+import type { ArticleListCard, ArticleWithRelations, Author, Category } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/utils";
 
 const LIST_LIMIT = HOME_ARTICLE_LIMIT;
@@ -34,6 +34,7 @@ const ARTICLE_DETAIL_SELECT = `${ARTICLE_LIST_SELECT},body`;
 
 type ArticleRow = Record<string, unknown> & {
   category?: Category | Category[] | null;
+  categories?: Category | Category[] | null;
   author?: Author | Author[] | null;
   body?: string | null;
   cover_image_url?: string | null;
@@ -73,8 +74,8 @@ function asRelation<T>(value: T | T[] | null | undefined): T | null {
 }
 
 function mapArticleRow(row: ArticleRow, includeBody: boolean): ArticleWithRelations | null {
-  const category = asRelation(row.category as Category | Category[] | null);
-  const author = asRelation(row.author as Author | Author[] | null);
+  const category = asRelation(row.category) ?? asRelation(row.categories);
+  const author = asRelation(row.author);
   if (!category || !author) return null;
 
   const article = row as unknown as ArticleWithRelations;
@@ -413,12 +414,105 @@ export const getSuccessInsightsArticles = cache(async (limit = 20) => {
   return withListCovers(rows);
 });
 
+const ARCHIVE_SELECT = [
+  "id",
+  "title",
+  "slug",
+  "dek",
+  "excerpt",
+  "cover_image_url",
+  "cover_image_alt",
+  "published_at",
+  "category_id",
+  "author_id",
+  "view_count",
+  "is_featured",
+  "is_breaking",
+  "categories!inner(id,name,slug)",
+  "author:authors(id,name,slug,title,avatar_url)",
+].join(",");
+
+/** Full Success Insights archive — list fields only, bypasses the 100-row PostgREST cap. */
+export const getSuccessInsightsArchive = cache(async () => {
+  const seedRows = () =>
+    withListCovers(
+      dedupeArticles([
+        ...filterSeed({ categoryName: SUCCESS_INSIGHTS_NAME, limit: 1000 }),
+        ...filterSeed({ categorySlug: SUCCESS_INSIGHTS_SLUG, limit: 1000 }),
+      ]),
+    );
+
+  if (!isSupabaseConfigured()) return seedRows();
+
+  try {
+    const supabase = createPublicClient();
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from("articles")
+      .select(ARCHIVE_SELECT)
+      .eq("status", "published")
+      .lte("published_at", now)
+      .or("slug.eq.success-insights,name.ilike.%success insights%", {
+        foreignTable: "categories",
+      })
+      .order("published_at", { ascending: false })
+      .range(0, 999);
+
+    const fromJoin =
+      !error && data?.length
+        ? data
+            .map((row) => mapArticleRow(row as unknown as ArticleRow, false))
+            .filter((row): row is ArticleWithRelations => Boolean(row))
+        : [];
+
+    if (fromJoin.length) return withListCovers(dedupeArticles(fromJoin));
+
+    const ids = await getSuccessInsightsCategoryIds();
+    if (ids.length) {
+      const byId = await supabase
+        .from("articles")
+        .select(ARTICLE_LIST_SELECT)
+        .eq("status", "published")
+        .lte("published_at", now)
+        .in("category_id", ids)
+        .order("published_at", { ascending: false })
+        .range(0, 999);
+
+      const mapped =
+        !byId.error && byId.data?.length
+          ? byId.data
+              .map((row) => mapArticleRow(row as unknown as ArticleRow, false))
+              .filter((row): row is ArticleWithRelations => Boolean(row))
+          : [];
+      if (mapped.length) return withListCovers(dedupeArticles(mapped));
+    }
+  } catch {
+    /* fall through to seed */
+  }
+
+  return seedRows();
+});
+
 export const getBreakingArticles = cache(async () => {
   const rows =
     (await queryList({ breaking: true, limit: 5 })) ?? filterSeed({ breaking: true, limit: 5 });
   const source = rows.length ? rows : ((await queryList({ limit: 3 })) ?? filterSeed({ limit: 3 }));
   return withListCovers(source.slice(0, 3));
 });
+
+export function toArticleListCard(article: ArticleWithRelations): ArticleListCard {
+  return {
+    id: article.id,
+    slug: article.slug,
+    title: article.title,
+    excerpt: article.excerpt,
+    cover_image_url: article.cover_image_url,
+    cover_image_alt: article.cover_image_alt,
+    published_at: article.published_at,
+    authorName: article.author.name,
+    categoryName: article.category.name,
+  };
+}
 
 export const getRelatedArticles = cache(async (article: ArticleWithRelations, limit = 5) => {
   const sameDesk =

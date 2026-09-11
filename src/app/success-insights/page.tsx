@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Header from "@/components/Header";
+import GrowthStrategies from "@/components/GrowthStrategies";
+import LeadershipSpotlight from "@/components/LeadershipSpotlight";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import { getArticles, getSuccessInsightsArticles } from "@/lib/articles";
-import { formatPublishedAt, formatShortDate } from "@/lib/utils";
+import { SUCCESS_INSIGHTS_SPOTLIGHT_COUNT } from "@/lib/cache";
+import {
+  getArticles,
+  getSuccessInsightsArchive,
+  toArticleListCard,
+} from "@/lib/articles";
+import { formatPublishedAt } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Success Insights",
@@ -20,18 +27,23 @@ export const metadata: Metadata = {
 export const revalidate = 120;
 
 export default async function SuccessInsightsPage() {
-  const insights = await getSuccessInsightsArticles(12);
-  const desk = insights.length ? insights : await getArticles("leadership", 12);
+  const insights = await getSuccessInsightsArchive();
+  const desk = insights.length ? insights : await getArticles("leadership", 36);
   const featured = desk[0];
-  const interviews = desk.filter((article) => article.id !== featured?.id).slice(0, 3);
-  const spotlightIds = new Set([featured?.id, ...interviews.map((item) => item.id)]);
-  const strategies = desk
+  const afterFeatured = featured
+    ? desk.filter((article) => article.id !== featured.id)
+    : desk;
+  const interviews = afterFeatured
+    .slice(0, SUCCESS_INSIGHTS_SPOTLIGHT_COUNT)
+    .map(toArticleListCard);
+  const spotlightIds = new Set(interviews.map((item) => item.id));
+  const strategies = afterFeatured
     .filter((article) => !spotlightIds.has(article.id))
-    .slice(0, 6);
+    .map(toArticleListCard);
 
   return (
     <>
-      <Header activePage="success-insights" tickerArticles={desk} />
+      <Header activePage="success-insights" tickerArticles={desk.slice(0, 12)} />
       <main className="mx-auto max-w-[1240px] px-4 py-8">
         <section className="max-w-3xl border-b border-neutral-200 pb-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">
@@ -97,75 +109,8 @@ export default async function SuccessInsightsPage() {
           </section>
         ) : null}
 
-        {interviews.length ? (
-          <section className="mt-10">
-            <h2 className="font-serif text-2xl font-semibold tracking-tight">
-              Leadership spotlights
-            </h2>
-            <div className="mt-5 grid gap-6 sm:grid-cols-3">
-              {interviews.map((article) => (
-                <Link
-                  key={article.id}
-                  href={`/news/${article.slug}`}
-                  className="group border-t border-neutral-200 pt-4"
-                >
-                  <div className="relative aspect-[16/10] overflow-hidden bg-neutral-100">
-                    <SafeArticleImage
-                      src={article.cover_image_url}
-                      alt={article.cover_image_alt}
-                      fill
-                      sizes="(min-width: 640px) 33vw, 100vw"
-                      loading="lazy"
-                    />
-                  </div>
-                  <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">
-                    {article.category.name}
-                  </p>
-                  <h3 className="mt-1 font-serif text-lg font-semibold leading-snug tracking-tight group-hover:text-[#c41e3a]">
-                    {article.title}
-                  </h3>
-                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-neutral-600">
-                    {article.excerpt}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        <section className="mt-10 border-t border-neutral-200 pt-8">
-          <h2 className="font-serif text-2xl font-semibold tracking-tight">
-            Growth strategies
-          </h2>
-          {strategies.length ? (
-            <ul className="mt-4 divide-y divide-neutral-200 border-y border-neutral-200">
-              {strategies.map((article) => (
-                <li key={article.id} className="py-4">
-                  <Link href={`/news/${article.slug}`} className="group block">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500">
-                      {article.category.name}
-                      <span className="mx-2">·</span>
-                      {formatShortDate(article.published_at)}
-                    </p>
-                    <h3 className="mt-1 font-serif text-xl font-semibold tracking-tight group-hover:text-[#c41e3a]">
-                      {article.title}
-                    </h3>
-                    <p className="mt-1 text-sm leading-6 text-neutral-600">
-                      {article.excerpt}
-                    </p>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-4 max-w-2xl text-[15px] leading-7 text-neutral-700">
-              This desk will carry playbooks from operators who have already
-              made the hard calls — capital, talent, and the unglamorous work of
-              compounding. More growth packages land here as they clear the
-              edit.
-            </p>
-          )}
-        </section>
+        <LeadershipSpotlight articles={interviews} />
+        <GrowthStrategies articles={strategies} />
       </main>
     </>
   );

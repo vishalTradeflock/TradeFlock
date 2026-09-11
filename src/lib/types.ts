@@ -36,6 +36,19 @@ export type ArticleWithRelations = Article & {
   author: Author;
 };
 
+/** List-card fields only — never includes `body`. */
+export type ArticleListCard = {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  cover_image_url: string;
+  cover_image_alt: string;
+  published_at: string;
+  authorName: string;
+  categoryName: string;
+};
+
 export const NAV_CATEGORIES = [
   { name: "Tech", slug: "tech" },
   { name: "Markets", slug: "markets" },
