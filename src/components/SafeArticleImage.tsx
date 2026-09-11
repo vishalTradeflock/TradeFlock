@@ -15,6 +15,8 @@ export default function SafeArticleImage({
   src,
   alt,
   className,
+  priority,
+  loading,
   ...props
 }: SafeArticleImageProps) {
   const [failed, setFailed] = useState(false);
@@ -37,6 +39,8 @@ export default function SafeArticleImage({
       alt={alt}
       className={cn("object-cover", className)}
       onError={() => setFailed(true)}
+      priority={priority}
+      loading={priority ? undefined : loading ?? "lazy"}
       {...props}
     />
   );

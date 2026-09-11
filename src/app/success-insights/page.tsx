@@ -17,12 +17,11 @@ export const metadata: Metadata = {
   },
 };
 
+export const revalidate = 120;
+
 export default async function SuccessInsightsPage() {
-  const [insights, leadership] = await Promise.all([
-    getSuccessInsightsArticles(24),
-    getArticles("leadership", 12),
-  ]);
-  const desk = insights.length ? insights : leadership;
+  const insights = await getSuccessInsightsArticles(12);
+  const desk = insights.length ? insights : await getArticles("leadership", 12);
   const featured = desk[0];
   const interviews = desk.filter((article) => article.id !== featured?.id).slice(0, 3);
   const spotlightIds = new Set([featured?.id, ...interviews.map((item) => item.id)]);
@@ -116,6 +115,7 @@ export default async function SuccessInsightsPage() {
                       alt={article.cover_image_alt}
                       fill
                       sizes="(min-width: 640px) 33vw, 100vw"
+                      loading="lazy"
                     />
                   </div>
                   <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">

@@ -4,49 +4,36 @@ import HeroCarousel from "@/components/HeroCarousel";
 import LatestScroller from "@/components/LatestScroller";
 import MiddleScroller from "@/components/MiddleScroller";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import {
-  getBigTake,
-  getHomeLayout,
-  getSuccessInsightsArticles,
-  isSuccessInsightsArticle,
-  partitionHomeArticles,
-} from "@/lib/articles";
+import { LATEST_SCROLLER_LIMIT } from "@/lib/cache";
+import { getHomeLayout } from "@/lib/articles";
 import type { ArticleWithRelations } from "@/lib/types";
 import { formatShortDate, formatTimeAgo } from "@/lib/utils";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 120;
 
-type HomeProps = {
-  searchParams: Promise<{ category?: string; q?: string }>;
-};
-
-export default async function Home({ searchParams }: HomeProps) {
-  const params = await searchParams;
-  const category = params.category;
-  const [{ featured, mostRead, articles }, bigTake, successInsightsArticles] = await Promise.all([
-    getHomeLayout(category),
-    getBigTake(8),
-    getSuccessInsightsArticles(20),
-  ]);
-  const editorialArticles = partitionHomeArticles(articles).editorialArticles;
+export default async function Home() {
+  const {
+    featured,
+    mostRead,
+    bigTake,
+    editorialArticles,
+    successInsightsArticles,
+  } = await getHomeLayout();
 
   const heroArticles = editorialArticles.slice(0, 8);
   const lead = heroArticles[0] ?? featured;
   const deepDiveTop = editorialArticles.slice(8, 10);
   const deepDiveSub = editorialArticles.slice(10, 14);
-  const latestArticles = editorialArticles.slice(14);
-  const editorialMostRead = mostRead.filter((article) => !isSuccessInsightsArticle(article));
-  const editorialBigTake = bigTake.filter((article) => !isSuccessInsightsArticle(article));
+  const latestArticles = editorialArticles.slice(14, 14 + LATEST_SCROLLER_LIMIT);
   const middleRail =
     successInsightsArticles.length > 0
       ? successInsightsArticles
-      : editorialArticles.slice(14, 34);
+      : editorialArticles.slice(14, 24);
 
   if (!lead && !heroArticles.length) {
     return (
       <>
-        <Header activeCategory={category} tickerArticles={successInsightsArticles} />
+        <Header tickerArticles={successInsightsArticles} />
         <main className="mx-auto max-w-[1240px] px-4 py-16">
           <p className="text-sm text-neutral-600">No stories on the desk yet.</p>
         </main>
@@ -56,14 +43,8 @@ export default async function Home({ searchParams }: HomeProps) {
 
   return (
     <>
-      <Header activeCategory={category} tickerArticles={successInsightsArticles} />
+      <Header tickerArticles={successInsightsArticles} />
       <main className="mx-auto max-w-[1240px] px-4 py-6">
-        {category ? (
-          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">
-            Section · {lead?.category.name ?? category}
-          </p>
-        ) : null}
-
         <section className="grid min-h-0 grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-0">
           <div className="min-h-0 lg:col-span-6 lg:pr-6">
             <HeroCarousel articles={heroArticles} />
@@ -83,6 +64,7 @@ export default async function Home({ searchParams }: HomeProps) {
                         alt={article.cover_image_alt}
                         fill
                         sizes="(min-width: 640px) 25vw, 100vw"
+                        loading="lazy"
                       />
                     </div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">
@@ -124,10 +106,10 @@ export default async function Home({ searchParams }: HomeProps) {
             <MiddleScroller articles={middleRail} />
 
             <aside className="min-h-0 lg:border-l lg:border-neutral-200 lg:pl-5">
-              <RankedRail title="Most Read" articles={editorialMostRead} />
+              <RankedRail title="Most Read" articles={mostRead} />
               <RankedRail
                 title="The Big Take"
-                articles={editorialBigTake}
+                articles={bigTake}
                 className="mt-8"
                 scrollable
               />

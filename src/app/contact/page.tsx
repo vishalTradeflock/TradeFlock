@@ -14,6 +14,8 @@ export const metadata: Metadata = {
   },
 };
 
+export const revalidate = 120;
+
 export default function ContactPage() {
   return (
     <>
