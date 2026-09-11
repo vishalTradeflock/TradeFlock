@@ -14,6 +14,8 @@ export const metadata: Metadata = {
   },
 };
 
+export const revalidate = 120;
+
 const FEATURED = {
   volume: "Vol. 12 No. 9",
   season: "September 2026",

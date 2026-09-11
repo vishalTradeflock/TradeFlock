@@ -3,7 +3,7 @@ import SafeArticleImage from "@/components/SafeArticleImage";
 import type { ArticleWithRelations } from "@/lib/types";
 import { formatShortDate } from "@/lib/utils";
 
-const LOOP_MAX = 20;
+const LOOP_MAX = 10;
 
 function loopSource(articles: ArticleWithRelations[]) {
   const seen = new Set<string>();
@@ -67,6 +67,7 @@ function RailCard({ article }: { article: ArticleWithRelations }) {
           fill
           sizes="64px"
           className="object-cover"
+          loading="lazy"
         />
       </div>
       <div className="min-w-0">

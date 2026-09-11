@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   },
 };
 
+export const revalidate = 120;
+
 const VALUES = [
   {
     title: "Accuracy first",

@@ -1,12 +1,12 @@
 import { cache } from "react";
+import { HOME_ARTICLE_LIMIT } from "@/lib/cache";
 import { SEED_ARTICLES } from "@/lib/data/seed";
 import { assignDistinctCovers, resolveCoverImage } from "@/lib/images";
-import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import type { ArticleWithRelations, Author, Category } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/utils";
 
-const LIST_LIMIT = 80;
-const HOME_EDITORIAL_LIMIT = 250;
+const LIST_LIMIT = HOME_ARTICLE_LIMIT;
 
 export const SUCCESS_INSIGHTS_SLUG = "success-insights";
 export const SUCCESS_INSIGHTS_NAME = "Success Insights";
@@ -161,7 +161,7 @@ async function queryList(options: ListQuery): Promise<ArticleWithRelations[] | n
   if (!isSupabaseConfigured()) return null;
 
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const limit = options.limit ?? LIST_LIMIT;
     const order = options.order ?? "published_at";
     const needsCategoryInner =
@@ -177,6 +177,7 @@ async function queryList(options: ListQuery): Promise<ArticleWithRelations[] | n
     let request = supabase
       .from("articles")
       .select(select)
+      .eq("status", "published")
       .lte("published_at", new Date().toISOString())
       .order(order, { ascending: false })
       .limit(limit);
@@ -247,7 +248,7 @@ export function partitionHomeArticles(articles: ArticleWithRelations[]) {
 const getSuccessInsightsCategoryIds = cache(async () => {
   if (!isSupabaseConfigured()) return [] as string[];
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase.from("categories").select("id,name,slug");
     if (error || !data?.length) return [] as string[];
     return data
@@ -262,7 +263,7 @@ const getSuccessInsightsCategoryIds = cache(async () => {
   }
 });
 
-export const getEditorialArticles = cache(async (limit = HOME_EDITORIAL_LIMIT) => {
+export const getEditorialArticles = cache(async (limit = HOME_ARTICLE_LIMIT) => {
   const siIds = await getSuccessInsightsCategoryIds();
   const queried =
     (await queryList({
@@ -291,10 +292,11 @@ export async function getArticleSlugs() {
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("articles")
       .select("slug")
+      .eq("status", "published")
       .lte("published_at", new Date().toISOString())
       .order("published_at", { ascending: false })
       .limit(LIST_LIMIT);
@@ -312,12 +314,13 @@ async function fetchArticleBySlugFromSupabase(cleanSlug: string) {
   if (!isSupabaseConfigured()) return null;
 
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const now = new Date().toISOString();
 
     const exact = await supabase
       .from("articles")
       .select(ARTICLE_DETAIL_SELECT)
+      .eq("status", "published")
       .eq("slug", cleanSlug)
       .lte("published_at", now)
       .maybeSingle();
@@ -332,6 +335,7 @@ async function fetchArticleBySlugFromSupabase(cleanSlug: string) {
       const retry = await supabase
         .from("articles")
         .select(ARTICLE_DETAIL_SELECT)
+        .eq("status", "published")
         .eq("slug", variant)
         .lte("published_at", now)
         .maybeSingle();
@@ -344,6 +348,7 @@ async function fetchArticleBySlugFromSupabase(cleanSlug: string) {
     const insensitive = await supabase
       .from("articles")
       .select(ARTICLE_DETAIL_SELECT)
+      .eq("status", "published")
       .ilike(
         "slug",
         cleanSlug.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_"),
@@ -362,7 +367,7 @@ async function fetchArticleBySlugFromSupabase(cleanSlug: string) {
   return null;
 }
 
-export async function getArticleBySlug(slug: string) {
+export const getArticleBySlug = cache(async (slug: string) => {
   const cleanSlug = normalizeArticleSlug(slug);
   if (!cleanSlug) return null;
 
@@ -377,7 +382,7 @@ export async function getArticleBySlug(slug: string) {
     ...seed,
     cover_image_url: resolveCoverImage(seed.cover_image_url),
   };
-}
+});
 
 export const getSuccessInsightsArticles = cache(async (limit = 20) => {
   const byName =
@@ -408,24 +413,14 @@ export const getSuccessInsightsArticles = cache(async (limit = 20) => {
   return withListCovers(rows);
 });
 
-export async function getBreakingArticles() {
+export const getBreakingArticles = cache(async () => {
   const rows =
     (await queryList({ breaking: true, limit: 5 })) ?? filterSeed({ breaking: true, limit: 5 });
   const source = rows.length ? rows : ((await queryList({ limit: 3 })) ?? filterSeed({ limit: 3 }));
   return withListCovers(source.slice(0, 3));
-}
+});
 
-export async function getMostRead(limit = 5, categorySlug?: string) {
-  const rows =
-    (await queryList({ categorySlug, limit: limit + 8, order: "view_count" })) ??
-    filterSeed({ categorySlug, limit: limit + 8, order: "view_count" });
-  const editorial = categorySlug
-    ? rows
-    : rows.filter((article) => !isSuccessInsightsArticle(article));
-  return withListCovers(editorial.slice(0, limit));
-}
-
-export async function getRelatedArticles(article: ArticleWithRelations, limit = 5) {
+export const getRelatedArticles = cache(async (article: ArticleWithRelations, limit = 5) => {
   const sameDesk =
     (await queryList({ categoryId: article.category_id, excludeId: article.id, limit })) ??
     filterSeed({ categoryId: article.category_id, excludeId: article.id, limit });
@@ -440,40 +435,45 @@ export async function getRelatedArticles(article: ArticleWithRelations, limit = 
     ...filler.filter((item) => !sameDesk.some((desk) => desk.id === item.id)),
   ].slice(0, limit);
   return withListCovers(merged);
-}
+});
 
-export async function getBigTake(limit = 8) {
-  const articles = await getEditorialArticles();
-  const deepDives = articles.filter((article) =>
+export const getHomeLayout = cache(async (categorySlug?: string) => {
+  const articles = await getArticles(categorySlug, HOME_ARTICLE_LIMIT);
+  const { editorialArticles, successInsightsArticles } = partitionHomeArticles(articles);
+  const pool = editorialArticles.length ? editorialArticles : articles;
+  const featured = pool.find((article) => article.is_featured) ?? pool[0];
+  const mostRead = [...pool]
+    .sort((a, b) => b.view_count - a.view_count)
+    .slice(0, 5);
+  const deskTake = pool.filter((article) =>
     ["markets", "finance", "tech", "leadership"].includes(article.category.slug),
   );
-  const source = deepDives.length >= 6 ? deepDives : articles;
-  return source.slice(0, limit);
-}
-
-export async function getHomeLayout(categorySlug?: string) {
-  const articles = categorySlug
-    ? await getArticles(categorySlug, HOME_EDITORIAL_LIMIT)
-    : await getEditorialArticles(HOME_EDITORIAL_LIMIT);
-  const featured = articles.find((article) => article.is_featured) ?? articles[0];
-  let secondary = articles.filter((article) => article.id !== featured?.id).slice(0, 10);
-  if (secondary.length < 8) {
-    const extras = (
-      categorySlug
-        ? await getArticles(undefined, HOME_EDITORIAL_LIMIT)
-        : await getEditorialArticles(HOME_EDITORIAL_LIMIT)
-    ).filter(
-      (article) =>
-        article.id !== featured?.id &&
-        !secondary.some((item) => item.id === article.id),
-    );
-    secondary = [...secondary, ...extras].slice(0, 10);
-  }
-  const mostRead = await getMostRead(5, categorySlug);
-  const latest = articles.filter(
+  const bigTake = (deskTake.length >= 5 ? deskTake : pool).slice(0, 8);
+  const secondary = pool.filter((article) => article.id !== featured?.id).slice(0, 10);
+  const latest = pool.filter(
     (article) =>
       article.id !== featured?.id && !secondary.some((item) => item.id === article.id),
   );
 
-  return { featured, secondary, mostRead, latest, articles };
+  return {
+    featured,
+    secondary,
+    mostRead,
+    bigTake,
+    latest,
+    articles,
+    editorialArticles,
+    successInsightsArticles,
+  };
+});
+
+export async function getMostRead(limit = 5, categorySlug?: string) {
+  const { mostRead } = await getHomeLayout(categorySlug);
+  return mostRead.slice(0, limit);
 }
+
+export async function getBigTake(limit = 8) {
+  const { bigTake } = await getHomeLayout();
+  return bigTake.slice(0, limit);
+}
+

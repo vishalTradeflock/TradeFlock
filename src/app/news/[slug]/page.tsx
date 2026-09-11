@@ -3,12 +3,17 @@ import Link from "next/link";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
-import { getArticleBySlug, getRelatedArticles, normalizeArticleSlug } from "@/lib/articles";
+import { getArticleBySlug, getArticleSlugs, getRelatedArticles, normalizeArticleSlug } from "@/lib/articles";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { formatPublishedAt } from "@/lib/utils";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 120;
 export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  const slugs = await getArticleSlugs();
+  return slugs.slice(0, 12).map((slug) => ({ slug }));
+}
 
 type ArticlePageProps = {
   params: Promise<{ slug: string }>;
@@ -131,6 +136,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                         alt={item.cover_image_alt}
                         fill
                         sizes="96px"
+                        loading="lazy"
                       />
                     </div>
                     <div>

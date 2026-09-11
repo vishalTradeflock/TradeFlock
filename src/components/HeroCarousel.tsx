@@ -51,6 +51,7 @@ export default function HeroCarousel({
             alt={article.cover_image_alt}
             fill
             priority={safeIndex === 0}
+            loading={safeIndex === 0 ? undefined : "lazy"}
             sizes="(min-width: 1024px) 50vw, 100vw"
             className="object-cover transition-opacity group-hover:opacity-90"
           />
