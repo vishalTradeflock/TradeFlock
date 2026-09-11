@@ -414,10 +414,21 @@ export const getSuccessInsightsArticles = cache(async (limit = 20) => {
 });
 
 export const getBreakingArticles = cache(async () => {
-  const rows =
-    (await queryList({ breaking: true, limit: 5 })) ?? filterSeed({ breaking: true, limit: 5 });
-  const source = rows.length ? rows : ((await queryList({ limit: 3 })) ?? filterSeed({ limit: 3 }));
-  return withListCovers(source.slice(0, 3));
+  const siIds = await getSuccessInsightsCategoryIds();
+  const breakingRows =
+    (await queryList({
+      breaking: true,
+      excludeCategoryIds: siIds.length ? siIds : undefined,
+      excludeSuccessInsights: siIds.length === 0,
+      limit: 8,
+    })) ?? filterSeed({ breaking: true, excludeSuccessInsights: true, limit: 8 });
+  const breaking = breakingRows.filter((article) => !isSuccessInsightsArticle(article));
+  if (breaking.length) {
+    return withListCovers(breaking.slice(0, 8));
+  }
+
+  const editorial = await getEditorialArticles(8);
+  return editorial.slice(0, 8);
 });
 
 export const getRelatedArticles = cache(async (article: ArticleWithRelations, limit = 5) => {

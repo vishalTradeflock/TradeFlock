@@ -33,7 +33,7 @@ export default async function Home() {
   if (!lead && !heroArticles.length) {
     return (
       <>
-        <Header tickerArticles={successInsightsArticles} />
+        <Header />
         <main className="mx-auto max-w-[1240px] px-4 py-16">
           <p className="text-sm text-neutral-600">No stories on the desk yet.</p>
         </main>
@@ -43,7 +43,7 @@ export default async function Home() {
 
   return (
     <>
-      <Header tickerArticles={successInsightsArticles} />
+      <Header />
       <main className="mx-auto max-w-[1240px] px-4 py-6">
         <section className="grid min-h-0 grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-0">
           <div className="min-h-0 lg:col-span-6 lg:pr-6">

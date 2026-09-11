@@ -31,7 +31,7 @@ export default async function SuccessInsightsPage() {
 
   return (
     <>
-      <Header activePage="success-insights" tickerArticles={desk} />
+      <Header activePage="success-insights" />
       <main className="mx-auto max-w-[1240px] px-4 py-8">
         <section className="max-w-3xl border-b border-neutral-200 pb-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">
