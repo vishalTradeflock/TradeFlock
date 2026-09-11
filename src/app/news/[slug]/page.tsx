@@ -3,23 +3,23 @@ import Link from "next/link";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
-import { getArticleBySlug, getArticles, getRelatedArticles } from "@/lib/articles";
+import { getArticleBySlug, getRelatedArticles, normalizeArticleSlug } from "@/lib/articles";
+import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { formatPublishedAt } from "@/lib/utils";
+
+export const dynamic = "force-dynamic";
+export const dynamicParams = true;
 
 type ArticlePageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export async function generateStaticParams() {
-  const articles = await getArticles();
-  return articles.map((article) => ({ slug: article.slug }));
-}
-
 export async function generateMetadata({
   params,
 }: ArticlePageProps): Promise<Metadata> {
   const { slug } = await params;
-  const article = await getArticleBySlug(slug);
+  const cleanSlug = normalizeArticleSlug(slug);
+  const article = await getArticleBySlug(cleanSlug);
   if (!article) {
     return { title: "Story not found" };
   }
@@ -52,10 +52,18 @@ export async function generateMetadata({
 
 export default async function ArticlePage({ params }: ArticlePageProps) {
   const { slug } = await params;
-  const article = await getArticleBySlug(slug);
+  const cleanSlug = normalizeArticleSlug(slug);
+  const article = await getArticleBySlug(cleanSlug);
   if (!article) notFound();
 
   const related = await getRelatedArticles(article);
+  const body = sanitizeArticleBody(article.body, {
+    title: article.title,
+    coverImageUrl: article.cover_image_url,
+  });
+  const showCoverCaption =
+    Boolean(article.cover_image_alt) &&
+    article.cover_image_alt.trim().toLowerCase() !== article.title.trim().toLowerCase();
 
   return (
     <>
@@ -88,20 +96,24 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               </time>
             </div>
 
-            <div className="relative mt-5 aspect-[16/9] overflow-hidden bg-neutral-100">
+            <div className="relative mt-5 flex min-h-[200px] items-center justify-center overflow-hidden bg-neutral-100">
               <SafeArticleImage
                 src={article.cover_image_url}
                 alt={article.cover_image_alt}
-                fill
+                width={1600}
+                height={900}
                 priority
                 sizes="(min-width: 1024px) 66vw, 100vw"
+                className="mx-auto h-auto max-h-[500px] w-auto object-contain object-top"
               />
             </div>
-            <p className="mt-2 text-[11px] text-neutral-500">{article.cover_image_alt}</p>
+            {showCoverCaption ? (
+              <p className="mt-2 text-[11px] text-neutral-500">{article.cover_image_alt}</p>
+            ) : null}
 
             <div
               className="prose-article prose prose-neutral mt-8 max-w-none prose-p:mb-5 prose-p:leading-relaxed prose-h3:mt-8 prose-h3:mb-3"
-              dangerouslySetInnerHTML={{ __html: article.body }}
+              dangerouslySetInnerHTML={{ __html: body }}
             />
           </article>
 
