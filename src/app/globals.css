@@ -30,7 +30,8 @@ body {
 .ticker-track {
   display: flex;
   width: max-content;
-  animation: ticker 42s linear infinite;
+  /* 90s keeps typical news headlines at the pre-migration crawl; 42s raced after SI titles. */
+  animation: ticker 90s linear infinite;
 }
 
 .ticker-track:hover {
