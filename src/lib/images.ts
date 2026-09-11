@@ -1,7 +1,12 @@
 export const FALLBACK_COVER_IMAGE =
   "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1600&q=80";
 
-const ALLOWED_HOSTS = new Set(["images.unsplash.com", "plus.unsplash.com"]);
+const ALLOWED_HOSTS = new Set([
+  "images.unsplash.com",
+  "plus.unsplash.com",
+  "www.tradeflockusa.com",
+  "tradeflockusa.com",
+]);
 
 export const EDITORIAL_COVERS = [
   // Tech / AI

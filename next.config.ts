@@ -15,6 +15,14 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "*.supabase.co",
       },
+      {
+        protocol: "https",
+        hostname: "www.tradeflockusa.com",
+      },
+      {
+        protocol: "https",
+        hostname: "tradeflockusa.com",
+      },
     ],
   },
 };
