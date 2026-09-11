@@ -1,10 +1,17 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import HeroCarousel from "@/components/HeroCarousel";
 import LatestScroller from "@/components/LatestScroller";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import { getBigTake, getHomeLayout } from "@/lib/articles";
+import {
+  getBigTake,
+  getHomeLayout,
+  getSuccessInsightsArticles,
+  isSuccessInsightsArticle,
+  partitionHomeArticles,
+} from "@/lib/articles";
 import type { ArticleWithRelations } from "@/lib/types";
-import { formatPublishedAt, formatShortDate, formatTimeAgo } from "@/lib/utils";
+import { formatShortDate, formatTimeAgo } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,17 +23,34 @@ type HomeProps = {
 export default async function Home({ searchParams }: HomeProps) {
   const params = await searchParams;
   const category = params.category;
-  const { featured, secondary, mostRead, articles } = await getHomeLayout(category);
-  const bigTake = await getBigTake(8);
-  const lead = articles[0] ?? featured;
-  const deepDiveTop = articles.slice(6, 8);
-  const deepDiveSub = articles.slice(8, 12);
-  const latestArticles = articles.slice(12);
+  const [{ featured, mostRead, articles }, bigTake, dedicatedInsights] = await Promise.all([
+    getHomeLayout(category),
+    getBigTake(8),
+    getSuccessInsightsArticles(16),
+  ]);
+  const partitioned = partitionHomeArticles(articles);
+  const editorialArticles = partitioned.editorialArticles;
+  const successInsightsArticles =
+    partitioned.successInsightsArticles.length > 0
+      ? partitioned.successInsightsArticles
+      : dedicatedInsights;
 
-  if (!lead) {
+  const heroArticles = editorialArticles.slice(0, 8);
+  const lead = heroArticles[0] ?? featured;
+  const deepDiveTop = editorialArticles.slice(8, 10);
+  const deepDiveSub = editorialArticles.slice(10, 14);
+  const latestArticles = editorialArticles.slice(14);
+  const editorialMostRead = mostRead.filter((article) => !isSuccessInsightsArticle(article));
+  const editorialBigTake = bigTake.filter((article) => !isSuccessInsightsArticle(article));
+  const middleRail =
+    successInsightsArticles.length > 0
+      ? successInsightsArticles
+      : editorialArticles.slice(14, 24);
+
+  if (!lead && !heroArticles.length) {
     return (
       <>
-        <Header activeCategory={category} />
+        <Header activeCategory={category} tickerArticles={successInsightsArticles} />
         <main className="mx-auto max-w-[1240px] px-4 py-16">
           <p className="text-sm text-neutral-600">No stories on the desk yet.</p>
         </main>
@@ -36,40 +60,17 @@ export default async function Home({ searchParams }: HomeProps) {
 
   return (
     <>
-      <Header activeCategory={category} />
+      <Header activeCategory={category} tickerArticles={successInsightsArticles} />
       <main className="mx-auto max-w-[1240px] px-4 py-6">
         {category ? (
           <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">
-            Section · {lead.category.name}
+            Section · {lead?.category.name ?? category}
           </p>
         ) : null}
 
         <section className="grid min-h-0 grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-0">
           <div className="min-h-0 lg:col-span-6 lg:pr-6">
-            <article>
-              <Link href={`/news/${lead.slug}`} className="group block">
-                <div className="relative aspect-[16/10] overflow-hidden bg-neutral-100">
-                  <SafeArticleImage
-                    src={lead.cover_image_url}
-                    alt={lead.cover_image_alt}
-                    fill
-                    priority
-                    sizes="(min-width: 1024px) 50vw, 100vw"
-                    className="object-cover transition-opacity group-hover:opacity-90"
-                  />
-                </div>
-                <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">
-                  {lead.category.name}
-                </p>
-                <h2 className="mt-1 font-serif text-3xl font-semibold leading-tight tracking-tight text-neutral-950 group-hover:text-[#c41e3a] sm:text-4xl">
-                  {lead.title}
-                </h2>
-                {lead.dek ? (
-                  <p className="mt-2 text-[17px] leading-7 text-neutral-700">{lead.dek}</p>
-                ) : null}
-                <Byline article={lead} />
-              </Link>
-            </article>
+            <HeroCarousel articles={heroArticles} />
 
             <hr className="my-6 border-border" />
             <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -128,7 +129,7 @@ export default async function Home({ searchParams }: HomeProps) {
               <div className="absolute inset-0 overflow-hidden">
                 <div className="secondary-marquee">
                   {[0, 1].flatMap((copy) =>
-                    secondary.map((article) => (
+                    middleRail.map((article) => (
                       <SecondaryCard
                         key={`${article.id}-${copy}`}
                         article={article}
@@ -148,10 +149,10 @@ export default async function Home({ searchParams }: HomeProps) {
             </div>
 
             <aside className="min-h-0 lg:border-l lg:border-neutral-200 lg:pl-5">
-              <RankedRail title="Most Read" articles={mostRead} />
+              <RankedRail title="Most Read" articles={editorialMostRead} />
               <RankedRail
                 title="The Big Take"
-                articles={bigTake}
+                articles={editorialBigTake}
                 className="mt-8"
                 scrollable
               />
@@ -242,15 +243,5 @@ function SecondaryCard({ article }: { article: ArticleWithRelations }) {
         </p>
       </div>
     </Link>
-  );
-}
-
-function Byline({ article }: { article: ArticleWithRelations }) {
-  return (
-    <p className="mt-3 text-xs text-neutral-500">
-      By <span className="font-semibold text-neutral-800">{article.author.name}</span>
-      <span className="mx-1.5">·</span>
-      {formatPublishedAt(article.published_at)}
-    </p>
   );
 }

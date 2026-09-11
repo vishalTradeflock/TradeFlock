@@ -25,8 +25,6 @@ export default function LatestScroller({
   const [page, setPage] = useState(0);
   if (!articles.length) return null;
 
-  const start = page * PAGE_SIZE + 1;
-  const end = Math.min((page + 1) * PAGE_SIZE, articles.length);
   const atStart = page <= 0;
   const atEnd = page >= pages.length - 1;
 
@@ -35,9 +33,6 @@ export default function LatestScroller({
       <div className="mb-6 flex items-center justify-between gap-4">
         <h3 className="text-2xl font-bold uppercase tracking-wide">The Latest</h3>
         <div className="flex items-center gap-2">
-          <p className="text-xs text-muted-foreground">
-            {start}-{end} of {articles.length}
-          </p>
           <button
             type="button"
             aria-label="Previous stories"
@@ -88,24 +83,6 @@ export default function LatestScroller({
           ))}
         </div>
       </div>
-
-      {pages.length > 1 ? (
-        <div className="mt-5 flex justify-center gap-2">
-          {pages.map((chunk, pageIndex) => (
-            <button
-              key={chunk[0]?.id ?? pageIndex}
-              type="button"
-              aria-label={`Show stories ${pageIndex * PAGE_SIZE + 1} to ${Math.min((pageIndex + 1) * PAGE_SIZE, articles.length)}`}
-              aria-current={pageIndex === page}
-              className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                pageIndex === page ? "bg-[#c41e3a]" : "bg-neutral-300",
-              )}
-              onClick={() => setPage(pageIndex)}
-            />
-          ))}
-        </div>
-      ) : null}
     </section>
   );
 }

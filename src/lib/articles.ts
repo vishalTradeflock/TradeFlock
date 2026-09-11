@@ -171,6 +171,27 @@ async function queryList(options: ListQuery): Promise<ArticleWithRelations[] | n
   }
 }
 
+export const SUCCESS_INSIGHTS_SLUG = "success-insights";
+
+export function isSuccessInsightsArticle(article: { category: { slug: string; name: string } }) {
+  const slug = article.category.slug.trim().toLowerCase();
+  const name = article.category.name.trim().toLowerCase();
+  return slug === SUCCESS_INSIGHTS_SLUG || name === "success insights";
+}
+
+export function partitionHomeArticles(articles: ArticleWithRelations[]) {
+  const editorialArticles: ArticleWithRelations[] = [];
+  const successInsightsArticles: ArticleWithRelations[] = [];
+  for (const article of articles) {
+    if (isSuccessInsightsArticle(article)) {
+      successInsightsArticles.push(article);
+    } else {
+      editorialArticles.push(article);
+    }
+  }
+  return { editorialArticles, successInsightsArticles };
+}
+
 export const getArticles = cache(async (categorySlug?: string, limit = LIST_LIMIT) => {
   const rows =
     (await queryList({ categorySlug, limit })) ?? filterSeed({ categorySlug, limit });
@@ -271,6 +292,10 @@ export async function getArticleBySlug(slug: string) {
   };
 }
 
+export async function getSuccessInsightsArticles(limit = 16) {
+  return getArticles(SUCCESS_INSIGHTS_SLUG, limit);
+}
+
 export async function getBreakingArticles() {
   const rows =
     (await queryList({ breaking: true, limit: 5 })) ?? filterSeed({ breaking: true, limit: 5 });
@@ -280,9 +305,12 @@ export async function getBreakingArticles() {
 
 export async function getMostRead(limit = 5, categorySlug?: string) {
   const rows =
-    (await queryList({ categorySlug, limit, order: "view_count" })) ??
-    filterSeed({ categorySlug, limit, order: "view_count" });
-  return withListCovers(rows);
+    (await queryList({ categorySlug, limit: limit + 8, order: "view_count" })) ??
+    filterSeed({ categorySlug, limit: limit + 8, order: "view_count" });
+  const editorial = categorySlug
+    ? rows
+    : rows.filter((article) => !isSuccessInsightsArticle(article));
+  return withListCovers(editorial.slice(0, limit));
 }
 
 export async function getRelatedArticles(article: ArticleWithRelations, limit = 5) {
@@ -304,10 +332,11 @@ export async function getRelatedArticles(article: ArticleWithRelations, limit = 
 
 export async function getBigTake(limit = 8) {
   const articles = await getArticles();
-  const deepDives = articles.filter((article) =>
+  const editorial = articles.filter((article) => !isSuccessInsightsArticle(article));
+  const deepDives = editorial.filter((article) =>
     ["markets", "finance", "tech", "leadership"].includes(article.category.slug),
   );
-  const source = deepDives.length >= 6 ? deepDives : articles;
+  const source = deepDives.length >= 6 ? deepDives : editorial;
   return source.slice(0, limit);
 }
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Header from "@/components/Header";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import { getArticles } from "@/lib/articles";
+import { getArticles, getSuccessInsightsArticles } from "@/lib/articles";
 import { formatPublishedAt, formatShortDate } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -18,21 +18,21 @@ export const metadata: Metadata = {
 };
 
 export default async function SuccessInsightsPage() {
-  const [leadership, all] = await Promise.all([
-    getArticles("leadership"),
-    getArticles(),
+  const [insights, leadership] = await Promise.all([
+    getSuccessInsightsArticles(24),
+    getArticles("leadership", 12),
   ]);
-  const desk = leadership.length ? leadership : all;
+  const desk = insights.length ? insights : leadership;
   const featured = desk[0];
   const interviews = desk.filter((article) => article.id !== featured?.id).slice(0, 3);
   const spotlightIds = new Set([featured?.id, ...interviews.map((item) => item.id)]);
-  const strategies = all
+  const strategies = desk
     .filter((article) => !spotlightIds.has(article.id))
     .slice(0, 6);
 
   return (
     <>
-      <Header activePage="success-insights" />
+      <Header activePage="success-insights" tickerArticles={desk} />
       <main className="mx-auto max-w-[1240px] px-4 py-8">
         <section className="max-w-3xl border-b border-neutral-200 pb-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">

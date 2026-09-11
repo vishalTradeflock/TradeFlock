@@ -1,23 +1,29 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import TradeFlockLogo from "@/components/TradeFlockLogo";
-import { NAV_CATEGORIES } from "@/lib/types";
-import { getBreakingArticles } from "@/lib/articles";
+import { NAV_CATEGORIES, type ArticleWithRelations } from "@/lib/types";
+import { getBreakingArticles, getSuccessInsightsArticles } from "@/lib/articles";
 import { cn, formatDateline } from "@/lib/utils";
 import { Search } from "lucide-react";
 
 type HeaderProps = {
   activeCategory?: string;
   activePage?: "magazine" | "success-insights";
+  tickerArticles?: ArticleWithRelations[];
 };
 
 export default async function Header({
   activeCategory,
   activePage,
+  tickerArticles,
 }: HeaderProps) {
-  const breaking = await getBreakingArticles();
+  const tickerSource =
+    tickerArticles && tickerArticles.length > 0
+      ? tickerArticles
+      : await getSuccessInsightsArticles(8);
+  const breakingFallback = tickerSource.length ? tickerSource : await getBreakingArticles();
   const dateline = formatDateline();
-  const tickerItems = [...breaking, ...breaking];
+  const tickerItems = [...breakingFallback, ...breakingFallback];
 
   return (
     <header className="bg-white">
