@@ -90,6 +90,10 @@ body {
   background: #d4d4d4;
 }
 
+.scrollbar-thin:hover::-webkit-scrollbar-thumb {
+  background: #a3a3a3;
+}
+
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;

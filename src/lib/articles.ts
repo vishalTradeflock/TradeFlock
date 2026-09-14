@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { HOME_ARTICLE_LIMIT } from "@/lib/cache";
+import { BIG_TAKE_LIMIT, HOME_ARTICLE_LIMIT } from "@/lib/cache";
 import { SEED_ARTICLES } from "@/lib/data/seed";
 import { assignDistinctCovers, resolveCoverImage } from "@/lib/images";
 import { createPublicClient } from "@/lib/supabase/public";
@@ -532,7 +532,9 @@ export const getRelatedArticles = cache(async (article: ArticleWithRelations, li
 });
 
 export const getHomeLayout = cache(async (categorySlug?: string) => {
-  const articles = await getArticles(categorySlug, HOME_ARTICLE_LIMIT);
+  const articles = categorySlug
+    ? await getArticles(categorySlug, HOME_ARTICLE_LIMIT)
+    : await getEditorialArticles(HOME_ARTICLE_LIMIT);
   const { editorialArticles, successInsightsArticles } = partitionHomeArticles(articles);
   const pool = editorialArticles.length ? editorialArticles : articles;
   const featured = pool.find((article) => article.is_featured) ?? pool[0];
@@ -542,7 +544,7 @@ export const getHomeLayout = cache(async (categorySlug?: string) => {
   const deskTake = pool.filter((article) =>
     ["markets", "finance", "tech", "leadership"].includes(article.category.slug),
   );
-  const bigTake = (deskTake.length >= 5 ? deskTake : pool).slice(0, 8);
+  const bigTake = (deskTake.length >= 5 ? deskTake : pool).slice(0, BIG_TAKE_LIMIT);
   const secondary = pool.filter((article) => article.id !== featured?.id).slice(0, 10);
   const latest = pool.filter(
     (article) =>
@@ -566,7 +568,7 @@ export async function getMostRead(limit = 5, categorySlug?: string) {
   return mostRead.slice(0, limit);
 }
 
-export async function getBigTake(limit = 8) {
+export async function getBigTake(limit = BIG_TAKE_LIMIT) {
   const { bigTake } = await getHomeLayout();
   return bigTake.slice(0, limit);
 }

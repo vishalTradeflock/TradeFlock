@@ -5,7 +5,6 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import type { ArticleWithRelations } from "@/lib/types";
-import { LATEST_SCROLLER_LIMIT } from "@/lib/cache";
 import { cn, formatShortDate } from "@/lib/utils";
 
 const PAGE_SIZE = 3;
@@ -15,20 +14,16 @@ export default function LatestScroller({
 }: {
   articles: ArticleWithRelations[];
 }) {
-  const capped = useMemo(
-    () => articles.slice(0, LATEST_SCROLLER_LIMIT),
-    [articles],
-  );
   const pages = useMemo(() => {
     const chunks: ArticleWithRelations[][] = [];
-    for (let i = 0; i < capped.length; i += PAGE_SIZE) {
-      chunks.push(capped.slice(i, i + PAGE_SIZE));
+    for (let i = 0; i < articles.length; i += PAGE_SIZE) {
+      chunks.push(articles.slice(i, i + PAGE_SIZE));
     }
     return chunks;
-  }, [capped]);
+  }, [articles]);
 
   const [page, setPage] = useState(0);
-  if (!capped.length) return null;
+  if (!articles.length) return null;
 
   const safePage = Math.min(page, pages.length - 1);
   const atStart = safePage <= 0;

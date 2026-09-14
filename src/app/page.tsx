@@ -28,12 +28,17 @@ export default async function Home() {
   const heroArticles = editorialArticles.slice(0, 8);
   const lead = heroArticles[0] ?? featured;
   const deepDiveTop = editorialArticles.slice(8, 10);
-  const deepDiveSub = editorialArticles.slice(10, 14);
-  const latestArticles = editorialArticles.slice(14, 14 + LATEST_SCROLLER_LIMIT);
+  const deepDiveSub = editorialArticles.slice(10, 16);
+  const occupied = new Set(
+    [...heroArticles, ...deepDiveTop, ...deepDiveSub].map((article) => article.id),
+  );
+  const latestArticles = editorialArticles
+    .filter((article) => !occupied.has(article.id))
+    .slice(0, LATEST_SCROLLER_LIMIT);
   const middleRail =
     successInsightsArticles.length > 0
       ? successInsightsArticles
-      : editorialArticles.slice(14, 24);
+      : editorialArticles.filter((article) => !occupied.has(article.id)).slice(0, 20);
 
   if (!lead && !heroArticles.length) {
     return (
@@ -66,10 +71,11 @@ export default async function Home() {
                     <div className="relative mb-3 aspect-[16/10] w-full overflow-hidden rounded bg-neutral-100">
                       <SafeArticleImage
                         src={article.cover_image_url}
-                        alt={article.cover_image_alt}
+                        alt={article.cover_image_alt || article.title}
                         fill
                         sizes="(min-width: 640px) 25vw, 100vw"
                         loading="lazy"
+                        unoptimized
                       />
                     </div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">
@@ -116,6 +122,7 @@ export default async function Home() {
                 title="The Big Take"
                 articles={bigTake}
                 className="mt-8"
+                scrollable
               />
             </aside>
           </div>
@@ -152,7 +159,7 @@ function RankedRail({
       <ol
         className={
           scrollable
-            ? "max-h-[380px] divide-y divide-neutral-200 overflow-y-auto scroll-smooth scrollbar-thin"
+            ? "max-h-[380px] divide-y divide-neutral-200 overflow-y-auto scroll-smooth pr-2 scrollbar-thin"
             : "divide-y divide-neutral-200"
         }
       >
