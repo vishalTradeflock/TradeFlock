@@ -43,7 +43,11 @@ export default async function MagazineCatalogPage() {
             {magazines.map((magazine) => (
               <article key={magazine.id} className="min-w-0">
                 <Link href={`/magazine/${magazine.slug}`} className="block">
-                  <MagazineCover pdfUrl={magazine.pdf_url} title={magazine.title} />
+                  <MagazineCover
+                    pdfUrl={magazine.pdf_url}
+                    title={magazine.title}
+                    coverImageUrl={magazine.cover_image_url}
+                  />
                 </Link>
                 <h2 className="mt-3 font-serif text-lg font-semibold leading-snug tracking-tight">
                   <Link

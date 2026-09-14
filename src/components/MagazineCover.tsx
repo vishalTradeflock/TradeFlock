@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { renderPdfPageToDataUrl } from "@/lib/pdfjs-browser";
 import { cn } from "@/lib/utils";
@@ -7,10 +8,25 @@ import { cn } from "@/lib/utils";
 type MagazineCoverProps = {
   pdfUrl: string;
   title: string;
+  coverImageUrl?: string | null;
   className?: string;
 };
 
 const coverCache = new Map<string, string>();
+
+function skipOptimizer(url: string) {
+  try {
+    const host = new URL(url).hostname;
+    return (
+      host.endsWith(".supabase.co") ||
+      host === "tradeflockusa.com" ||
+      host === "www.tradeflockusa.com" ||
+      host.endsWith(".tradeflockusa.com")
+    );
+  } catch {
+    return true;
+  }
+}
 
 function EditorialFallback({ title, className }: { title: string; className?: string }) {
   return (
@@ -48,12 +64,20 @@ function CoverShimmer() {
   );
 }
 
-export default function MagazineCover({ pdfUrl, title, className }: MagazineCoverProps) {
-  const [src, setSrc] = useState(() => coverCache.get(pdfUrl) ?? "");
-  const [failed, setFailed] = useState(!pdfUrl);
+export default function MagazineCover({
+  pdfUrl,
+  title,
+  coverImageUrl,
+  className,
+}: MagazineCoverProps) {
+  const storedCover = coverImageUrl?.trim() ?? "";
+  const [src, setSrc] = useState(() => (pdfUrl ? coverCache.get(pdfUrl) ?? "" : ""));
+  const [failed, setFailed] = useState(!pdfUrl && !storedCover);
+  const [imageFailed, setImageFailed] = useState(false);
   const nodeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (storedCover) return;
     if (!pdfUrl) {
       setFailed(true);
       return;
@@ -84,14 +108,31 @@ export default function MagazineCover({ pdfUrl, title, className }: MagazineCove
             if (!cancelled) setFailed(true);
           });
       },
-      { rootMargin: "240px" },
+      { rootMargin: "200px 0px", threshold: 0.1 },
     );
     observer.observe(node);
     return () => {
       cancelled = true;
       observer.disconnect();
     };
-  }, [pdfUrl]);
+  }, [pdfUrl, storedCover]);
+
+  if (storedCover && !imageFailed) {
+    return (
+      <div className={cn("relative aspect-[3/4] overflow-hidden rounded shadow-md", className)}>
+        <Image
+          src={storedCover}
+          alt={title}
+          fill
+          sizes="(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 100vw"
+          className="object-cover"
+          loading="lazy"
+          unoptimized={skipOptimizer(storedCover)}
+          onError={() => setImageFailed(true)}
+        />
+      </div>
+    );
+  }
 
   if (failed) {
     return <EditorialFallback title={title} className={className} />;

@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 const FlipbookReader = dynamic(() => import("@/components/FlipbookReader"), {
   ssr: false,
   loading: () => (
-    <div className="flex aspect-[16/10] max-h-[85vh] w-full items-center justify-center overflow-hidden rounded-xl bg-neutral-950 p-4 shadow-2xl">
+    <div className="flex h-full w-full items-center justify-center bg-[#1e1e1e]">
       <p className="text-sm text-neutral-400">Opening edition…</p>
     </div>
   ),
