@@ -16,7 +16,11 @@ export function proxiedPdfUrl(pdfUrl: string) {
   try {
     const parsed = new URL(pdfUrl);
     if (parsed.protocol !== "https:") return "";
-    return `/api/pdf-proxy?url=${encodeURIComponent(parsed.toString())}`;
+    const path = `/api/pdf-proxy?url=${encodeURIComponent(parsed.toString())}`;
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}${path}`;
+    }
+    return path;
   } catch {
     return "";
   }

@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import Header from "@/components/Header";
-import MagazineCover from "@/components/MagazineCover";
+import MagazineDeskGrid from "@/components/MagazineDeskGrid";
 import { getMagazines } from "@/lib/magazines";
-import { formatShortDate } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "The Magazine Desk",
@@ -39,48 +37,7 @@ export default async function MagazineCatalogPage() {
         </header>
 
         {magazines.length ? (
-          <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {magazines.map((magazine) => (
-              <article key={magazine.id} className="min-w-0">
-                <Link href={`/magazine/${magazine.slug}`} className="block">
-                  <MagazineCover
-                    pdfUrl={magazine.pdf_url}
-                    title={magazine.title}
-                    coverImageUrl={magazine.cover_image_url}
-                  />
-                </Link>
-                <h2 className="mt-3 font-serif text-lg font-semibold leading-snug tracking-tight">
-                  <Link
-                    href={`/magazine/${magazine.slug}`}
-                    className="hover:text-[#c41e3a]"
-                  >
-                    {magazine.title}
-                  </Link>
-                </h2>
-                <p className="mt-1 text-xs text-neutral-500">
-                  {formatShortDate(magazine.published_at)}
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <Link
-                    href={`/magazine/${magazine.slug}`}
-                    className="rounded bg-[#c41e3a] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
-                  >
-                    Read Flipbook
-                  </Link>
-                  {magazine.pdf_url ? (
-                    <a
-                      href={magazine.pdf_url}
-                      className="text-xs text-muted-foreground hover:underline"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Download PDF
-                    </a>
-                  ) : null}
-                </div>
-              </article>
-            ))}
-          </div>
+          <MagazineDeskGrid magazines={magazines} />
         ) : (
           <p className="mt-10 text-sm text-neutral-600">
             No editions on the desk yet.

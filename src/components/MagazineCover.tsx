@@ -2,19 +2,41 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { renderPdfPageToDataUrl } from "@/lib/pdfjs-browser";
-import { cn } from "@/lib/utils";
+import * as pdfjsLib from "pdfjs-dist";
+import { enqueuePdfWork, renderPdfCoverThumbnail } from "@/lib/pdfjs-browser";
+import { installPdfJsBlobWorker } from "@/lib/pdfjs-worker";
+import { cn, formatShortDate } from "@/lib/utils";
+
+if (typeof window !== "undefined") {
+  installPdfJsBlobWorker(pdfjsLib);
+}
 
 type MagazineCoverProps = {
   pdfUrl: string;
   title: string;
+  publishedAt?: string;
   coverImageUrl?: string | null;
   className?: string;
 };
 
 const coverCache = new Map<string, string>();
 
+function usableCoverUrl(url?: string | null) {
+  const trimmed = url?.trim() ?? "";
+  if (!trimmed || /^(null|undefined|none|n\/a)$/i.test(trimmed)) return "";
+  if (trimmed.startsWith("/covers/") && /\.(jpe?g|webp|png)$/i.test(trimmed)) {
+    return trimmed;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "https:" ? trimmed : "";
+  } catch {
+    return "";
+  }
+}
+
 function skipOptimizer(url: string) {
+  if (url.startsWith("/")) return false;
   try {
     const host = new URL(url).hostname;
     return (
@@ -28,7 +50,15 @@ function skipOptimizer(url: string) {
   }
 }
 
-function EditorialFallback({ title, className }: { title: string; className?: string }) {
+function EditorialFallback({
+  title,
+  publishedAt,
+  className,
+}: {
+  title: string;
+  publishedAt?: string;
+  className?: string;
+}) {
   return (
     <div
       className={cn(
@@ -49,17 +79,18 @@ function EditorialFallback({ title, className }: { title: string; className?: st
       <h3 className="line-clamp-4 font-serif text-base font-semibold leading-tight text-white md:text-lg">
         {title}
       </h3>
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-[#d4af37]">
-        Digital Edition
-      </span>
-    </div>
-  );
-}
-
-function CoverShimmer() {
-  return (
-    <div className="relative aspect-[3/4] overflow-hidden rounded bg-neutral-200 shadow-md">
-      <div className="magazine-shimmer absolute inset-0 bg-gradient-to-r from-transparent via-white/70 to-transparent" />
+      {publishedAt ? (
+        <time
+          dateTime={publishedAt}
+          className="text-[10px] font-semibold uppercase tracking-widest text-[#d4af37]"
+        >
+          {formatShortDate(publishedAt)}
+        </time>
+      ) : (
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-[#d4af37]">
+          Digital Edition
+        </span>
+      )}
     </div>
   );
 }
@@ -67,25 +98,21 @@ function CoverShimmer() {
 export default function MagazineCover({
   pdfUrl,
   title,
+  publishedAt,
   coverImageUrl,
   className,
 }: MagazineCoverProps) {
-  const storedCover = coverImageUrl?.trim() ?? "";
+  const storedCover = usableCoverUrl(coverImageUrl);
   const [src, setSrc] = useState(() => (pdfUrl ? coverCache.get(pdfUrl) ?? "" : ""));
-  const [failed, setFailed] = useState(!pdfUrl && !storedCover);
   const [imageFailed, setImageFailed] = useState(false);
   const nodeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (storedCover) return;
-    if (!pdfUrl) {
-      setFailed(true);
-      return;
-    }
+    if (!pdfUrl) return;
     const cached = coverCache.get(pdfUrl);
     if (cached) {
       setSrc(cached);
-      setFailed(false);
       return;
     }
 
@@ -97,15 +124,15 @@ export default function MagazineCover({
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
         observer.disconnect();
-        void renderPdfPageToDataUrl(pdfUrl, 1, 640)
-          .then(({ dataUrl }) => {
+        const proxiedUrl = `${window.location.origin}/api/pdf-proxy?url=${encodeURIComponent(pdfUrl)}`;
+        void enqueuePdfWork(() => renderPdfCoverThumbnail(proxiedUrl))
+          .then((dataUrl) => {
             if (cancelled) return;
             coverCache.set(pdfUrl, dataUrl);
             setSrc(dataUrl);
-            setFailed(false);
           })
           .catch(() => {
-            if (!cancelled) setFailed(true);
+            /* Editorial card stays visible on CORS / range / PDF errors. */
           });
       },
       { rootMargin: "200px 0px", threshold: 0.1 },
@@ -134,26 +161,21 @@ export default function MagazineCover({
     );
   }
 
-  if (failed) {
-    return <EditorialFallback title={title} className={className} />;
-  }
-
-  if (!src) {
+  if (src) {
     return (
-      <div ref={nodeRef} className={className}>
-        <CoverShimmer />
+      <div
+        className={cn("relative aspect-[3/4] overflow-hidden rounded shadow-md", className)}
+      >
+        {/* Native img: PDF page 1 rasterized by pdf.js */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt={title} className="h-full w-full object-cover" />
       </div>
     );
   }
 
   return (
-    <div
-      ref={nodeRef}
-      className={cn("relative aspect-[3/4] overflow-hidden rounded shadow-md", className)}
-    >
-      {/* Native img: PDF page 1 rasterized by pdf.js */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={title} className="h-full w-full object-cover" />
+    <div ref={nodeRef} className={className}>
+      <EditorialFallback title={title} publishedAt={publishedAt} />
     </div>
   );
 }

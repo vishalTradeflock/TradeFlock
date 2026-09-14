@@ -15,13 +15,27 @@ function sortByPublished(a: Magazine, b: Magazine) {
   return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
 }
 
+function usableCoverUrl(url: string | null | undefined) {
+  const trimmed = url?.trim() ?? "";
+  if (!trimmed || /^(null|undefined|none|n\/a)$/i.test(trimmed)) return null;
+  if (trimmed.startsWith("/covers/") && /\.(jpe?g|webp|png)$/i.test(trimmed)) {
+    return trimmed;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "https:" ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
 function asMagazine(row: MagazineRow): Magazine {
   return {
     id: row.id,
     slug: row.slug,
     title: row.title,
     description: row.description ?? row.dek ?? null,
-    cover_image_url: row.cover_image_url ?? null,
+    cover_image_url: usableCoverUrl(row.cover_image_url) ?? `/covers/${row.slug}.jpg`,
     pdf_url: row.pdf_url ?? row.file_url ?? row.source_url ?? "",
     published_at: row.published_at,
   };
