@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import HTMLFlipBook from "react-pageflip";
 import * as pdfjsLib from "pdfjs-dist";
 import { installPdfJsBlobWorker } from "@/lib/pdfjs-worker";
@@ -20,17 +20,26 @@ interface FlipbookReaderProps {
   pdfUrl: string;
 }
 
-const FlipPage = React.forwardRef<HTMLDivElement, { src: string; label: string }>(
-  function FlipPage({ src, label }, ref) {
-    return (
-      <div ref={ref} className="h-full w-full overflow-hidden bg-white">
-        {/* Native img: pre-rasterized PDF page */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt={label} className="block h-full w-full object-fill" />
-      </div>
-    );
-  },
-);
+const FlipPage = React.forwardRef<
+  HTMLDivElement,
+  { src: string; label: string; width: number; height: number }
+>(function FlipPage({ src, label, width, height }, ref) {
+  return (
+    <div
+      ref={ref}
+      className="h-full w-full overflow-hidden bg-white"
+      style={{ width, height }}
+    >
+      {src ? (
+        <>
+          {/* Native img: pre-rasterized PDF page */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt={label} className="block h-full w-full object-fill" />
+        </>
+      ) : null}
+    </div>
+  );
+});
 
 export default function FlipbookReader({ pdfUrl }: FlipbookReaderProps) {
   const [pages, setPages] = useState<string[]>([]);
@@ -40,18 +49,29 @@ export default function FlipbookReader({ pdfUrl }: FlipbookReaderProps) {
   const [bookSize, setBookSize] = useState({ width: 550, height: 750 });
   const bookRef = useRef<FlipBookHandle | null>(null);
 
+  const sheets = useMemo(() => {
+    if (pages.length % 2 === 1) return [...pages, ""];
+    return pages;
+  }, [pages]);
+
   useEffect(() => {
     function updateSize() {
       const availH = window.innerHeight - 110;
       const availW = window.innerWidth - 60;
-      let h = availH;
-      let w = h * 0.707;
+      const pageRatio = 0.707;
 
-      if (w * 2 > availW) {
-        w = availW / 2;
-        h = w / 0.707;
+      let targetH = availH;
+      let targetW = targetH * pageRatio;
+
+      if (targetW * 2 > availW) {
+        targetW = availW / 2;
+        targetH = targetW / pageRatio;
       }
-      setBookSize({ width: Math.floor(w), height: Math.floor(h) });
+
+      setBookSize({
+        width: Math.floor(targetW),
+        height: Math.floor(targetH),
+      });
     }
     updateSize();
     window.addEventListener("resize", updateSize);
@@ -136,38 +156,39 @@ export default function FlipbookReader({ pdfUrl }: FlipbookReaderProps) {
     );
   }
 
-  const isCover = currentPage === 0;
+  const lastSpreadStart = Math.max(0, sheets.length - 2);
 
   return (
-    <div className="relative flex h-full w-full select-none flex-col items-center justify-center overflow-hidden bg-[#121212]">
-      <div
-        className="transition-transform duration-300 ease-out"
-        style={{
-          transform: isCover ? `translateX(-${bookSize.width / 2}px)` : "translateX(0)",
-        }}
+    <div className="flex h-full w-full select-none items-center justify-center overflow-hidden bg-[#121212]">
+      {/* react-pageflip ships incomplete TypeScript props */}
+      {/* @ts-expect-error HTMLFlipBook ref and size props are untyped */}
+      <HTMLFlipBook
+        ref={bookRef}
+        className="shadow-2xl"
+        width={bookSize.width}
+        height={bookSize.height}
+        size="fixed"
+        minWidth={bookSize.width}
+        maxWidth={bookSize.width}
+        minHeight={bookSize.height}
+        maxHeight={bookSize.height}
+        showCover={false}
+        usePortrait={false}
+        startPage={0}
+        drawShadow
+        maxShadowOpacity={0.5}
+        onFlip={onFlip}
       >
-        {/* react-pageflip ships incomplete TypeScript props */}
-        {/* @ts-expect-error HTMLFlipBook ref and size props are untyped */}
-        <HTMLFlipBook
-          ref={bookRef}
-          className="shadow-2xl"
-          width={bookSize.width}
-          height={bookSize.height}
-          size="fixed"
-          minWidth={bookSize.width}
-          maxWidth={bookSize.width}
-          minHeight={bookSize.height}
-          maxHeight={bookSize.height}
-          showCover
-          drawShadow
-          maxShadowOpacity={0.5}
-          onFlip={onFlip}
-        >
-          {pages.map((imgSrc, index) => (
-            <FlipPage key={index} src={imgSrc} label={`Page ${index + 1}`} />
-          ))}
-        </HTMLFlipBook>
-      </div>
+        {sheets.map((imgSrc, index) => (
+          <FlipPage
+            key={index}
+            src={imgSrc}
+            label={`Page ${index + 1}`}
+            width={bookSize.width}
+            height={bookSize.height}
+          />
+        ))}
+      </HTMLFlipBook>
 
       <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full border border-neutral-700/70 bg-neutral-900/90 px-5 py-2 text-xs text-neutral-300 shadow-2xl backdrop-blur">
         <button
@@ -179,15 +200,12 @@ export default function FlipbookReader({ pdfUrl }: FlipbookReaderProps) {
           ◀
         </button>
         <span className="font-mono text-[11px] text-neutral-400">
-          {currentPage === 0
-            ? "Cover"
-            : `${currentPage} - ${Math.min(currentPage + 1, pages.length)}`}{" "}
-          / {pages.length}
+          {currentPage + 1}–{Math.min(currentPage + 2, pages.length)} of {pages.length}
         </span>
         <button
           type="button"
           onClick={() => bookRef.current?.pageFlip()?.flipNext()}
-          disabled={currentPage >= pages.length - 1}
+          disabled={currentPage >= lastSpreadStart}
           className="px-1 font-bold transition hover:text-white disabled:opacity-30"
         >
           ▶
