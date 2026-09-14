@@ -1,6 +1,8 @@
 export const FALLBACK_COVER_IMAGE =
   "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1600&q=80";
 
+export const PLACEHOLDER_COVER = "/placeholder.jpg";
+
 const ALLOWED_HOSTS = new Set([
   "images.unsplash.com",
   "plus.unsplash.com",
@@ -55,6 +57,13 @@ function hashKey(value: string) {
   return hash;
 }
 
+/** Same Unsplash photo with different query strings still counts as one image. */
+export function coverIdentity(url: string) {
+  const photo = url.match(/photo-[a-zA-Z0-9_-]+/);
+  if (photo) return photo[0];
+  return url.split("?")[0];
+}
+
 export function resolveCoverImage(url: string | null | undefined): string {
   if (!url) return FALLBACK_COVER_IMAGE;
 
@@ -86,19 +95,22 @@ export function assignDistinctCovers<T extends CoverSource>(articles: T[]): T[] 
   return articles.map((article, index) => {
     const raw = article.cover_image_url?.trim() ?? "";
     let url = !raw || isWeakCover(raw) ? pickEditorialCover(article, index) : resolveCoverImage(raw);
+    let identity = coverIdentity(url);
 
-    if (used.has(url) || url === previous) {
+    if (used.has(identity) || identity === previous) {
       for (let step = 1; step <= EDITORIAL_COVERS.length; step += 1) {
         const candidate = pickEditorialCover(article, index + step);
-        if (!used.has(candidate) && candidate !== previous) {
+        const candidateId = coverIdentity(candidate);
+        if (!used.has(candidateId) && candidateId !== previous) {
           url = candidate;
+          identity = candidateId;
           break;
         }
       }
     }
 
-    used.add(url);
-    previous = url;
+    used.add(identity);
+    previous = identity;
     return { ...article, cover_image_url: url };
   });
 }

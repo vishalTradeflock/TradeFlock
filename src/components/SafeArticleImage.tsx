@@ -2,13 +2,18 @@
 
 import Image, { type ImageProps } from "next/image";
 import { Newspaper } from "lucide-react";
-import { useEffect, useState } from "react";
-import { FALLBACK_COVER_IMAGE, resolveCoverImage } from "@/lib/images";
+import { useEffect, useState, type SyntheticEvent } from "react";
+import {
+  FALLBACK_COVER_IMAGE,
+  PLACEHOLDER_COVER,
+  resolveCoverImage,
+} from "@/lib/images";
 import { cn } from "@/lib/utils";
 
 type SafeArticleImageProps = Omit<ImageProps, "src" | "alt"> & {
   src: string | null | undefined;
   alt: string;
+  fallbackSrc?: string;
 };
 
 function skipOptimizer(url: string) {
@@ -47,6 +52,16 @@ function CoverPlaceholder() {
   );
 }
 
+function nextFallback(current: string) {
+  if (current !== FALLBACK_COVER_IMAGE && current !== PLACEHOLDER_COVER) {
+    return FALLBACK_COVER_IMAGE;
+  }
+  if (current !== PLACEHOLDER_COVER) {
+    return PLACEHOLDER_COVER;
+  }
+  return null;
+}
+
 export default function SafeArticleImage({
   src,
   alt,
@@ -55,19 +70,57 @@ export default function SafeArticleImage({
   loading,
   unoptimized,
   onError,
+  fill,
+  sizes,
+  fallbackSrc,
   ...props
 }: SafeArticleImageProps) {
   const resolved = resolveCoverImage(src);
-  const [currentSrc, setCurrentSrc] = useState(resolved);
-  const [failed, setFailed] = useState(!isUsableSrc(resolved));
+  const initial = isUsableSrc(resolved) ? resolved : fallbackSrc || PLACEHOLDER_COVER;
+  const [currentSrc, setCurrentSrc] = useState(initial);
+  const [failed, setFailed] = useState(false);
+  const useNativeImg = unoptimized ?? skipOptimizer(currentSrc);
 
   useEffect(() => {
-    setCurrentSrc(resolved);
-    setFailed(!isUsableSrc(resolved));
-  }, [resolved]);
+    const next = isUsableSrc(resolved) ? resolved : fallbackSrc || PLACEHOLDER_COVER;
+    setCurrentSrc(next);
+    setFailed(false);
+  }, [resolved, fallbackSrc]);
+
+  const handleError = (event: SyntheticEvent<HTMLImageElement, Event>) => {
+    const target = event.currentTarget;
+    target.onerror = null;
+    onError?.(event);
+    if (fallbackSrc && currentSrc !== fallbackSrc) {
+      setCurrentSrc(fallbackSrc);
+      return;
+    }
+    const fallback = nextFallback(currentSrc);
+    if (fallback) {
+      setCurrentSrc(fallback);
+      return;
+    }
+    setFailed(true);
+  };
 
   if (failed) {
     return <CoverPlaceholder />;
+  }
+
+  if (useNativeImg) {
+    return (
+      // Native img so 404s always fire onError (Next/Image can swallow optimizer failures).
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={currentSrc}
+        alt={alt}
+        className={cn(
+          fill ? "absolute inset-0 h-full w-full object-cover" : "object-cover",
+          className,
+        )}
+        onError={handleError}
+      />
+    );
   }
 
   return (
@@ -75,18 +128,13 @@ export default function SafeArticleImage({
       {...props}
       src={currentSrc}
       alt={alt}
+      fill={fill}
+      sizes={sizes}
       className={cn("object-cover", className)}
-      onError={(event) => {
-        onError?.(event);
-        if (currentSrc !== FALLBACK_COVER_IMAGE) {
-          setCurrentSrc(FALLBACK_COVER_IMAGE);
-          return;
-        }
-        setFailed(true);
-      }}
+      onError={handleError}
       priority={priority}
       loading={priority ? undefined : loading ?? "lazy"}
-      unoptimized={unoptimized ?? skipOptimizer(currentSrc)}
+      unoptimized={unoptimized}
     />
   );
 }

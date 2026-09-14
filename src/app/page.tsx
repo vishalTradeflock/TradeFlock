@@ -9,6 +9,9 @@ import { getHomeLayout, getSuccessInsightsArticles } from "@/lib/articles";
 import type { ArticleWithRelations } from "@/lib/types";
 import { formatShortDate, formatTimeAgo } from "@/lib/utils";
 
+const DEEP_DIVE_FALLBACK =
+  "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&q=80";
+
 export const revalidate = 120;
 
 export default async function Home() {
@@ -16,7 +19,6 @@ export default async function Home() {
     {
       featured,
       mostRead,
-      bigTake,
       editorialArticles,
     },
     successInsightsArticles,
@@ -32,9 +34,11 @@ export default async function Home() {
   const occupied = new Set(
     [...heroArticles, ...deepDiveTop, ...deepDiveSub].map((article) => article.id),
   );
-  const latestArticles = editorialArticles
-    .filter((article) => !occupied.has(article.id))
-    .slice(0, LATEST_SCROLLER_LIMIT);
+  const remainingEditorial = editorialArticles.filter(
+    (article) => !occupied.has(article.id),
+  );
+  const bigTakeArticles = remainingEditorial.slice(0, 12);
+  const latestArticles = remainingEditorial.slice(12, 12 + LATEST_SCROLLER_LIMIT);
   const middleRail =
     successInsightsArticles.length > 0
       ? successInsightsArticles
@@ -55,7 +59,7 @@ export default async function Home() {
     <>
       <Header tickerArticles={successInsightsArticles} />
       <main className="mx-auto max-w-[1240px] px-4 py-6">
-        <section className="grid min-h-0 grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-0">
+        <section className="grid min-h-0 grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:items-stretch lg:gap-0">
           <div className="min-h-0 lg:col-span-6 lg:pr-6">
             <HeroCarousel articles={heroArticles} />
 
@@ -68,7 +72,7 @@ export default async function Home() {
               <div className="mb-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {deepDiveTop.map((article) => (
                   <Link key={article.id} href={`/news/${article.slug}`} className="group block">
-                    <div className="relative mb-3 aspect-[16/10] w-full overflow-hidden rounded bg-neutral-100">
+                    <div className="relative mb-3 aspect-[16/10] w-full overflow-hidden rounded bg-muted">
                       <SafeArticleImage
                         src={article.cover_image_url}
                         alt={article.cover_image_alt || article.title}
@@ -76,6 +80,7 @@ export default async function Home() {
                         sizes="(min-width: 640px) 25vw, 100vw"
                         loading="lazy"
                         unoptimized
+                        fallbackSrc={DEEP_DIVE_FALLBACK}
                       />
                     </div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">
@@ -98,13 +103,13 @@ export default async function Home() {
               <div className="grid grid-cols-1 gap-x-5 gap-y-4 border-t border-border/60 pt-4 sm:grid-cols-2">
                 {deepDiveSub.map((article) => (
                   <Link key={article.id} href={`/news/${article.slug}`} className="group block">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[#c41e3a]">
                       {article.category.name}
                     </p>
-                    <h4 className="mt-1 line-clamp-2 text-sm font-medium leading-snug group-hover:underline">
+                    <h4 className="mt-1 line-clamp-2 font-serif text-sm font-bold leading-snug text-neutral-950 group-hover:underline">
                       {article.title}
                     </h4>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {formatTimeAgo(article.published_at)}
                     </p>
                   </Link>
@@ -113,14 +118,14 @@ export default async function Home() {
             ) : null}
           </div>
 
-          <div className="grid min-h-0 grid-cols-1 items-stretch gap-6 lg:col-span-6 lg:grid-cols-2 lg:gap-0">
+          <div className="grid min-h-0 grid-cols-1 items-stretch gap-6 lg:col-span-6 lg:grid-cols-2 lg:gap-0 lg:self-stretch">
             <MiddleScroller articles={middleRail} />
 
             <aside className="min-h-0 lg:border-l lg:border-neutral-200 lg:pl-5">
-              <RankedRail title="Most Read" articles={mostRead} />
+              <RankedRail title="Most Read" articles={mostRead.slice(0, 5)} />
               <RankedRail
                 title="The Big Take"
-                articles={bigTake}
+                articles={bigTakeArticles}
                 className="mt-8"
                 scrollable
               />
@@ -128,10 +133,10 @@ export default async function Home() {
           </div>
         </section>
 
+        <div className="my-8 w-full border-b border-border/60" />
+
         {latestArticles.length ? (
-          <div className="mt-8 border-t border-neutral-200 pt-6">
-            <LatestScroller articles={latestArticles} />
-          </div>
+          <LatestScroller articles={latestArticles} />
         ) : null}
       </main>
     </>
@@ -156,31 +161,49 @@ function RankedRail({
       <h3 className="border-b border-neutral-200 pb-2 font-serif text-xl font-semibold tracking-tight">
         {title}
       </h3>
-      <ol
-        className={
-          scrollable
-            ? "max-h-[380px] divide-y divide-neutral-200 overflow-y-auto scroll-smooth pr-2 scrollbar-thin"
-            : "divide-y divide-neutral-200"
-        }
-      >
-        {articles.map((article, index) => (
-          <li key={article.id} className="py-3">
-            <Link href={`/news/${article.slug}`} className="group flex gap-3">
-              <span className="font-serif text-2xl font-semibold leading-none text-[#c41e3a]">
-                {index + 1}
-              </span>
-              <span>
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500">
-                  {article.category.name}
+      {scrollable ? (
+        <div className="h-[615px] space-y-4 overflow-y-auto pr-2">
+          <ol>
+            {articles.map((article, index) => (
+              <li key={article.id} className="py-3">
+                <Link href={`/news/${article.slug}`} className="group flex gap-3">
+                  <span className="font-serif text-2xl font-semibold leading-none text-[#c41e3a]">
+                    {index + 1}
+                  </span>
+                  <span>
+                    <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500">
+                      {article.category.name}
+                    </span>
+                    <span className="mt-0.5 block text-sm font-semibold leading-5 text-neutral-950 group-hover:text-[#c41e3a]">
+                      {article.title}
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : (
+        <ol className="divide-y divide-neutral-200">
+          {articles.map((article, index) => (
+            <li key={article.id} className="py-3">
+              <Link href={`/news/${article.slug}`} className="group flex gap-3">
+                <span className="font-serif text-2xl font-semibold leading-none text-[#c41e3a]">
+                  {index + 1}
                 </span>
-                <span className="mt-0.5 block text-sm font-semibold leading-5 text-neutral-950 group-hover:text-[#c41e3a]">
-                  {article.title}
+                <span>
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500">
+                    {article.category.name}
+                  </span>
+                  <span className="mt-0.5 block text-sm font-semibold leading-5 text-neutral-950 group-hover:text-[#c41e3a]">
+                    {article.title}
+                  </span>
                 </span>
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ol>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
