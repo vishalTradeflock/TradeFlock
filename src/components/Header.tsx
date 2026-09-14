@@ -113,7 +113,7 @@ export default async function Header({
             Success Insights
           </NavLink>
           <NavLink href="/magazine" active={activePage === "magazine"}>
-            Publication
+            Magazine
           </NavLink>
         </div>
       </nav>

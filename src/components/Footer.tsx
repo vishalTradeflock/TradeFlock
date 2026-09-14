@@ -9,7 +9,7 @@ const SECTION_LINKS = [
     label: category.name,
   })),
   { href: "/success-insights", label: "Success Insights" },
-  { href: "/magazine", label: "Publication" },
+  { href: "/magazine", label: "Magazine" },
 ];
 
 const COMPANY_LINKS = [

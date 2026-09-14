@@ -132,6 +132,42 @@ export type Database = {
           },
         ];
       };
+      magazines: {
+        Row: {
+          id: string;
+          slug: string;
+          title: string;
+          description: string | null;
+          cover_image_url: string | null;
+          pdf_url: string | null;
+          published_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          slug: string;
+          title: string;
+          description?: string | null;
+          cover_image_url?: string | null;
+          pdf_url?: string | null;
+          published_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          slug?: string;
+          title?: string;
+          description?: string | null;
+          cover_image_url?: string | null;
+          pdf_url?: string | null;
+          published_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       processed_leads: {
         Row: {
           id: string;

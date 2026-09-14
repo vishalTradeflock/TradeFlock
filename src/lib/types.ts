@@ -49,6 +49,16 @@ export type ArticleListCard = {
   categoryName: string;
 };
 
+export type Magazine = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  cover_image_url: string | null;
+  pdf_url: string;
+  published_at: string;
+};
+
 export const NAV_CATEGORIES = [
   { name: "Tech", slug: "tech" },
   { name: "Markets", slug: "markets" },
