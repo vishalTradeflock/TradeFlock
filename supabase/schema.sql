@@ -132,7 +132,11 @@ create policy "Public read published articles"
   on public.articles
   for select
   to anon, authenticated
-  using (published_at is not null and published_at <= now());
+  using (
+    status = 'published'
+    and published_at is not null
+    and published_at <= now()
+  );
 
 grant usage on schema public to anon, authenticated;
 grant select on public.categories, public.authors, public.articles to anon, authenticated;

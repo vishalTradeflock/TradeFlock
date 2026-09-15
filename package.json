@@ -14,14 +14,16 @@
     "@supabase/supabase-js": "^2.116.0",
     "@tailwindcss/typography": "^0.5.20",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.44.0",
+    "lucide-react": "^1.46.0",
     "next": "16.3.4",
+    "novel": "^1.0.2",
     "openai": "^7.13.0",
     "pdfjs-dist": "^6.3.289",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-pageflip": "^2.0.3",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "unsplash-js": "github:unsplash/unsplash-js"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^1.0.9",
