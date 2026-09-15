@@ -5,12 +5,39 @@ import LatestScroller from "@/components/LatestScroller";
 import MiddleScroller from "@/components/MiddleScroller";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { LATEST_SCROLLER_LIMIT } from "@/lib/cache";
-import { getHomeLayout, getSuccessInsightsArticles } from "@/lib/articles";
-import type { ArticleWithRelations } from "@/lib/types";
+import { getCategoryDesk, getHomeLayout, getSuccessInsightsArticles } from "@/lib/articles";
+import { NAV_CATEGORIES, type ArticleWithRelations } from "@/lib/types";
 import { formatShortDate, formatTimeAgo } from "@/lib/utils";
 
 const DEEP_DIVE_FALLBACK =
   "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&q=80";
+
+const DESK_SCROLLER_LIMIT = 12;
+
+function matchesDesk(article: ArticleWithRelations, slug: string, name: string) {
+  const deskSlug = slug.trim().toLowerCase();
+  const deskName = name.trim().toLowerCase();
+  const articleSlug = article.category.slug.trim().toLowerCase();
+  const articleName = article.category.name.trim().toLowerCase();
+  if (articleSlug === deskSlug || articleName === deskName) return true;
+  if (deskSlug === "tech") {
+    return articleSlug === "technology" || articleName === "technology";
+  }
+  return false;
+}
+
+function articlesForDesk(
+  fetched: ArticleWithRelations[],
+  recent: ArticleWithRelations[],
+  slug: string,
+  name: string,
+) {
+  const fromFetched = fetched.filter((article) => matchesDesk(article, slug, name));
+  if (fromFetched.length) return fromFetched.slice(0, DESK_SCROLLER_LIMIT);
+  const fromRecent = recent.filter((article) => matchesDesk(article, slug, name));
+  if (fromRecent.length) return fromRecent.slice(0, DESK_SCROLLER_LIMIT);
+  return [];
+}
 
 export const revalidate = 120;
 
@@ -22,9 +49,11 @@ export default async function Home() {
       editorialArticles,
     },
     successInsightsArticles,
+    ...deskQueries
   ] = await Promise.all([
     getHomeLayout(),
     getSuccessInsightsArticles(20),
+    ...NAV_CATEGORIES.map((category) => getCategoryDesk(category.slug, DESK_SCROLLER_LIMIT)),
   ]);
 
   const heroArticles = editorialArticles.slice(0, 8);
@@ -43,6 +72,15 @@ export default async function Home() {
     successInsightsArticles.length > 0
       ? successInsightsArticles
       : editorialArticles.filter((article) => !occupied.has(article.id)).slice(0, 20);
+  const deskSections = NAV_CATEGORIES.map((category, index) => ({
+    title: category.name,
+    articles: articlesForDesk(
+      deskQueries[index] ?? [],
+      editorialArticles,
+      category.slug,
+      category.name,
+    ),
+  }));
 
   if (!lead && !heroArticles.length) {
     return (
@@ -138,6 +176,15 @@ export default async function Home() {
         {latestArticles.length ? (
           <LatestScroller articles={latestArticles} />
         ) : null}
+
+        {deskSections.map((desk) =>
+          desk.articles.length ? (
+            <div key={desk.title}>
+              <div className="my-8 w-full border-b border-border/60" />
+              <LatestScroller title={desk.title} articles={desk.articles} />
+            </div>
+          ) : null,
+        )}
       </main>
     </>
   );

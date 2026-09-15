@@ -97,6 +97,45 @@ export function pickEditorialCover(article: CoverSource, offset = 0) {
   return EDITORIAL_COVERS[index];
 }
 
+const DESK_COVER_POOLS: Record<string, readonly string[]> = {
+  tech: EDITORIAL_COVERS.slice(0, 7),
+  technology: EDITORIAL_COVERS.slice(0, 7),
+  markets: EDITORIAL_COVERS.slice(7, 14),
+  finance: EDITORIAL_COVERS.slice(14, 20),
+  leadership: EDITORIAL_COVERS.slice(20, 26),
+};
+
+/** Deterministic stand-in when a story has no usable cover — keyed by id/slug, not row index. */
+export function deskCoverFallback(article: {
+  id: string;
+  title: string;
+  slug?: string;
+  category?: { slug?: string | null };
+}) {
+  const desk = article.category?.slug?.trim().toLowerCase() ?? "";
+  const pool = DESK_COVER_POOLS[desk] ?? EDITORIAL_COVERS;
+  const index = hashKey(`${article.id}:${article.slug ?? article.title}:${desk}`) % pool.length;
+  return pool[index];
+}
+
+export function articleCoverSrc(article: {
+  id: string;
+  title: string;
+  slug?: string;
+  cover_image_url?: string | null;
+  category?: { slug?: string | null };
+}) {
+  const raw = article.cover_image_url?.trim() ?? "";
+  if (!raw || raw === FALLBACK_COVER_IMAGE || raw === PLACEHOLDER_COVER) {
+    return deskCoverFallback(article);
+  }
+  const resolved = resolveCoverImage(raw);
+  if (resolved === FALLBACK_COVER_IMAGE || resolved === PLACEHOLDER_COVER) {
+    return deskCoverFallback(article);
+  }
+  return resolved;
+}
+
 function isWeakCover(url: string | null | undefined) {
   return !url?.trim();
 }

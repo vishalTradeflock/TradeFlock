@@ -5,14 +5,38 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const NEW_YORK_TZ = "America/New_York";
+
 export function formatDateline(date: Date = new Date()) {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
     year: "numeric",
-    timeZone: "America/New_York",
-  }).format(date);
+    timeZone: NEW_YORK_TZ,
+  })
+    .format(date)
+    .toUpperCase();
+}
+
+export function newYorkEdition(date: Date = new Date()) {
+  const rawHour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: NEW_YORK_TZ,
+      hour: "numeric",
+      hourCycle: "h23",
+    })
+      .formatToParts(date)
+      .find((part) => part.type === "hour")?.value ?? "0",
+  );
+  const hour = rawHour === 24 ? 0 : rawHour;
+  if (hour >= 4 && hour < 12) return "MORNING EDITION";
+  if (hour >= 12 && hour < 17) return "AFTERNOON EDITION";
+  return "LATE EDITION";
+}
+
+export function formatMastheadDateline(date: Date = new Date()) {
+  return `${formatDateline(date)} | NEW YORK | ${newYorkEdition(date)}`;
 }
 
 export function formatPublishedAt(iso: string) {

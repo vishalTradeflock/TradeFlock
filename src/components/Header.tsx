@@ -1,9 +1,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { BreakingTicker } from "@/components/BreakingTicker";
+import { MastheadDateline } from "@/components/MastheadDateline";
 import TradeFlockLogo from "@/components/TradeFlockLogo";
 import { NAV_CATEGORIES, type ArticleWithRelations } from "@/lib/types";
 import { getBreakingArticles, getSuccessInsightsArticles } from "@/lib/articles";
-import { cn, formatDateline } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { Search } from "lucide-react";
 
 type HeaderProps = {
@@ -11,6 +13,8 @@ type HeaderProps = {
   activePage?: "magazine" | "success-insights";
   tickerArticles?: ArticleWithRelations[];
 };
+
+const TICKER_LIMIT = 8;
 
 export default async function Header({
   activeCategory,
@@ -20,10 +24,10 @@ export default async function Header({
   const tickerSource =
     tickerArticles && tickerArticles.length > 0
       ? tickerArticles
-      : await getSuccessInsightsArticles(8);
-  const breakingFallback = tickerSource.length ? tickerSource : await getBreakingArticles();
-  const dateline = formatDateline();
-  const tickerItems = [...breakingFallback, ...breakingFallback];
+      : await getSuccessInsightsArticles(TICKER_LIMIT);
+  const tickerArticlesForStrip = (
+    tickerSource.length ? tickerSource : await getBreakingArticles()
+  ).slice(0, TICKER_LIMIT);
 
   return (
     <header className="bg-white">
@@ -32,37 +36,16 @@ export default async function Header({
           <span className="shrink-0 bg-[#c41e3a] px-2 py-0.5 text-[10px] font-bold tracking-[0.16em]">
             BREAKING
           </span>
-          <div className="group relative min-w-0 flex-1 overflow-hidden">
-            <div
-              className="ticker-track gap-10 text-[12px] leading-5 text-neutral-100 hover:[animation-play-state:paused]"
-              style={{ animation: "ticker 75s linear infinite" }}
-            >
-              {tickerItems.map((article, index) => (
-                <Link
-                  key={`${article.id}-${index}`}
-                  href={`/news/${article.slug}`}
-                  className="shrink-0 hover:text-white"
-                >
-                  <span className="mr-2 font-semibold uppercase tracking-wider text-[#ff6b81]">
-                    {article.category.name}
-                  </span>
-                  {article.title}
-                </Link>
-              ))}
-            </div>
-          </div>
+          <BreakingTicker articles={tickerArticlesForStrip} />
         </div>
       </div>
 
       <div className="border-b border-neutral-200">
-        <div className="mx-auto flex max-w-[1240px] items-center justify-between px-4 py-2 text-[11px] uppercase tracking-[0.14em] text-neutral-500">
-          <p>
-            {dateline}
-            <span className="mx-2 text-neutral-300">|</span>
-            New York
-            <span className="mx-2 text-neutral-300">|</span>
-            Late Edition
-          </p>
+        <div
+          className="mx-auto flex max-w-[1240px] items-center justify-between px-4 py-2 text-[11px] uppercase tracking-[0.14em] text-neutral-500"
+          suppressHydrationWarning
+        >
+          <MastheadDateline />
           <p className="hidden sm:block">Vol. 12 No. 254</p>
         </div>
       </div>
