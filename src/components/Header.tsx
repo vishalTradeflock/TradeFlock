@@ -68,10 +68,8 @@ export default async function Header({
       </div>
 
       <div className="mx-auto flex max-w-[1240px] items-end justify-between px-4 pb-3 pt-4">
-        <Link href="/" className="group block">
-          <h1>
-            <TradeFlockLogo className="text-4xl sm:text-5xl" />
-          </h1>
+        <Link href="/" className="group block" aria-label="TradeFlock USA">
+          <TradeFlockLogo className="text-4xl sm:text-5xl" />
         </Link>
         <form
           action="/"
