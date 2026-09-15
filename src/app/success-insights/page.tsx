@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import Header from "@/components/Header";
+import FeaturedInsightsSlider from "@/components/FeaturedInsightsSlider";
 import GrowthStrategies from "@/components/GrowthStrategies";
 import LeadershipSpotlight from "@/components/LeadershipSpotlight";
-import SafeArticleImage from "@/components/SafeArticleImage";
 import { SUCCESS_INSIGHTS_SPOTLIGHT_COUNT } from "@/lib/cache";
 import {
   getArticles,
   getSuccessInsightsArchive,
   toArticleListCard,
 } from "@/lib/articles";
-import { formatPublishedAt } from "@/lib/utils";
+import type { ArticleWithRelations } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Success Insights",
@@ -26,13 +25,27 @@ export const metadata: Metadata = {
 
 export const revalidate = 120;
 
+function takeFeaturedInterviews(
+  insights: ArticleWithRelations[],
+  latest: ArticleWithRelations[],
+) {
+  if (insights.length >= 10) return insights.slice(0, 10);
+
+  const merged = [...insights];
+  for (const article of latest) {
+    if (merged.length >= 10) break;
+    if (!merged.some((row) => row.id === article.id)) merged.push(article);
+  }
+  return merged.slice(0, 10);
+}
+
 export default async function SuccessInsightsPage() {
   const insights = await getSuccessInsightsArchive();
-  const desk = insights.length ? insights : await getArticles("leadership", 36);
-  const featured = desk[0];
-  const afterFeatured = featured
-    ? desk.filter((article) => article.id !== featured.id)
-    : desk;
+  const latest = insights.length >= 10 ? [] : await getArticles(undefined, 36);
+  const desk = insights.length ? insights : latest;
+  const featuredList = takeFeaturedInterviews(insights, latest);
+  const featuredIds = new Set(featuredList.map((article) => article.id));
+  const afterFeatured = desk.filter((article) => !featuredIds.has(article.id));
   const interviews = afterFeatured
     .slice(0, SUCCESS_INSIGHTS_SPOTLIGHT_COUNT)
     .map(toArticleListCard);
@@ -59,55 +72,12 @@ export default async function SuccessInsightsPage() {
           </p>
         </section>
 
-        {featured ? (
-          <section className="mt-8 grid grid-cols-1 gap-8 border-b border-neutral-200 pb-10 lg:grid-cols-12 lg:gap-0">
-            <Link
-              href={`/news/${featured.slug}`}
-              className="group lg:col-span-7 lg:pr-10"
-            >
-              <div className="relative aspect-[16/10] overflow-hidden bg-neutral-100">
-                <SafeArticleImage
-                  src={featured.cover_image_url}
-                  alt={featured.cover_image_alt}
-                  fill
-                  priority
-                  sizes="(min-width: 1024px) 55vw, 100vw"
-                  className="object-cover transition-opacity group-hover:opacity-90"
-                />
-              </div>
-            </Link>
-            <div className="lg:col-span-5 lg:border-l lg:border-neutral-200 lg:pl-8">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">
-                Featured interview
-              </p>
-              <h2 className="mt-2 font-serif text-3xl font-semibold leading-tight tracking-tight">
-                <Link
-                  href={`/news/${featured.slug}`}
-                  className="hover:text-[#c41e3a]"
-                >
-                  {featured.title}
-                </Link>
-              </h2>
-              {featured.dek ? (
-                <p className="mt-3 text-[17px] leading-7 text-neutral-700">
-                  {featured.dek}
-                </p>
-              ) : (
-                <p className="mt-3 text-[17px] leading-7 text-neutral-700">
-                  {featured.excerpt}
-                </p>
-              )}
-              <p className="mt-4 text-xs text-neutral-500">
-                By{" "}
-                <span className="font-semibold text-neutral-800">
-                  {featured.author.name}
-                </span>
-                <span className="mx-1.5">·</span>
-                {formatPublishedAt(featured.published_at)}
-              </p>
-            </div>
-          </section>
-        ) : null}
+        <FeaturedInsightsSlider
+          interviews={featuredList.map((article) => ({
+            ...toArticleListCard(article),
+            excerpt: article.dek?.trim() || article.excerpt,
+          }))}
+        />
 
         <LeadershipSpotlight articles={interviews} />
         <GrowthStrategies articles={strategies} />

@@ -137,6 +137,10 @@ body {
   animation: magazine-shimmer 1.4s ease-in-out infinite;
 }
 
+.magazine-reel {
+  scrollbar-width: thin;
+}
+
 .magazine-flip-page {
   margin: 0;
   padding: 0;

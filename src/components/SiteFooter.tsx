@@ -5,7 +5,7 @@ import Footer from "@/components/Footer";
 
 export default function SiteFooter() {
   const pathname = usePathname();
-  if (pathname.startsWith("/magazine/") && pathname !== "/magazine") {
+  if (/^\/magazine\/[^/]+\/read\/?$/.test(pathname)) {
     return null;
   }
   return <Footer />;

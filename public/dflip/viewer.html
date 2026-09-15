@@ -64,6 +64,7 @@
       showMissing("Invalid PDF");
     } else {
       const proxiedPdf = "/api/pdf-proxy?url=" + encodeURIComponent(parsed.toString());
+      const direction = (DFLIP.DIRECTION || DFLIP.READ_DIRECTION).LTR;
 
       jQuery(document).ready(function () {
         jQuery("#df_container").flipBook(proxiedPdf, {
@@ -76,7 +77,7 @@
           scrollWheel: true,
           autoEnableOutline: false,
           autoEnableThumbnail: false,
-          direction: DFLIP.READ_DIRECTION.LTR
+          direction: direction
         });
       });
     }
