@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>TradeFlock Reader</title>
+  <link rel="stylesheet" href="/dflip/css/dflip.min.css">
+  <link rel="stylesheet" href="/dflip/css/themify-icons.min.css">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #1a1a1a;
+    }
+    #df_container {
+      width: 100vw;
+      height: 100vh;
+    }
+    .df-missing {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #a3a3a3;
+      font: 13px/1.4 system-ui, sans-serif;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+
+<div id="df_container"></div>
+
+<script>
+  window.dFlipLocation = "/dflip/";
+</script>
+<script src="/dflip/js/libs/jquery.min.js"></script>
+<script src="/dflip/js/dflip.min.js"></script>
+<script>
+  const urlParams = new URLSearchParams(window.location.search);
+  const pdfSource = urlParams.get("pdf");
+
+  function showMissing(message) {
+    const el = document.getElementById("df_container");
+    el.className = "df-missing";
+    el.textContent = message;
+  }
+
+  if (!pdfSource) {
+    showMissing("Missing PDF");
+  } else {
+    let parsed;
+    try {
+      parsed = new URL(pdfSource);
+    } catch {
+      parsed = null;
+    }
+
+    if (!parsed || parsed.protocol !== "https:") {
+      showMissing("Invalid PDF");
+    } else {
+      const proxiedPdf = "/api/pdf-proxy?url=" + encodeURIComponent(parsed.toString());
+
+      jQuery(document).ready(function () {
+        jQuery("#df_container").flipBook(proxiedPdf, {
+          webgl: true,
+          height: "100%",
+          backgroundColor: "#1a1a1a",
+          enableDownload: true,
+          soundEnable: true,
+          soundFile: "sound/turn2.mp3",
+          scrollWheel: true,
+          autoEnableOutline: false,
+          autoEnableThumbnail: false,
+          direction: DFLIP.READ_DIRECTION.LTR
+        });
+      });
+    }
+  }
+</script>
+</body>
+</html>

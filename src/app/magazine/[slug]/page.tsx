@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import FlipbookReader from "./flipbook";
 import { getMagazineBySlug, getMagazines } from "@/lib/magazines";
 
 export const revalidate = 120;
@@ -44,34 +43,50 @@ export default async function MagazineReaderPage({ params }: MagazinePageProps) 
   const magazine = await getMagazineBySlug(slug);
   if (!magazine) notFound();
 
+  const viewerSrc = magazine.pdf_url
+    ? `/dflip/viewer.html?pdf=${encodeURIComponent(magazine.pdf_url)}`
+    : "";
+
   return (
-    <div className="fixed inset-0 z-50 flex h-[100dvh] w-screen select-none flex-col overflow-hidden bg-[#1e1e1e]">
-      <header className="relative z-10 flex items-center justify-between gap-3 px-4 py-3">
+    <div className="fixed inset-0 z-50 flex h-[100dvh] w-screen select-none flex-col overflow-hidden bg-[#141414]">
+      <header className="z-20 flex h-11 w-full items-center justify-between border-b border-neutral-800 bg-[#1c1c1c] px-4">
         <Link
           href="/magazine"
-          className="shrink-0 rounded bg-black/40 px-3 py-1 text-xs tracking-wider text-neutral-400 uppercase hover:text-white"
+          className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-400 transition hover:text-white"
         >
-          ← Back to Desk
+          ← Back to Archive
         </Link>
-        <h1 className="min-w-0 flex-1 text-center text-sm font-medium text-neutral-300 line-clamp-1">
+        <span className="hidden max-w-md truncate text-xs font-medium text-neutral-300 sm:block">
           {magazine.title}
-        </h1>
+        </span>
         {magazine.pdf_url ? (
           <a
             href={magazine.pdf_url}
-            className="shrink-0 text-xs text-neutral-400 hover:text-white"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
+            className="text-xs tracking-wider text-neutral-400 transition hover:text-white"
           >
             Download PDF
           </a>
         ) : (
-          <span className="w-[5.5rem] shrink-0" aria-hidden />
+          <span className="w-[5.5rem]" aria-hidden />
         )}
       </header>
-      <div className="relative min-h-0 flex-1">
-        <FlipbookReader pdfUrl={magazine.pdf_url} />
-      </div>
+
+      <main className="h-[calc(100dvh-44px)] w-full flex-1 bg-[#1a1a1a]">
+        {viewerSrc ? (
+          <iframe
+            src={viewerSrc}
+            title={magazine.title}
+            className="block h-full w-full border-0"
+            allow="fullscreen"
+          />
+        ) : (
+          <p className="flex h-full items-center justify-center text-xs uppercase tracking-widest text-neutral-400">
+            PDF unavailable
+          </p>
+        )}
+      </main>
     </div>
   );
 }
