@@ -100,7 +100,7 @@ export default async function Header({
           {NAV_CATEGORIES.map((category) => (
             <NavLink
               key={category.slug}
-              href={`/?category=${category.slug}`}
+              href={`/${category.slug}`}
               active={activeCategory === category.slug}
             >
               {category.name}

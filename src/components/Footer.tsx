@@ -5,7 +5,7 @@ import { NAV_CATEGORIES } from "@/lib/types";
 const SECTION_LINKS = [
   { href: "/", label: "Home" },
   ...NAV_CATEGORIES.map((category) => ({
-    href: `/?category=${category.slug}`,
+    href: `/${category.slug}`,
     label: category.name,
   })),
   { href: "/success-insights", label: "Success Insights" },

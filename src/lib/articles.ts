@@ -287,6 +287,34 @@ export const getArticles = cache(async (categorySlug?: string, limit = LIST_LIMI
   return withListCovers(rows);
 });
 
+/** Category desks: match slug first, then display name, then common aliases. */
+export const getCategoryDesk = cache(async (slugOrName: string, limit = LIST_LIMIT) => {
+  const raw = slugOrName.trim();
+  const slug = raw.toLowerCase().replace(/\s+/g, "-");
+  const slugAliases =
+    slug === "technology" || slug === "tech" ? ["tech", "technology"] : [slug];
+
+  for (const alias of slugAliases) {
+    const rows = await getArticles(alias, limit);
+    if (rows.length) return rows;
+  }
+
+  const names = new Set<string>([raw, raw.replace(/-/g, " ")]);
+  if (slug === "tech" || slug === "technology") {
+    names.add("Tech");
+    names.add("Technology");
+  }
+
+  for (const name of names) {
+    const fromDb = await queryList({ categoryName: name, limit });
+    if (fromDb?.length) return withListCovers(fromDb);
+    const seeded = filterSeed({ categoryName: name, limit });
+    if (seeded.length) return withListCovers(seeded);
+  }
+
+  return [];
+});
+
 export async function getArticleSlugs() {
   if (!isSupabaseConfigured()) {
     return SEED_ARTICLES.map((article) => article.slug);

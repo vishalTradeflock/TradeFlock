@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import { getArticleBySlug, getArticleSlugs, getRelatedArticles, normalizeArticleSlug } from "@/lib/articles";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
+import { sectionPath } from "@/lib/types";
 import { formatPublishedAt } from "@/lib/utils";
 
 export const revalidate = 120;
@@ -77,7 +78,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-0">
           <article className="lg:col-span-8 lg:pr-10">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">
-              <Link href={`/?category=${article.category.slug}`} className="hover:underline">
+              <Link href={sectionPath(article.category.slug)} className="hover:underline">
                 {article.category.name}
               </Link>
             </p>

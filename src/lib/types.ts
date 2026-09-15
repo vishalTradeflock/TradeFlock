@@ -65,3 +65,12 @@ export const NAV_CATEGORIES = [
   { name: "Leadership", slug: "leadership" },
   { name: "Finance", slug: "finance" },
 ] as const;
+
+export function sectionPath(slug: string) {
+  const clean = slug.trim().toLowerCase();
+  if (clean === "success-insights") return "/success-insights";
+  if (NAV_CATEGORIES.some((category) => category.slug === clean)) {
+    return `/${clean}`;
+  }
+  return "/";
+}
