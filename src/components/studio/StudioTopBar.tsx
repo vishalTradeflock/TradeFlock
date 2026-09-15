@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { StudioInviteStaff } from "@/components/studio/StudioInviteStaff";
 import { signOutStudioClient } from "@/lib/studio/browser-auth";
 import { cn } from "@/lib/utils";
 
@@ -9,10 +10,12 @@ export function StudioTopBar({
   status,
   email,
   onSignOut,
+  canInvite,
 }: {
   status?: string;
   email?: string | null;
   onSignOut?: boolean;
+  canInvite?: boolean;
 }) {
   const router = useRouter();
 
@@ -46,6 +49,7 @@ export function StudioTopBar({
           >
             Write
           </Link>
+          {canInvite ? <StudioInviteStaff /> : null}
           {onSignOut !== false ? (
             <button
               type="button"

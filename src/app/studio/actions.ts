@@ -8,7 +8,8 @@ import {
   slugifyTitle,
   uniqueAuthorSlug,
 } from "@/lib/studio/copy";
-import { canPublishArticle } from "@/lib/studio/access";
+import { headers } from "next/headers";
+import { canInviteStaff, canPublishArticle } from "@/lib/studio/access";
 import { isModerator, type StudioRole } from "@/lib/studio/roles";
 import { getStudioSession } from "@/lib/studio/session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -184,4 +185,182 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
 export async function signOutStudio() {
   const supabase = await createClient();
   await supabase.auth.signOut();
+}
+
+export type StudioInviteRole = "writer" | "moderator";
+
+export type InviteStudioStaffInput = {
+  name: string;
+  email: string;
+  role: StudioInviteRole;
+};
+
+export type InviteStudioStaffResult =
+  | {
+      ok: true;
+      name: string;
+      email: string;
+      role: StudioInviteRole;
+      password: string | null;
+      inviteLink: string | null;
+      existing: boolean;
+    }
+  | { ok: false; error: string };
+
+function generateTemporaryPassword() {
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, 16);
+}
+
+function isInviteRole(role: string): role is StudioInviteRole {
+  return role === "writer" || role === "moderator";
+}
+
+function emailAlreadyRegistered(message: string, code?: string) {
+  const haystack = `${code ?? ""} ${message}`.toLowerCase();
+  return (
+    haystack.includes("already") ||
+    haystack.includes("email_exists") ||
+    haystack.includes("user_already_exists")
+  );
+}
+
+async function studioLoginUrl() {
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  if (!host) return undefined;
+  const proto =
+    requestHeaders.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
+  return `${proto}://${host}/studio/login`;
+}
+
+async function findAuthUserByEmail(
+  admin: ReturnType<typeof createAdminClient>,
+  email: string,
+) {
+  const target = email.toLowerCase();
+  for (let page = 1; page <= 8; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) return null;
+    const match = data.users.find((user) => user.email?.toLowerCase() === target);
+    if (match) return match;
+    if (data.users.length < 200) return null;
+  }
+  return null;
+}
+
+async function createAuthUserForInvite(
+  admin: ReturnType<typeof createAdminClient>,
+  email: string,
+  name: string,
+  password: string,
+  redirectTo: string | undefined,
+) {
+  const created = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { display_name: name, name },
+  });
+
+  if (created.data.user && !created.error) {
+    return { user: created.data.user, existing: false as const, password };
+  }
+
+  if (created.error && !emailAlreadyRegistered(created.error.message, created.error.code)) {
+    throw new Error(created.error.message);
+  }
+
+  const invited = await admin.auth.admin.inviteUserByEmail(email, {
+    data: { display_name: name, name },
+    redirectTo,
+  });
+  if (invited.data.user && !invited.error) {
+    return { user: invited.data.user, existing: false as const, password: null };
+  }
+
+  const existing = await findAuthUserByEmail(admin, email);
+  if (existing) return { user: existing, existing: true as const, password: null };
+
+  throw new Error(
+    created.error?.message || invited.error?.message || "Could not create this newsroom account.",
+  );
+}
+
+async function inviteActionLink(
+  admin: ReturnType<typeof createAdminClient>,
+  email: string,
+  existing: boolean,
+  redirectTo: string | undefined,
+) {
+  const generated = await admin.auth.admin.generateLink({
+    type: existing ? "recovery" : "magiclink",
+    email,
+    options: redirectTo ? { redirectTo } : undefined,
+  });
+  if (generated.error) return null;
+  const properties = generated.data.properties;
+  return properties?.action_link ?? null;
+}
+
+export async function inviteStudioStaff(
+  input: InviteStudioStaffInput,
+): Promise<InviteStudioStaffResult> {
+  try {
+    const session = await getStudioSession();
+    if (!session || !canInviteStaff(session.profile.role)) {
+      return { ok: false, error: "Only a moderator can invite staff." };
+    }
+
+    const name = input.name.trim();
+    const email = input.email.trim().toLowerCase();
+    const role = input.role;
+
+    if (!name) return { ok: false, error: "Enter a name for the masthead." };
+    if (!email.includes("@")) return { ok: false, error: "Enter a valid email address." };
+    if (!isInviteRole(role)) return { ok: false, error: "Choose Writer or Moderator." };
+
+    const admin = createAdminClient();
+    const redirectTo = await studioLoginUrl();
+    const { user, existing, password } = await createAuthUserForInvite(
+      admin,
+      email,
+      name,
+      generateTemporaryPassword(),
+      redirectTo,
+    );
+
+    const { error: profileError } = await admin.from("profiles").upsert(
+      {
+        id: user.id,
+        role,
+        display_name: name,
+      },
+      { onConflict: "id" },
+    );
+    if (profileError) return { ok: false, error: profileError.message };
+
+    await admin.rpc("ensure_studio_author", { p_user_id: user.id });
+
+    let inviteLink: string | null = null;
+    try {
+      inviteLink = await inviteActionLink(admin, email, existing, redirectTo);
+    } catch {
+      inviteLink = null;
+    }
+
+    return {
+      ok: true,
+      name,
+      email,
+      role,
+      password,
+      inviteLink,
+      existing,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not invite this person.";
+    return { ok: false, error: message };
+  }
 }

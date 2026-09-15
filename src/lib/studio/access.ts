@@ -12,3 +12,7 @@ export function canDeleteArticle(role: StudioRole) {
 export function canPublishArticle(role: StudioRole) {
   return isModerator(role);
 }
+
+export function canInviteStaff(role: StudioRole) {
+  return isModerator(role);
+}
