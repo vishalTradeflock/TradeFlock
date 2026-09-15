@@ -5,7 +5,7 @@ create table if not exists public.profiles (
   role text not null default 'writer',
   display_name text,
   created_at timestamptz not null default now(),
-  constraint profiles_role_allowed check (role in ('writer', 'editor', 'admin'))
+  constraint profiles_role_allowed check (role in ('writer', 'moderator'))
 );
 
 alter table public.profiles enable row level security;
@@ -60,6 +60,6 @@ create policy "Newsroom upload article media"
     and exists (
       select 1 from public.profiles p
       where p.id = auth.uid()
-        and p.role in ('writer', 'editor', 'admin')
+        and p.role in ('writer', 'moderator', 'editor', 'admin')
     )
   );

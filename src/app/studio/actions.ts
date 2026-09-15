@@ -8,7 +8,9 @@ import {
   slugifyTitle,
   uniqueAuthorSlug,
 } from "@/lib/studio/copy";
-import { requireStudioSession, type StudioRole } from "@/lib/studio/session";
+import { canPublishArticle } from "@/lib/studio/access";
+import { isModerator, type StudioRole } from "@/lib/studio/roles";
+import { getStudioSession } from "@/lib/studio/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
@@ -62,22 +64,16 @@ async function ensureAuthorId(session: {
 }
 
 function canPublish(role: StudioRole, nextStatus: "draft" | "review" | "published") {
-  if (nextStatus === "published") return role === "admin";
+  if (nextStatus === "published") return canPublishArticle(role);
   return true;
-}
-
-function canEditDraft(
-  role: StudioRole,
-  userId: string,
-  articleAuthorId: string,
-) {
-  if (role === "admin" || role === "editor") return true;
-  return articleAuthorId === userId;
 }
 
 export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftResult> {
   try {
-    const session = await requireStudioSession();
+    const session = await getStudioSession();
+    if (!session) {
+      return { ok: false, error: "Sign in again to save this draft." };
+    }
     const requested = input.status;
 
     const title = input.title.trim() || "Untitled draft";
@@ -98,13 +94,17 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         .maybeSingle();
 
       if (existingError || !existing) return { ok: false, error: "Draft not found." };
-      if (!canEditDraft(session.profile.role, session.userId, existing.author_id)) {
+      if (
+        !isModerator(session.profile.role) &&
+        existing.author_id !== session.userId &&
+        existing.author_id !== authorId
+      ) {
         return { ok: false, error: "You cannot edit this draft." };
       }
 
       const nextStatus = requested ?? existing.status;
       if (!canPublish(session.profile.role, nextStatus)) {
-        return { ok: false, error: "Only an editor-in-chief can publish." };
+        return { ok: false, error: "Only a moderator can publish." };
       }
 
       const update: {
@@ -143,7 +143,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
 
     const nextStatus = requested ?? "draft";
     if (!canPublish(session.profile.role, nextStatus)) {
-      return { ok: false, error: "Only an editor-in-chief can publish." };
+      return { ok: false, error: "Only a moderator can publish." };
     }
 
     const slug = slugifyTitle(title);

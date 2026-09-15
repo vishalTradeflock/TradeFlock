@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { StudioCategory } from "@/components/studio/types";
+import { isModerator } from "@/lib/studio/roles";
 import { getStudioSession } from "@/lib/studio/session";
+import { studioAuthorIds } from "@/lib/studio/desk";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createPublicClient } from "@/lib/supabase/public";
 
@@ -30,6 +32,7 @@ export async function GET(request: Request) {
     id: string;
     title: string;
     body: string;
+    slug: string;
     categoryId: string;
     status: "draft" | "review" | "published";
   } | null = null;
@@ -38,23 +41,22 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
     const { data: article } = await admin
       .from("articles")
-      .select("id, title, body, category_id, status, author_id")
+      .select("id, title, body, slug, category_id, status, author_id")
       .eq("id", id)
       .maybeSingle();
 
-    if (
-      article &&
-      (article.author_id === session.userId ||
-        session.profile.role === "admin" ||
-        session.profile.role === "editor")
-    ) {
-      initialDraft = {
-        id: article.id,
-        title: article.title,
-        body: article.body,
-        categoryId: article.category_id,
-        status: article.status,
-      };
+    if (article) {
+      const authorIds = await studioAuthorIds(session);
+      if (isModerator(session.profile.role) || authorIds.includes(article.author_id)) {
+        initialDraft = {
+          id: article.id,
+          title: article.title,
+          body: article.body,
+          slug: article.slug,
+          categoryId: article.category_id,
+          status: article.status,
+        };
+      }
     }
   }
 

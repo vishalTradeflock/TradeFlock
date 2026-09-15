@@ -4,7 +4,7 @@ import nextDynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import type { StudioCategory } from "@/components/studio/types";
-import type { StudioRole } from "@/lib/studio/session";
+import type { StudioRole } from "@/lib/studio/roles";
 
 const StudioWriter = nextDynamic(() => import("@/components/studio/StudioWriter"), {
   ssr: false,
@@ -25,6 +25,7 @@ type Bootstrap = {
     id: string;
     title: string;
     body: string;
+    slug: string;
     categoryId: string;
     status: "draft" | "review" | "published";
   } | null;

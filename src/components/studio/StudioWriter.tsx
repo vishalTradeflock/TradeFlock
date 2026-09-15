@@ -25,12 +25,17 @@ import {
   type EditorInstance,
 } from "novel";
 import { ImageIcon, Minus, Quote, Search } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { saveStudioDraft, signOutStudio } from "@/app/studio/actions";
+import { saveStudioDraft, type SaveDraftResult } from "@/app/studio/actions";
+import { StudioDialog } from "@/components/studio/StudioDialog";
 import { unsplashEditorSrc } from "@/lib/images";
+import { storyPreviewHref } from "@/components/studio/types";
 import { cn } from "@/lib/utils";
-import type { StudioRole } from "@/lib/studio/session";
+import type { StudioRole } from "@/lib/studio/roles";
+import { isModerator } from "@/lib/studio/roles";
+import { signOutStudioClient } from "@/lib/studio/browser-auth";
 import type { StudioCategory } from "@/components/studio/types";
 
 type UnsplashPhoto = {
@@ -66,11 +71,13 @@ export default function StudioWriter({
     id: string;
     title: string;
     body: string;
+    slug: string;
     categoryId: string;
     status: "draft" | "review" | "published";
   } | null;
 }) {
   const router = useRouter();
+  const moderator = isModerator(role);
   const editorRef = useRef<EditorInstance | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -81,8 +88,23 @@ export default function StudioWriter({
   const [categoryId, setCategoryId] = useState(
     initialDraft?.categoryId ?? categories[0]?.id ?? "",
   );
+  const saveChain = useRef(Promise.resolve());
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState("");
+  const [savedStatus, setSavedStatus] = useState<"draft" | "review" | "published">(
+    initialDraft?.status ?? "draft",
+  );
+  const [busyAction, setBusyAction] = useState<"review" | "published" | null>(null);
+  const [success, setSuccess] = useState<{
+    status: "review" | "published";
+    id: string;
+    slug: string;
+    title: string;
+  } | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [savedSlug, setSavedSlug] = useState(initialDraft?.slug ?? "");
+  const [storyId, setStoryId] = useState(initialDraft?.id ?? "");
   const [unsplashOpen, setUnsplashOpen] = useState(false);
   const [unsplashQuery, setUnsplashQuery] = useState("boardroom");
   const [unsplashPhotos, setUnsplashPhotos] = useState<UnsplashPhoto[]>([]);
@@ -239,31 +261,102 @@ export default function StudioWriter({
   );
 
   const persist = useCallback(
-    async (status?: "draft" | "review" | "published") => {
-      if (!categoryId) return;
-      setSaveState("saving");
-      setSaveError("");
-      const body = editorRef.current?.getHTML() ?? initialDraft?.body ?? "";
-      const result = await saveStudioDraft({
-        id: draftId.current || null,
-        title,
-        body,
-        categoryId,
-        status,
-      });
-      if (!result.ok) {
-        setSaveState("error");
-        setSaveError(result.error);
-        return;
-      }
-      draftId.current = result.id;
-      setSaveState("saved");
-      if (!window.location.search.includes(result.id)) {
-        router.replace(`/studio/write?id=${result.id}`);
-      }
+    async (status?: "draft" | "review" | "published"): Promise<SaveDraftResult | null> => {
+      let outcome: SaveDraftResult | null = null;
+      const run = async () => {
+        if (!categoryId) {
+          setSaveState("error");
+          setSaveError("Choose a desk before saving.");
+          return;
+        }
+        if ((status === "review" || status === "published") && !title.trim()) {
+          setSaveState("error");
+          setSaveError("Add a headline before submitting.");
+          return;
+        }
+        if (status === "published" && !moderator) {
+          setSaveState("error");
+          setSaveError("Only a moderator can publish.");
+          return;
+        }
+
+        setSaveState("saving");
+        setSaveError("");
+        try {
+          const body = editorRef.current?.getHTML() ?? initialDraft?.body ?? "";
+          const result = await saveStudioDraft({
+            id: draftId.current || null,
+            title,
+            body,
+            categoryId,
+            status,
+          });
+          outcome = result;
+          if (!result.ok) {
+            setSaveState("error");
+            setSaveError(result.error);
+            return;
+          }
+          draftId.current = result.id;
+          setStoryId(result.id);
+          setSavedSlug(result.slug);
+          setSavedStatus(result.status);
+          setSaveState("saved");
+          if (typeof window !== "undefined") {
+            const next = `/studio/write?id=${result.id}`;
+            if (window.location.pathname + window.location.search !== next) {
+              window.history.replaceState(null, "", next);
+            }
+          }
+        } catch (error) {
+          setSaveState("error");
+          setSaveError(error instanceof Error ? error.message : "Could not save draft.");
+        }
+      };
+
+      const queued = saveChain.current.then(run, run);
+      saveChain.current = queued.then(
+        () => undefined,
+        () => undefined,
+      );
+      await queued;
+      return outcome;
     },
-    [categoryId, initialDraft?.body, router, title],
+    [categoryId, initialDraft?.body, moderator, title],
   );
+
+  const submitStatus = useCallback(
+    (status: "review" | "published") => {
+      window.clearTimeout(saveTimer.current);
+      setBusyAction(status);
+      void persist(status)
+        .then((result) => {
+          if (result?.ok && (result.status === "review" || result.status === "published")) {
+            setSuccess({
+              status: result.status,
+              id: result.id,
+              slug: result.slug,
+              title: title.trim() || "Untitled draft",
+            });
+          }
+        })
+        .finally(() => setBusyAction(null));
+    },
+    [persist, title],
+  );
+
+  async function deleteStory() {
+    const id = draftId.current;
+    if (!id) return;
+    setDeleteError("");
+    const response = await fetch(`/api/posts/${id}`, { method: "DELETE" });
+    const payload = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setDeleteError(payload.error ?? "Could not delete this story.");
+      return;
+    }
+    router.replace("/studio");
+  }
 
   useEffect(() => {
     window.clearTimeout(saveTimer.current);
@@ -302,19 +395,34 @@ export default function StudioWriter({
 
   const statusLabel =
     saveState === "saving"
-      ? "Saving…"
+      ? busyAction === "published"
+        ? "Publishing…"
+        : busyAction === "review"
+          ? "Submitting…"
+          : "Saving…"
       : saveState === "error"
         ? "Save failed"
-        : saveState === "saved"
-          ? "Draft saved"
-          : "Draft";
+        : savedStatus === "published" && saveState === "saved"
+          ? "Published"
+          : savedStatus === "review" && saveState === "saved"
+            ? "In review"
+            : saveState === "saved"
+              ? "Draft saved"
+              : savedStatus === "review"
+                ? "In review"
+                : savedStatus === "published"
+                  ? "Published"
+                  : "Draft";
+  const saving = saveState === "saving";
 
   return (
     <div className="min-h-dvh bg-white">
       <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <div>
-            <p className="font-serif text-lg font-semibold tracking-tight">TradeFlock Studio</p>
+            <Link href="/studio" className="font-serif text-lg font-semibold tracking-tight hover:text-[#c41e3a]">
+              TradeFlock Studio
+            </Link>
             <p
               className={cn(
                 "text-[11px] uppercase tracking-widest",
@@ -325,6 +433,14 @@ export default function StudioWriter({
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {moderator ? (
+              <Link
+                href="/studio"
+                className="h-8 px-2 text-[11px] font-semibold uppercase tracking-widest leading-8 hover:text-[#c41e3a]"
+              >
+                Desk
+              </Link>
+            ) : null}
             <select
               value={categoryId}
               onChange={(event) => setCategoryId(event.target.value)}
@@ -338,25 +454,40 @@ export default function StudioWriter({
             </select>
             <button
               type="button"
-              className="h-8 border border-neutral-200 px-3 text-[11px] font-semibold uppercase tracking-widest hover:text-[#c41e3a]"
-              onClick={() => void persist("review")}
+              disabled={saving}
+              className="h-8 border border-neutral-200 px-3 text-[11px] font-semibold uppercase tracking-widest hover:text-[#c41e3a] disabled:opacity-50"
+              onClick={() => submitStatus("review")}
             >
-              Submit for Review
+              {busyAction === "review" ? "Submitting…" : "Submit for Review"}
             </button>
-            {role === "admin" ? (
+            {moderator ? (
               <button
                 type="button"
-                className="h-8 bg-[#c41e3a] px-3 text-[11px] font-semibold uppercase tracking-widest text-white hover:opacity-90"
-                onClick={() => void persist("published")}
+                disabled={saving}
+                className="h-8 bg-[#c41e3a] px-3 text-[11px] font-semibold uppercase tracking-widest text-white hover:opacity-90 disabled:opacity-50"
+                onClick={() => submitStatus("published")}
               >
-                Publish
+                {busyAction === "published" ? "Publishing…" : "Publish"}
+              </button>
+            ) : null}
+            {moderator && storyId ? (
+              <button
+                type="button"
+                disabled={saving}
+                className="h-8 px-2 text-[11px] font-semibold uppercase tracking-widest text-neutral-500 hover:text-[#c41e3a] disabled:opacity-50"
+                onClick={() => {
+                  setDeleteError("");
+                  setDeleteOpen(true);
+                }}
+              >
+                Delete
               </button>
             ) : null}
             <button
               type="button"
               className="h-8 px-2 text-[11px] uppercase tracking-widest text-neutral-500 hover:text-neutral-900"
               onClick={async () => {
-                await signOutStudio();
+                await signOutStudioClient();
                 router.replace("/studio/login");
               }}
             >
@@ -364,6 +495,11 @@ export default function StudioWriter({
             </button>
           </div>
         </div>
+        {saveError ? (
+          <p className="border-t border-neutral-200 bg-white px-4 py-2 text-center text-sm text-[#c41e3a]">
+            {saveError}
+          </p>
+        ) : null}
       </header>
 
       <div className="mx-auto max-w-3xl px-6 py-12">
@@ -420,6 +556,7 @@ export default function StudioWriter({
                 editorRef.current = editor;
                 window.clearTimeout(saveTimer.current);
                 saveTimer.current = window.setTimeout(() => {
+                  if (!title.trim() && !editor.getText().trim()) return;
                   void persist();
                 }, 2000);
               }}
@@ -555,6 +692,59 @@ export default function StudioWriter({
             )}
           </div>
         </div>
+      ) : null}
+
+      {success ? (
+        <StudioDialog title={success.status === "published" ? "Published" : "Submitted for review"}>
+          <p>
+            {success.status === "published"
+              ? "The story is live on TradeFlock USA."
+              : "The masthead has your copy. It is not on the live book yet."}
+          </p>
+          <p className="mt-3 font-serif text-lg font-semibold tracking-tight text-neutral-900">
+            {success.title}
+          </p>
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-widest text-[#c41e3a]">
+            {success.status === "published" ? "Published" : "In review"}
+          </p>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Link
+              href={storyPreviewHref(success)}
+              className="h-8 border border-neutral-200 px-3 text-center text-[11px] font-semibold uppercase tracking-widest leading-8 hover:text-[#c41e3a]"
+            >
+              {success.status === "published" ? "View story" : "Preview in editor"}
+            </Link>
+            <Link
+              href="/studio"
+              className="h-8 bg-[#c41e3a] px-3 text-center text-[11px] font-semibold uppercase tracking-widest leading-8 text-white"
+            >
+              Back to Desk
+            </Link>
+          </div>
+        </StudioDialog>
+      ) : null}
+
+      {deleteOpen ? (
+        <StudioDialog title="Delete this story?" onClose={() => setDeleteOpen(false)}>
+          <p>This removes the piece from the desk and the live book. This cannot be undone.</p>
+          {deleteError ? <p className="mt-3 text-sm text-[#c41e3a]">{deleteError}</p> : null}
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              className="h-8 px-3 text-[11px] font-semibold uppercase tracking-widest text-neutral-500"
+              onClick={() => setDeleteOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="h-8 bg-[#c41e3a] px-3 text-[11px] font-semibold uppercase tracking-widest text-white"
+              onClick={() => void deleteStory()}
+            >
+              Delete
+            </button>
+          </div>
+        </StudioDialog>
       ) : null}
     </div>
   );

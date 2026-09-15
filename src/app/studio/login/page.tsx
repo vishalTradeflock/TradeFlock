@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import StudioLoginForm from "@/components/studio/StudioLoginForm";
 import { getAuthUser, getStudioSession } from "@/lib/studio/session";
+import { studioHomePath } from "@/lib/studio/roles";
 import { isSupabaseConfigured } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -12,9 +13,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function StudioLoginPage() {
-  if (await getStudioSession()) {
-    redirect("/studio/write");
-  }
+  const session = await getStudioSession();
+  if (session) redirect(studioHomePath(session.profile.role));
 
   const user = await getAuthUser();
 

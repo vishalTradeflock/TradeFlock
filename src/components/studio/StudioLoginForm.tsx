@@ -13,7 +13,9 @@ export default function StudioLoginForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(
-    forbidden ? "This account is not on the masthead." : "",
+    forbidden
+      ? "This sign-in worked, but there is no studio profile for the account. Writers and moderators both need a profiles row whose id matches auth.users id."
+      : "",
   );
   const [pending, setPending] = useState(false);
 
@@ -31,7 +33,19 @@ export default function StudioLoginForm({
       setError(signInError.message);
       return;
     }
-    router.replace("/studio/write");
+
+    const me = await fetch("/api/studio/me");
+    const payload = (await me.json()) as { home?: string; role?: string; error?: string };
+    if (!me.ok || !payload.home) {
+      setPending(false);
+      setError(
+        payload.error ??
+          "This account can sign in, but it is not a studio writer or moderator yet.",
+      );
+      return;
+    }
+
+    router.replace(payload.home);
     router.refresh();
   }
 
@@ -72,7 +86,7 @@ export default function StudioLoginForm({
         {pending ? "Signing in…" : "Enter the desk"}
       </button>
       <p className="text-xs text-neutral-500">
-        Newsroom accounts are issued by the masthead. There is no public signup.
+        Writers go to the canvas. Moderators go to the desk. There is no public signup.
       </p>
     </form>
   );

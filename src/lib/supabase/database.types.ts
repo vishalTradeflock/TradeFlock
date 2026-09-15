@@ -204,19 +204,19 @@ export type Database = {
       profiles: {
         Row: {
           id: string;
-          role: "writer" | "editor" | "admin";
+          role: "writer" | "moderator" | "editor" | "admin";
           display_name: string | null;
           created_at: string;
         };
         Insert: {
           id: string;
-          role?: "writer" | "editor" | "admin";
+          role?: "writer" | "moderator" | "editor" | "admin";
           display_name?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
-          role?: "writer" | "editor" | "admin";
+          role?: "writer" | "moderator" | "editor" | "admin";
           display_name?: string | null;
           created_at?: string;
         };
