@@ -4,12 +4,9 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   role text not null default 'writer',
   display_name text,
-  author_id uuid references public.authors (id) on delete set null,
   created_at timestamptz not null default now(),
   constraint profiles_role_allowed check (role in ('writer', 'editor', 'admin'))
 );
-
-create index if not exists profiles_author_id_idx on public.profiles (author_id);
 
 alter table public.profiles enable row level security;
 

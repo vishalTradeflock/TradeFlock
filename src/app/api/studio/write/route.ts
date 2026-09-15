@@ -44,7 +44,7 @@ export async function GET(request: Request) {
 
     if (
       article &&
-      (article.author_id === session.profile.author_id ||
+      (article.author_id === session.userId ||
         session.profile.role === "admin" ||
         session.profile.role === "editor")
     ) {

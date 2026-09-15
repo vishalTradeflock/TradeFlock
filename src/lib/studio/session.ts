@@ -1,12 +1,15 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { Database } from "@/lib/supabase/database.types";
 
 export const STUDIO_ROLES = ["writer", "editor", "admin"] as const;
 
 export type StudioRole = (typeof STUDIO_ROLES)[number];
 
-export type StudioProfile = Database["public"]["Tables"]["profiles"]["Row"];
+export type StudioProfile = {
+  id: string;
+  role: StudioRole;
+  display_name: string | null;
+};
 
 export type StudioSession = {
   userId: string;
@@ -16,6 +19,19 @@ export type StudioSession = {
 
 function isStudioRole(role: string): role is StudioRole {
   return STUDIO_ROLES.includes(role as StudioRole);
+}
+
+function asStudioProfile(row: {
+  id: string;
+  role: string;
+  display_name?: string | null;
+} | null): StudioProfile | null {
+  if (!row || !isStudioRole(row.role)) return null;
+  return {
+    id: row.id,
+    role: row.role,
+    display_name: row.display_name ?? null,
+  };
 }
 
 export async function getAuthUser() {
@@ -38,13 +54,20 @@ export async function getStudioSession(): Promise<StudioSession | null> {
     } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const { data: profile, error } = await supabase
+    const full = await supabase
       .from("profiles")
-      .select("*")
+      .select("id, role, display_name")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (error || !profile || !isStudioRole(profile.role)) return null;
+    const row = full.error
+      ? (
+          await supabase.from("profiles").select("id, role").eq("id", user.id).maybeSingle()
+        ).data
+      : full.data;
+
+    const profile = asStudioProfile(row);
+    if (!profile) return null;
 
     return {
       userId: user.id,

@@ -7,6 +7,7 @@ type UnsplashPhoto = {
   id: string;
   alt: string;
   url: string;
+  thumb: string;
   photographer: string;
   photographerUrl: string;
 };
@@ -44,18 +45,25 @@ export async function GET(request: Request) {
     results?: Array<{
       id: string;
       alt_description: string | null;
-      urls: { regular: string };
+      urls: { regular?: string; small?: string; full?: string };
       user: { name: string; links: { html: string } };
     }>;
   };
 
-  const photos: UnsplashPhoto[] = (payload.results ?? []).map((photo) => ({
-    id: photo.id,
-    alt: photo.alt_description ?? `Photo by ${photo.user.name}`,
-    url: photo.urls.regular,
-    photographer: photo.user.name,
-    photographerUrl: photo.user.links.html,
-  }));
+  const photos: UnsplashPhoto[] = (payload.results ?? []).flatMap((photo) => {
+    const url = photo.urls.regular || photo.urls.small || photo.urls.full;
+    if (!url) return [];
+    return [
+      {
+        id: photo.id,
+        alt: photo.alt_description ?? `Photo by ${photo.user.name}`,
+        url,
+        thumb: photo.urls.small || url,
+        photographer: photo.user.name,
+        photographerUrl: photo.user.links.html,
+      },
+    ];
+  });
 
   return NextResponse.json({ photos });
 }

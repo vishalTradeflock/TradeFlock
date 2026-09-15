@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { FALLBACK_COVER_IMAGE } from "@/lib/images";
 import {
-  authorSlugFromEmail,
   coverFromHtml,
   excerptFromHtml,
   slugifyTitle,
+  uniqueAuthorSlug,
 } from "@/lib/studio/copy";
 import { requireStudioSession, type StudioRole } from "@/lib/studio/session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -28,38 +28,51 @@ export type SaveDraftResult =
 async function ensureAuthorId(session: {
   userId: string;
   email: string | null;
-  profile: { author_id: string | null; display_name: string | null };
+  profile: { display_name: string | null };
 }) {
-  if (session.profile.author_id) return session.profile.author_id;
-
   const admin = createAdminClient();
-  const name = session.profile.display_name?.trim() || session.email?.split("@")[0] || "Staff Writer";
-  const slugBase = authorSlugFromEmail(session.email ?? `${session.userId}@studio`);
-  let slug = slugBase;
-  let attempt = 0;
-
-  while (attempt < 5) {
-    const { data, error } = await admin
-      .from("authors")
-      .insert({ name, slug, title: "Staff Writer" })
-      .select("id")
-      .single();
-
-    if (!error && data?.id) {
-      await admin.from("profiles").update({ author_id: data.id }).eq("id", session.userId);
-      return data.id;
-    }
-
-    attempt += 1;
-    slug = `${slugBase}-${attempt + 1}`;
+  const { data: rpcId, error: rpcError } = await admin.rpc("ensure_studio_author", {
+    p_user_id: session.userId,
+  });
+  if (!rpcError && typeof rpcId === "string" && rpcId) {
+    return rpcId;
   }
 
-  throw new Error("Could not attach an author record.");
+  const { data: byUser } = await admin.from("authors").select("id").eq("id", session.userId).maybeSingle();
+  if (byUser?.id) return byUser.id;
+
+  const name = session.profile.display_name?.trim() || session.email?.split("@")[0] || "Staff Writer";
+  const slug = uniqueAuthorSlug(session.email ?? `${session.userId}@studio`, session.userId);
+
+  const { data: bySlug } = await admin.from("authors").select("id").eq("slug", slug).maybeSingle();
+  if (bySlug?.id) return bySlug.id;
+
+  const { error } = await admin.from("authors").insert({
+    id: session.userId,
+    name,
+    slug,
+    title: "Staff Writer",
+  });
+  if (!error) return session.userId;
+
+  const { data: created } = await admin.from("authors").select("id").eq("id", session.userId).maybeSingle();
+  if (created?.id) return created.id;
+
+  throw new Error(error.message || rpcError?.message || "Could not attach an author record.");
 }
 
 function canPublish(role: StudioRole, nextStatus: "draft" | "review" | "published") {
   if (nextStatus === "published") return role === "admin";
   return true;
+}
+
+function canEditDraft(
+  role: StudioRole,
+  userId: string,
+  articleAuthorId: string,
+) {
+  if (role === "admin" || role === "editor") return true;
+  return articleAuthorId === userId;
 }
 
 export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftResult> {
@@ -85,11 +98,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         .maybeSingle();
 
       if (existingError || !existing) return { ok: false, error: "Draft not found." };
-      if (
-        existing.author_id !== authorId &&
-        session.profile.role !== "admin" &&
-        session.profile.role !== "editor"
-      ) {
+      if (!canEditDraft(session.profile.role, session.userId, existing.author_id)) {
         return { ok: false, error: "You cannot edit this draft." };
       }
 

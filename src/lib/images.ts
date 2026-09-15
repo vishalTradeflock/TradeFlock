@@ -64,6 +64,19 @@ export function coverIdentity(url: string) {
   return url.split("?")[0];
 }
 
+/** Stable hotlink for the Studio editor (TipTap <img src>, not next/image). */
+export function unsplashEditorSrc(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== "images.unsplash.com" && parsed.hostname !== "plus.unsplash.com") {
+      return url;
+    }
+    return `https://${parsed.hostname}${parsed.pathname}?auto=format&fit=crop&w=1600&q=80`;
+  } catch {
+    return url;
+  }
+}
+
 export function resolveCoverImage(url: string | null | undefined): string {
   if (!url) return FALLBACK_COVER_IMAGE;
 

@@ -175,8 +175,11 @@ body {
 }
 
 .studio-editor .ProseMirror img {
+  display: block;
   height: auto;
   max-width: 100%;
+  min-height: 8rem;
+  background: #f5f5f5;
 }
 
 .studio-editor .ProseMirror blockquote {

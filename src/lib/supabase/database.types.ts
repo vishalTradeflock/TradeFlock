@@ -206,39 +206,31 @@ export type Database = {
           id: string;
           role: "writer" | "editor" | "admin";
           display_name: string | null;
-          author_id: string | null;
           created_at: string;
         };
         Insert: {
           id: string;
           role?: "writer" | "editor" | "admin";
           display_name?: string | null;
-          author_id?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           role?: "writer" | "editor" | "admin";
           display_name?: string | null;
-          author_id?: string | null;
           created_at?: string;
         };
-        Relationships: [
-          {
-            foreignKeyName: "profiles_author_id_fkey";
-            columns: ["author_id"];
-            isOneToOne: false;
-            referencedRelation: "authors";
-            referencedColumns: ["id"];
-          },
-        ];
+        Relationships: [];
       };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      ensure_studio_author: {
+        Args: { p_user_id: string };
+        Returns: string;
+      };
     };
     Enums: {
       [_ in never]: never;

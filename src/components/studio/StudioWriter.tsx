@@ -28,6 +28,7 @@ import { ImageIcon, Minus, Quote, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { saveStudioDraft, signOutStudio } from "@/app/studio/actions";
+import { unsplashEditorSrc } from "@/lib/images";
 import { cn } from "@/lib/utils";
 import type { StudioRole } from "@/lib/studio/session";
 import type { StudioCategory } from "@/components/studio/types";
@@ -36,6 +37,7 @@ type UnsplashPhoto = {
   id: string;
   alt: string;
   url: string;
+  thumb?: string;
   photographer: string;
   photographerUrl: string;
 };
@@ -100,15 +102,56 @@ export default function StudioWriter({
 
   const insertUnsplash = useCallback((photo: UnsplashPhoto) => {
     const editor = editorRef.current;
-    if (!editor) return;
-    editor
+    const src = unsplashEditorSrc(photo.url);
+    if (!editor || !src) return;
+
+    let href = "https://unsplash.com/?utm_source=tradeflock&utm_medium=referral";
+    try {
+      const parsed = new URL(photo.photographerUrl || "https://unsplash.com");
+      parsed.searchParams.set("utm_source", "tradeflock");
+      parsed.searchParams.set("utm_medium", "referral");
+      href = parsed.toString();
+    } catch {
+      // keep Unsplash homepage attribution if the photographer URL is malformed
+    }
+
+    const alt = photo.alt || `Photo by ${photo.photographer}`;
+    const inserted = editor
       .chain()
       .focus()
-      .setImage({ src: photo.url, alt: photo.alt })
-      .insertContent(
-        `<p><em>Photo by <a href="${photo.photographerUrl}?utm_source=tradeflock&utm_medium=referral" target="_blank" rel="noreferrer">${photo.photographer}</a> on Unsplash</em></p>`,
-      )
+      .insertContent([
+        {
+          type: "image",
+          attrs: { src, alt },
+        },
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", marks: [{ type: "italic" }], text: "Photo by " },
+            {
+              type: "text",
+              marks: [
+                { type: "italic" },
+                {
+                  type: "link",
+                  attrs: {
+                    href,
+                    target: "_blank",
+                    rel: "noreferrer",
+                  },
+                },
+              ],
+              text: photo.photographer || "Unsplash",
+            },
+            { type: "text", marks: [{ type: "italic" }], text: " on Unsplash" },
+          ],
+        },
+      ])
       .run();
+
+    if (!inserted) {
+      editor.chain().focus().setImage({ src, alt }).run();
+    }
     setUnsplashOpen(false);
   }, []);
 
@@ -499,7 +542,7 @@ export default function StudioWriter({
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={photo.url}
+                      src={photo.thumb || photo.url}
                       alt={photo.alt}
                       className="aspect-[4/3] w-full object-cover"
                     />

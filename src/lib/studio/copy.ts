@@ -29,3 +29,9 @@ export function authorSlugFromEmail(email: string) {
   const slug = local.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return slug || "writer";
 }
+
+export function uniqueAuthorSlug(email: string, userId: string) {
+  const base = authorSlugFromEmail(email);
+  const suffix = userId.replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase();
+  return suffix ? `${base}-${suffix}` : `${base}-desk`;
+}
