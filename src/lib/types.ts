@@ -20,6 +20,8 @@ export type Article = {
   title: string;
   dek: string | null;
   excerpt: string;
+  meta_title?: string | null;
+  meta_description?: string | null;
   body: string;
   cover_image_url: string;
   cover_image_alt: string;

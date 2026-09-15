@@ -24,13 +24,15 @@ import {
   renderItems,
   type EditorInstance,
 } from "novel";
-import { ImageIcon, Minus, Quote, Search } from "lucide-react";
+import { ImageIcon, Minus, Quote, Search, Settings } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { saveStudioDraft, type SaveDraftResult } from "@/app/studio/actions";
 import { StudioDialog } from "@/components/studio/StudioDialog";
+import { StudioSeoDrawer } from "@/components/studio/StudioSeoDrawer";
 import { unsplashEditorSrc } from "@/lib/images";
+import { excerptFromHtml } from "@/lib/studio/copy";
 import { storyPreviewHref } from "@/components/studio/types";
 import { cn } from "@/lib/utils";
 import type { StudioRole } from "@/lib/studio/roles";
@@ -74,6 +76,8 @@ export default function StudioWriter({
     slug: string;
     categoryId: string;
     status: "draft" | "review" | "published";
+    metaTitle?: string;
+    metaDescription?: string;
   } | null;
 }) {
   const router = useRouter();
@@ -110,6 +114,12 @@ export default function StudioWriter({
   const [unsplashPhotos, setUnsplashPhotos] = useState<UnsplashPhoto[]>([]);
   const [unsplashError, setUnsplashError] = useState("");
   const [unsplashLoading, setUnsplashLoading] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [metaTitle, setMetaTitle] = useState(initialDraft?.metaTitle ?? "");
+  const [metaDescription, setMetaDescription] = useState(initialDraft?.metaDescription ?? "");
+  const [openingPreview, setOpeningPreview] = useState(() =>
+    excerptFromHtml(initialDraft?.body ?? ""),
+  );
 
   const resizeTitle = useCallback(() => {
     const node = titleRef.current;
@@ -290,6 +300,8 @@ export default function StudioWriter({
             body,
             categoryId,
             status,
+            metaTitle,
+            metaDescription,
           });
           outcome = result;
           if (!result.ok) {
@@ -322,7 +334,7 @@ export default function StudioWriter({
       await queued;
       return outcome;
     },
-    [categoryId, initialDraft?.body, moderator, title],
+    [categoryId, initialDraft?.body, metaDescription, metaTitle, moderator, title],
   );
 
   const submitStatus = useCallback(
@@ -365,7 +377,7 @@ export default function StudioWriter({
       void persist();
     }, 2000);
     return () => window.clearTimeout(saveTimer.current);
-  }, [title, persist]);
+  }, [metaDescription, metaTitle, title, persist]);
 
   async function searchUnsplash(event?: React.FormEvent) {
     event?.preventDefault();
@@ -470,6 +482,15 @@ export default function StudioWriter({
                 {busyAction === "published" ? "Publishing…" : "Publish"}
               </button>
             ) : null}
+            <button
+              type="button"
+              aria-label="SEO settings"
+              onClick={() => setSettingsOpen(true)}
+              className="inline-flex h-8 items-center gap-1.5 border border-neutral-200 px-3 text-[11px] font-semibold uppercase tracking-widest hover:text-[#c41e3a]"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              Settings
+            </button>
             {moderator && storyId ? (
               <button
                 type="button"
@@ -554,6 +575,7 @@ export default function StudioWriter({
               }}
               onUpdate={({ editor }) => {
                 editorRef.current = editor;
+                setOpeningPreview(excerptFromHtml(editor.getHTML()));
                 window.clearTimeout(saveTimer.current);
                 saveTimer.current = window.setTimeout(() => {
                   if (!title.trim() && !editor.getText().trim()) return;
@@ -746,6 +768,18 @@ export default function StudioWriter({
           </div>
         </StudioDialog>
       ) : null}
+
+      <StudioSeoDrawer
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        title={title}
+        slug={savedSlug}
+        opening={openingPreview}
+        metaTitle={metaTitle}
+        metaDescription={metaDescription}
+        onMetaTitleChange={setMetaTitle}
+        onMetaDescriptionChange={setMetaDescription}
+      />
     </div>
   );
 }

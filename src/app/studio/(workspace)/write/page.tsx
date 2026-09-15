@@ -28,6 +28,8 @@ type Bootstrap = {
     slug: string;
     categoryId: string;
     status: "draft" | "review" | "published";
+    metaTitle: string;
+    metaDescription: string;
   } | null;
 };
 

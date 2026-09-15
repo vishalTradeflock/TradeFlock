@@ -31,6 +31,18 @@ const ARTICLE_LIST_SELECT = [
 ].join(",");
 
 const ARTICLE_DETAIL_SELECT = `${ARTICLE_LIST_SELECT},body`;
+const ARTICLE_DETAIL_SEO_SELECT = `${ARTICLE_DETAIL_SELECT},meta_title,meta_description`;
+
+let articleSeoColumns = true;
+
+function missingSeoColumn(message: string | undefined) {
+  const haystack = (message ?? "").toLowerCase();
+  return haystack.includes("meta_title") || haystack.includes("meta_description");
+}
+
+function articleDetailSelect() {
+  return articleSeoColumns ? ARTICLE_DETAIL_SEO_SELECT : ARTICLE_DETAIL_SELECT;
+}
 
 type ArticleRow = Record<string, unknown> & {
   category?: Category | Category[] | null;
@@ -38,6 +50,8 @@ type ArticleRow = Record<string, unknown> & {
   author?: Author | Author[] | null;
   body?: string | null;
   cover_image_url?: string | null;
+  meta_title?: string | null;
+  meta_description?: string | null;
 };
 
 type ListQuery = {
@@ -83,6 +97,11 @@ function mapArticleRow(row: ArticleRow, includeBody: boolean): ArticleWithRelati
     ...article,
     body: includeBody ? String(row.body ?? "") : "",
     cover_image_url: resolveCoverImage(article.cover_image_url),
+    meta_title: typeof row.meta_title === "string" && row.meta_title.trim() ? row.meta_title : null,
+    meta_description:
+      typeof row.meta_description === "string" && row.meta_description.trim()
+        ? row.meta_description
+        : null,
     category,
     author,
   };
@@ -348,11 +367,16 @@ async function fetchArticleBySlugFromSupabase(cleanSlug: string) {
 
     const exact = await supabase
       .from("articles")
-      .select(ARTICLE_DETAIL_SELECT)
+      .select(articleDetailSelect())
       .eq("status", "published")
       .eq("slug", cleanSlug)
       .lte("published_at", now)
       .maybeSingle();
+
+    if (articleSeoColumns && missingSeoColumn(exact.error?.message)) {
+      articleSeoColumns = false;
+      return fetchArticleBySlugFromSupabase(cleanSlug);
+    }
 
     if (!exact.error && exact.data) {
       return mapArticleRow(exact.data as unknown as ArticleRow, true);
@@ -363,7 +387,7 @@ async function fetchArticleBySlugFromSupabase(cleanSlug: string) {
 
       const retry = await supabase
         .from("articles")
-        .select(ARTICLE_DETAIL_SELECT)
+        .select(articleDetailSelect())
         .eq("status", "published")
         .eq("slug", variant)
         .lte("published_at", now)
@@ -376,7 +400,7 @@ async function fetchArticleBySlugFromSupabase(cleanSlug: string) {
 
     const insensitive = await supabase
       .from("articles")
-      .select(ARTICLE_DETAIL_SELECT)
+      .select(articleDetailSelect())
       .eq("status", "published")
       .ilike(
         "slug",

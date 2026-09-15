@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import { getArticleBySlug, getArticleSlugs, getRelatedArticles, normalizeArticleSlug } from "@/lib/articles";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
+import { resolveSeoDescription, resolveSeoTitle, publicStoryUrl } from "@/lib/studio/seo";
 import { sectionPath } from "@/lib/types";
 import { formatPublishedAt } from "@/lib/utils";
 
@@ -30,28 +31,31 @@ export async function generateMetadata({
     return { title: "Story not found" };
   }
 
+  const seoTitle = resolveSeoTitle(article.meta_title, article.title);
+  const seoDescription = resolveSeoDescription(article.meta_description, article.excerpt);
+  const image = {
+    url: article.cover_image_url,
+    alt: article.cover_image_alt || article.title,
+  };
+
   return {
-    title: article.title,
-    description: article.excerpt,
+    title: seoTitle,
+    description: seoDescription,
     authors: [{ name: article.author.name }],
     openGraph: {
-      title: article.title,
-      description: article.excerpt,
+      title: seoTitle,
+      description: seoDescription,
       type: "article",
+      url: publicStoryUrl(article.slug),
       publishedTime: article.published_at,
       authors: [article.author.name],
-      images: [
-        {
-          url: article.cover_image_url,
-          alt: article.cover_image_alt,
-        },
-      ],
+      images: [image],
     },
     twitter: {
       card: "summary_large_image",
-      title: article.title,
-      description: article.excerpt,
-      images: [article.cover_image_url],
+      title: seoTitle,
+      description: seoDescription,
+      images: [image.url],
     },
   };
 }

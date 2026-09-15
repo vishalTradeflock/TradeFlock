@@ -10,6 +10,7 @@ import {
 } from "@/lib/studio/copy";
 import { headers } from "next/headers";
 import { canInviteStaff, canPublishArticle } from "@/lib/studio/access";
+import { emptyToNull } from "@/lib/studio/seo";
 import { isModerator, type StudioRole } from "@/lib/studio/roles";
 import { getStudioSession } from "@/lib/studio/session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -22,6 +23,8 @@ export type SaveDraftInput = {
   body: string;
   categoryId: string;
   status?: "draft" | "review" | "published";
+  metaTitle?: string | null;
+  metaDescription?: string | null;
 };
 
 export type SaveDraftResult =
@@ -67,6 +70,18 @@ async function ensureAuthorId(session: {
 function canPublish(role: StudioRole, nextStatus: "draft" | "review" | "published") {
   if (nextStatus === "published") return canPublishArticle(role);
   return true;
+}
+
+function seoPayload(input: SaveDraftInput) {
+  return {
+    meta_title: emptyToNull(input.metaTitle),
+    meta_description: emptyToNull(input.metaDescription),
+  };
+}
+
+function missingSeoColumn(message: string | undefined) {
+  const haystack = (message ?? "").toLowerCase();
+  return haystack.includes("meta_title") || haystack.includes("meta_description");
 }
 
 export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftResult> {
@@ -117,6 +132,8 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         category_id: string;
         status: "draft" | "review" | "published";
         published_at?: string;
+        meta_title?: string | null;
+        meta_description?: string | null;
       } = {
         title,
         body,
@@ -125,14 +142,30 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         cover_image_alt,
         category_id: input.categoryId,
         status: nextStatus,
+        ...seoPayload(input),
       };
 
       if (nextStatus === "published") {
         update.published_at = new Date().toISOString();
       }
 
-      const { error } = await admin.from("articles").update(update).eq("id", existing.id);
-      if (error) return { ok: false, error: error.message };
+      const written = await admin.from("articles").update(update).eq("id", existing.id);
+      if (written.error && missingSeoColumn(written.error.message)) {
+        const withoutSeo = {
+          title: update.title,
+          body: update.body,
+          excerpt: update.excerpt,
+          cover_image_url: update.cover_image_url,
+          cover_image_alt: update.cover_image_alt,
+          category_id: update.category_id,
+          status: update.status,
+          ...(update.published_at ? { published_at: update.published_at } : {}),
+        };
+        const retry = await admin.from("articles").update(withoutSeo).eq("id", existing.id);
+        if (retry.error) return { ok: false, error: retry.error.message };
+      } else if (written.error) {
+        return { ok: false, error: written.error.message };
+      }
 
       if (nextStatus === "published") {
         revalidatePath("/", "layout");
@@ -148,25 +181,41 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     }
 
     const slug = slugifyTitle(title);
-    const { data, error } = await admin
-      .from("articles")
-      .insert({
-        slug,
-        title,
-        excerpt,
-        body,
-        cover_image_url,
-        cover_image_alt,
-        category_id: input.categoryId,
-        author_id: authorId,
-        status: nextStatus,
-        published_at:
-          nextStatus === "published"
-            ? new Date().toISOString()
-            : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      })
-      .select("id, slug, status")
-      .single();
+    const insert = {
+      slug,
+      title,
+      excerpt,
+      body,
+      cover_image_url,
+      cover_image_alt,
+      category_id: input.categoryId,
+      author_id: authorId,
+      status: nextStatus,
+      published_at:
+        nextStatus === "published"
+          ? new Date().toISOString()
+          : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      ...seoPayload(input),
+    };
+    let { data, error } = await admin.from("articles").insert(insert).select("id, slug, status").single();
+
+    if (error && missingSeoColumn(error.message)) {
+      const withoutSeo = {
+        slug: insert.slug,
+        title: insert.title,
+        excerpt: insert.excerpt,
+        body: insert.body,
+        cover_image_url: insert.cover_image_url,
+        cover_image_alt: insert.cover_image_alt,
+        category_id: insert.category_id,
+        author_id: insert.author_id,
+        status: insert.status,
+        published_at: insert.published_at,
+      };
+      const retry = await admin.from("articles").insert(withoutSeo).select("id, slug, status").single();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error || !data) return { ok: false, error: error?.message ?? "Could not save draft." };
 

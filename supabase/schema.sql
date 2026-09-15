@@ -34,6 +34,8 @@ create table if not exists public.articles (
   title text not null,
   dek text,
   excerpt text not null,
+  meta_title text,
+  meta_description text,
   body text not null,
   cover_image_url text not null,
   cover_image_alt text not null default '',

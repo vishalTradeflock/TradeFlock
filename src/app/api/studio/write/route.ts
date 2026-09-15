@@ -35,15 +35,31 @@ export async function GET(request: Request) {
     slug: string;
     categoryId: string;
     status: "draft" | "review" | "published";
+    metaTitle: string;
+    metaDescription: string;
   } | null = null;
 
   if (id) {
     const admin = createAdminClient();
-    const { data: article } = await admin
+    const withSeo = await admin
       .from("articles")
-      .select("id, title, body, slug, category_id, status, author_id")
+      .select("id, title, body, slug, category_id, status, author_id, meta_title, meta_description")
       .eq("id", id)
       .maybeSingle();
+
+    const missingSeo =
+      Boolean(withSeo.error?.message?.toLowerCase().includes("meta_title")) ||
+      Boolean(withSeo.error?.message?.toLowerCase().includes("meta_description"));
+
+    const article = missingSeo
+      ? (
+          await admin
+            .from("articles")
+            .select("id, title, body, slug, category_id, status, author_id")
+            .eq("id", id)
+            .maybeSingle()
+        ).data
+      : withSeo.data;
 
     if (article) {
       const authorIds = await studioAuthorIds(session);
@@ -55,6 +71,11 @@ export async function GET(request: Request) {
           slug: article.slug,
           categoryId: article.category_id,
           status: article.status,
+          metaTitle: "meta_title" in article && typeof article.meta_title === "string" ? article.meta_title : "",
+          metaDescription:
+            "meta_description" in article && typeof article.meta_description === "string"
+              ? article.meta_description
+              : "",
         };
       }
     }
