@@ -6,16 +6,26 @@ import {
   resolveWriterDesk,
   type WriterDesk,
 } from "@/lib/agents/prompts";
-import { FALLBACK_COVER_IMAGE } from "@/lib/images";
+import { FALLBACK_COVER_IMAGE, isHttpsCoverUrl } from "@/lib/images";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import { completeLlmChat, isLlmQuotaError } from "@/lib/llm";
+import { fetchOgImageUrl } from "@/lib/agents/source-cover";
+import {
+  parseLeadNotes,
+  polishWireBody,
+  wireHygieneFailures,
+  writerLeadInstructions,
+  type LeadNotes,
+} from "@/lib/agents/wire-hygiene";
 
 export type NewsLead = {
   topic: string;
   rawSource: string;
   category: string;
+  sourceUrl?: string;
+  imageUrl?: string | null;
 };
 
 export type EditorVerdict = {
@@ -48,6 +58,7 @@ export type ProcessLeadOptions = {
   requireApproved?: boolean;
 };
 
+/** Floor for ?force=1. Hygiene (source link, dating, invented observers, market-brief voice) still blocks publish. */
 export const FORCE_PUBLISH_SCORE_MIN = 6;
 
 const SITE_CATEGORY: Record<WriterDesk, string> = {
@@ -125,17 +136,13 @@ async function draftFromWriter(desk: WriterDesk, lead: NewsLead) {
     system: WRITER_PROMPTS[desk],
     temperature: 0.45,
     maxTokens: 2048,
-    user: `Write a 600-to-800-word TradeFlock USA analysis (5–7 substantial paragraphs) with the required <h3> section heads.
-
-Topic: ${lead.topic}
-Assigned category: ${lead.category}
-
-Source notes:
-${lead.rawSource}`,
+    user: writerLeadInstructions(lead),
   });
 }
 
 async function editWithEditor(desk: WriterDesk, lead: NewsLead, draft: string) {
+  const notes = parseLeadNotes(lead.rawSource);
+  const sourceUrl = lead.sourceUrl ?? notes.sourceUrl ?? "";
   const raw = await completeLlmChat({
     system: EDITOR_IN_CHIEF_PROMPT,
     temperature: 0.2,
@@ -144,6 +151,8 @@ async function editWithEditor(desk: WriterDesk, lead: NewsLead, draft: string) {
     user: `Desk: ${desk}
 Topic: ${lead.topic}
 Category: ${lead.category}
+Primary source URL (must remain an HTML <a href> in editedContent): ${sourceUrl || "(missing — do not invent a URL)"}
+Source published timestamp (must be reflected in the dateline): ${notes.publishedAt ?? "unknown"}
 
 Source notes:
 ${lead.rawSource}
@@ -239,6 +248,7 @@ function toArticleRow(input: {
   body: string;
   category_id: string;
   author_id: string;
+  cover_image_url: string;
 }): ArticleInsert {
   return {
     slug: input.slug,
@@ -246,7 +256,7 @@ function toArticleRow(input: {
     dek: input.excerpt,
     excerpt: input.excerpt,
     body: input.body,
-    cover_image_url: FALLBACK_COVER_IMAGE,
+    cover_image_url: input.cover_image_url,
     cover_image_alt: input.title,
     category_id: input.category_id,
     author_id: input.author_id,
@@ -256,6 +266,37 @@ function toArticleRow(input: {
     status: "published",
     published_at: new Date().toISOString(),
   };
+}
+
+function leadNotes(lead: NewsLead): LeadNotes {
+  const notes = parseLeadNotes(lead.rawSource);
+  return {
+    ...notes,
+    sourceUrl: lead.sourceUrl ?? notes.sourceUrl,
+    coverUrl: (lead.imageUrl && isHttpsCoverUrl(lead.imageUrl) ? lead.imageUrl : null) ?? notes.coverUrl,
+  };
+}
+
+function prepareWireBody(lead: NewsLead, title: string, content: string, coverImageUrl: string) {
+  const notes = leadNotes(lead);
+  const sanitized = sanitizeArticleBody(toHtmlBody(content), {
+    title,
+    coverImageUrl,
+  });
+  const body = polishWireBody(sanitized, notes);
+  return { body, notes, failures: wireHygieneFailures(body, notes, lead.rawSource) };
+}
+
+async function resolveLeadCover(lead: NewsLead): Promise<string> {
+  const notes = leadNotes(lead);
+  if (notes.coverUrl && isHttpsCoverUrl(notes.coverUrl)) return notes.coverUrl;
+  if (lead.imageUrl && isHttpsCoverUrl(lead.imageUrl)) return lead.imageUrl;
+  const pageUrl = notes.sourceUrl;
+  if (pageUrl) {
+    const og = await fetchOgImageUrl(pageUrl);
+    if (og && isHttpsCoverUrl(og)) return og;
+  }
+  return FALLBACK_COVER_IMAGE;
 }
 
 async function publishArticle(insert: ArticleInsert) {
@@ -289,27 +330,29 @@ async function commitVerdict(
   verdict: EditorVerdict,
 ): Promise<Extract<PipelineResult, { published: true }>> {
   const admin = createAdminClient();
-  const [categoryId, authorId] = await Promise.all([
+  const [categoryId, authorId, coverImageUrl] = await Promise.all([
     resolveCategoryId(admin, desk, lead.category),
     resolveAuthorId(admin, desk),
+    resolveLeadCover(lead),
   ]);
 
   const title = verdict.editedTitle.trim();
   const excerpt = verdict.excerpt.trim().slice(0, 280);
   const slug = slugify(title);
-  const body = sanitizeArticleBody(toHtmlBody(verdict.editedContent), {
-    title,
-    coverImageUrl: FALLBACK_COVER_IMAGE,
-  });
+  const prepared = prepareWireBody(lead, title, verdict.editedContent, coverImageUrl);
+  if (prepared.failures.length) {
+    throw new Error(`Wire hygiene blocked publish: ${prepared.failures.join("; ")}`);
+  }
 
   await publishArticle(
     toArticleRow({
       slug,
       title,
       excerpt,
-      body,
+      body: prepared.body,
       category_id: categoryId,
       author_id: authorId,
+      cover_image_url: coverImageUrl,
     }),
   );
 
@@ -324,6 +367,27 @@ async function commitVerdict(
     title,
     score: verdict.score,
     desk,
+  };
+}
+
+function holdForHygiene(
+  desk: WriterDesk,
+  verdict: EditorVerdict,
+  body: string,
+  failures: string[],
+): Extract<PipelineResult, { published: false }> {
+  return {
+    published: false,
+    score: Math.min(verdict.score, 7),
+    desk,
+    title: verdict.editedTitle,
+    reason: `Held — wire hygiene (${failures.join("; ")}).`,
+    verdict: {
+      ...verdict,
+      approved: false,
+      score: Math.min(verdict.score, 7),
+      editedContent: body,
+    },
   };
 }
 
@@ -350,6 +414,12 @@ export async function processNewsLead(
       reason: `Held — editor returned unusable JSON (${message}).`,
     };
   }
+
+  const prepared = prepareWireBody(lead, verdict.editedTitle.trim(), verdict.editedContent, FALLBACK_COVER_IMAGE);
+  if (prepared.failures.length) {
+    return holdForHygiene(desk, verdict, prepared.body, prepared.failures);
+  }
+  verdict = { ...verdict, editedContent: prepared.body };
 
   const belowBar =
     verdict.score < minScore || (requireApproved && !verdict.approved);
@@ -386,10 +456,23 @@ export async function publishHighestScoringHold(
     )
     .sort((a, b) => b.result.score - a.result.score);
 
-  const winner = ranked[0];
-  if (!winner?.result.verdict) return null;
+  for (const winner of ranked) {
+    const verdict = winner.result.verdict;
+    const prepared = prepareWireBody(
+      winner.lead,
+      verdict.editedTitle.trim(),
+      verdict.editedContent,
+      FALLBACK_COVER_IMAGE,
+    );
+    if (prepared.failures.length) continue;
+    const desk = winner.result.desk;
+    const published = await commitVerdict(
+      winner.lead,
+      desk,
+      { ...verdict, editedContent: prepared.body },
+    );
+    return { lead: winner.lead, result: published };
+  }
 
-  const desk = winner.result.desk;
-  const published = await commitVerdict(winner.lead, desk, winner.result.verdict);
-  return { lead: winner.lead, result: published };
+  return null;
 }

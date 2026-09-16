@@ -19,12 +19,9 @@ type SafeArticleImageProps = Omit<ImageProps, "src" | "alt"> & {
 function skipOptimizer(url: string) {
   try {
     const host = new URL(url).hostname;
-    return (
-      host.endsWith(".supabase.co") ||
-      host === "tradeflockusa.com" ||
-      host === "www.tradeflockusa.com" ||
-      host.endsWith(".tradeflockusa.com")
-    );
+    // Unsplash is in next.config remotePatterns; other https covers (Supabase, source/OG) use native img.
+    if (host === "images.unsplash.com" || host === "plus.unsplash.com") return false;
+    return true;
   } catch {
     return true;
   }

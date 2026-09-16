@@ -52,6 +52,7 @@ type Candidate = {
   desk: WriterDesk;
   titleKey: string;
   normalizedUrl: string;
+  imageUrl: string | null;
 };
 
 type TakenKeys = {
@@ -128,15 +129,19 @@ function toRawSource(candidate: Candidate): string {
     `Source: ${candidate.sourceName}`,
     `URL: ${candidate.link}`,
     `Published: ${published}`,
-    "",
-    `Headline: ${candidate.title}`,
   ];
+  if (candidate.imageUrl) {
+    lines.push(`Cover: ${candidate.imageUrl}`);
+  }
+  lines.push("", `Headline: ${candidate.title}`);
   if (summary) {
     lines.push("", "Summary:", summary);
   }
   lines.push(
     "",
-    "Attribute the originating outlet and link. Use only the facts above as notes — do not invent quotes, figures, or a full reprint of the source article.",
+    "Write a conventional news article, not a market brief. Quote or tightly paraphrase only the facts above.",
+    "Put an HTML <a href> to the URL line in the body. Use the Published timestamp — do not invent Monday/today urgency.",
+    "Do not invent quotes, figures, analysts, or allocator speculation. Do not reprint the source article.",
   );
   return lines.join("\n");
 }
@@ -149,6 +154,7 @@ function toIncomingLead(candidate: Candidate): IncomingLead {
     sourceName: candidate.sourceName,
     sourceUrl: candidate.link,
     titleKey: candidate.titleKey,
+    imageUrl: candidate.imageUrl ?? undefined,
   };
 }
 
@@ -201,6 +207,7 @@ function candidatesFromFeed(feed: NewsFeed, xml: string): Candidate[] {
         desk: refineDesk(feed.desk, item.title, item.summary),
         titleKey,
         normalizedUrl: normalizeUrl(item.link),
+        imageUrl: item.imageUrl,
       },
     ];
   });
@@ -283,6 +290,7 @@ export async function leadWasRecentlySeen(lead: IncomingLead): Promise<boolean> 
       desk: resolveWriterDesk(lead.category),
       titleKey: lead.titleKey,
       normalizedUrl: normalizeUrl(lead.sourceUrl),
+      imageUrl: lead.imageUrl ?? null,
     },
     taken,
   );
