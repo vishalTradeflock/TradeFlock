@@ -31,6 +31,16 @@ export type Article = {
   is_breaking: boolean;
   view_count: number;
   published_at: string;
+  magazine_id?: string | null;
+  magazine_sort?: number | null;
+  magazine_page?: number | null;
+  designation?: string | null;
+  subheading?: string | null;
+  company?: string | null;
+  bio?: string | null;
+  linkedin_url?: string | null;
+  website_url?: string | null;
+  flipbook_url?: string | null;
 };
 
 export type ArticleWithRelations = Article & {
@@ -51,6 +61,19 @@ export type ArticleListCard = {
   categoryName: string;
 };
 
+export type MagazineHonoree = {
+  name: string;
+  designation?: string | null;
+  company?: string | null;
+  bio?: string | null;
+  photo_url?: string | null;
+  linkedin_url?: string | null;
+  website_url?: string | null;
+  page?: number | null;
+  magazine_page?: number | null;
+  slug?: string | null;
+};
+
 export type Magazine = {
   id: string;
   slug: string;
@@ -58,7 +81,11 @@ export type Magazine = {
   description: string | null;
   cover_image_url: string | null;
   pdf_url: string;
+  flipbook_url: string;
+  honorees: MagazineHonoree[];
   published_at: string;
+  year: number | null;
+  status: "draft" | "published";
 };
 
 export const NAV_CATEGORIES = [

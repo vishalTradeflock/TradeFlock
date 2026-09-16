@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ExternalLink } from "lucide-react";
+import { IssueShareButton } from "@/components/IssueShareButton";
+import { MagazineFlipbookFrame } from "@/components/MagazineFlipbookFrame";
+import { magazineExternalHref, parseFlipbookPage } from "@/lib/magazine-links";
 import { getMagazineBySlug, getMagazines } from "@/lib/magazines";
 
 export const revalidate = 120;
@@ -8,6 +12,7 @@ export const dynamicParams = true;
 
 type MagazineReadPageProps = {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ page?: string | string[] }>;
 };
 
 export async function generateStaticParams() {
@@ -38,55 +43,52 @@ export async function generateMetadata({
   };
 }
 
-export default async function MagazineReadPage({ params }: MagazineReadPageProps) {
+export default async function MagazineReadPage({
+  params,
+  searchParams,
+}: MagazineReadPageProps) {
   const { slug } = await params;
+  const query = await searchParams;
   const magazine = await getMagazineBySlug(slug);
   if (!magazine) notFound();
 
-  const viewerSrc = magazine.pdf_url
-    ? `/dflip/viewer.html?pdf=${encodeURIComponent(magazine.pdf_url)}`
-    : "";
+  const page = parseFlipbookPage(query.page);
+  const externalHref = magazineExternalHref(magazine);
 
   return (
-    <div className="fixed inset-0 z-50 flex h-[100dvh] w-screen select-none flex-col overflow-hidden bg-[#141414]">
-      <header className="z-20 flex h-11 w-full items-center justify-between border-b border-neutral-800 bg-[#1c1c1c] px-4">
+    <div className="fixed inset-0 z-50 flex h-[100dvh] w-screen flex-col overflow-hidden bg-neutral-950">
+      <header className="flex h-14 items-center justify-between border-b border-neutral-800 bg-neutral-950 px-6 text-white">
         <Link
           href={`/magazine/${magazine.slug}`}
-          className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-400 transition hover:text-white"
+          className="text-xs font-semibold uppercase tracking-wider text-neutral-300 transition hover:text-white"
         >
-          ← Back to Overview
+          ← Back to Issue
         </Link>
-        <span className="hidden max-w-md truncate text-xs font-medium text-neutral-300 sm:block">
+        <p className="hidden max-w-xl truncate font-serif text-sm text-white sm:block">
           {magazine.title}
-        </span>
-        {magazine.pdf_url ? (
-          <a
-            href={magazine.pdf_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs tracking-wider text-neutral-400 transition hover:text-white"
-          >
-            Download PDF
-          </a>
-        ) : (
-          <span className="w-[5.5rem]" aria-hidden />
-        )}
+        </p>
+        <div className="flex items-center gap-4">
+          <IssueShareButton
+            title={magazine.title}
+            className="h-auto border-0 bg-transparent px-0 text-xs font-semibold uppercase tracking-wider text-neutral-300 hover:text-white"
+          />
+          {externalHref ? (
+            <a
+              href={externalHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open edition in a new tab"
+              className="text-neutral-300 transition hover:text-white"
+            >
+              <ExternalLink className="h-4 w-4" strokeWidth={1.75} />
+            </a>
+          ) : null}
+        </div>
       </header>
 
-      <main className="h-[calc(100dvh-44px)] w-full flex-1 bg-[#1a1a1a]">
-        {viewerSrc ? (
-          <iframe
-            src={viewerSrc}
-            title={magazine.title}
-            className="block h-full w-full border-0"
-            allow="fullscreen"
-          />
-        ) : (
-          <p className="flex h-full items-center justify-center text-xs uppercase tracking-widest text-neutral-400">
-            PDF unavailable
-          </p>
-        )}
-      </main>
+      <div className="flex h-[calc(100vh-3.5rem)] w-full items-center justify-center bg-neutral-900">
+        <MagazineFlipbookFrame magazine={magazine} queryPage={page} />
+      </div>
     </div>
   );
 }

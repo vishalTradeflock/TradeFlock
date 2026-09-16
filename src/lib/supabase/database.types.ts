@@ -78,6 +78,16 @@ export type Database = {
           published_at: string;
           created_at: string;
           updated_at: string;
+          magazine_id: string | null;
+          magazine_sort: number | null;
+          magazine_page: number | null;
+          designation: string | null;
+          subheading: string | null;
+          company: string | null;
+          bio: string | null;
+          linkedin_url: string | null;
+          website_url: string | null;
+          flipbook_url: string | null;
         };
         Insert: {
           id?: string;
@@ -99,6 +109,16 @@ export type Database = {
           published_at?: string;
           created_at?: string;
           updated_at?: string;
+          magazine_id?: string | null;
+          magazine_sort?: number | null;
+          magazine_page?: number | null;
+          designation?: string | null;
+          subheading?: string | null;
+          company?: string | null;
+          bio?: string | null;
+          linkedin_url?: string | null;
+          website_url?: string | null;
+          flipbook_url?: string | null;
         };
         Update: {
           id?: string;
@@ -120,6 +140,16 @@ export type Database = {
           published_at?: string;
           created_at?: string;
           updated_at?: string;
+          magazine_id?: string | null;
+          magazine_sort?: number | null;
+          magazine_page?: number | null;
+          designation?: string | null;
+          subheading?: string | null;
+          company?: string | null;
+          bio?: string | null;
+          linkedin_url?: string | null;
+          website_url?: string | null;
+          flipbook_url?: string | null;
         };
         Relationships: [
           {
@@ -136,6 +166,13 @@ export type Database = {
             referencedRelation: "categories";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "articles_magazine_id_fkey";
+            columns: ["magazine_id"];
+            isOneToOne: false;
+            referencedRelation: "magazines";
+            referencedColumns: ["id"];
+          },
         ];
       };
       magazines: {
@@ -144,8 +181,13 @@ export type Database = {
           slug: string;
           title: string;
           description: string | null;
+          cover_image: string | null;
           cover_image_url: string | null;
           pdf_url: string | null;
+          flipbook_url: string | null;
+          honorees: Json;
+          year: number | null;
+          status: "draft" | "published";
           published_at: string;
           created_at: string;
           updated_at: string;
@@ -157,6 +199,10 @@ export type Database = {
           description?: string | null;
           cover_image_url?: string | null;
           pdf_url?: string | null;
+          flipbook_url?: string | null;
+          honorees?: Json;
+          year?: number | null;
+          status?: "draft" | "published";
           published_at?: string;
           created_at?: string;
           updated_at?: string;
@@ -168,6 +214,10 @@ export type Database = {
           description?: string | null;
           cover_image_url?: string | null;
           pdf_url?: string | null;
+          flipbook_url?: string | null;
+          honorees?: Json;
+          year?: number | null;
+          status?: "draft" | "published";
           published_at?: string;
           created_at?: string;
           updated_at?: string;

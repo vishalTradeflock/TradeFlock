@@ -3,7 +3,9 @@ import type { Magazine } from "../types";
 const SAMPLE_PDF =
   "https://mozilla.github.io/pdf.js/web/compressed.tracemonkey-pldi-09.pdf";
 
-export const SEED_MAGAZINES: Magazine[] = [
+type SeedMagazine = Omit<Magazine, "year" | "status" | "flipbook_url" | "honorees">;
+
+const RAW_SEED_MAGAZINES: SeedMagazine[] = [
   {
     id: "m0000000-0000-0000-0000-000000000001",
     slug: "operators-rewriting-american-capital",
@@ -82,3 +84,11 @@ export const SEED_MAGAZINES: Magazine[] = [
     published_at: "2026-02-02T10:00:00.000Z",
   },
 ];
+
+export const SEED_MAGAZINES: Magazine[] = RAW_SEED_MAGAZINES.map((row) => ({
+  ...row,
+  year: new Date(row.published_at).getUTCFullYear(),
+  status: "published" as const,
+  flipbook_url: "",
+  honorees: [],
+}));

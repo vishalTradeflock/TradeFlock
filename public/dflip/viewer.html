@@ -67,6 +67,16 @@
       const direction = (DFLIP.DIRECTION || DFLIP.READ_DIRECTION).LTR;
 
       jQuery(document).ready(function () {
+        const hashPage = Number.parseInt(
+          (window.location.hash.match(/page[/=](\d+)/i) || [])[1] || "",
+          10,
+        );
+        const queryPage = Number.parseInt(urlParams.get("page") || "", 10);
+        const openPage =
+          (Number.isFinite(hashPage) && hashPage > 0 && hashPage) ||
+          (Number.isFinite(queryPage) && queryPage > 0 && queryPage) ||
+          1;
+
         jQuery("#df_container").flipBook(proxiedPdf, {
           webgl: true,
           height: "100%",
@@ -77,7 +87,13 @@
           scrollWheel: true,
           autoEnableOutline: false,
           autoEnableThumbnail: false,
-          direction: direction
+          direction: direction,
+          openPage: openPage,
+          onReady: function (flipBook) {
+            if (openPage > 1 && flipBook && typeof flipBook.gotoPage === "function") {
+              flipBook.gotoPage(openPage);
+            }
+          }
         });
       });
     }

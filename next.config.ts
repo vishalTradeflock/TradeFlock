@@ -26,6 +26,14 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "tradeflockusa.com",
       },
+      {
+        protocol: "https",
+        hostname: "www.tradeflock.us",
+      },
+      {
+        protocol: "https",
+        hostname: "tradeflock.us",
+      },
     ],
   },
 };

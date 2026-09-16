@@ -306,6 +306,241 @@ export const getArticles = cache(async (categorySlug?: string, limit = LIST_LIMI
   return withListCovers(rows);
 });
 
+function missingArticleColumn(message: string | undefined, column: string) {
+  return (message ?? "").toLowerCase().includes(column);
+}
+
+const MAGAZINE_STORY_SELECTS = [
+  `${ARTICLE_LIST_SELECT},magazine_sort,designation,subheading,linkedin_url,website_url,flipbook_url,magazine_page,company,bio`,
+  `${ARTICLE_LIST_SELECT},magazine_sort,designation,subheading,linkedin_url,website_url,flipbook_url,magazine_page,company`,
+  `${ARTICLE_LIST_SELECT},magazine_sort,designation,subheading`,
+  `${ARTICLE_LIST_SELECT},magazine_sort`,
+  ARTICLE_LIST_SELECT,
+];
+
+function seedArticlesForMagazine(magazineId: string) {
+  return SEED_ARTICLES.filter((article) => article.magazine_id === magazineId).sort(
+    (a, b) => new Date(a.published_at).getTime() - new Date(b.published_at).getTime(),
+  );
+}
+
+function sortMagazineHonorees(articles: ArticleWithRelations[]) {
+  return [...articles].sort((a, b) => {
+    if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1;
+    const sortA = a.magazine_sort ?? 10_000;
+    const sortB = b.magazine_sort ?? 10_000;
+    if (sortA !== sortB) return sortA - sortB;
+    return new Date(a.published_at).getTime() - new Date(b.published_at).getTime();
+  });
+}
+
+export const getArticlesByMagazineId = cache(async (magazine: {
+  id: string;
+  slug: string;
+  title?: string;
+}) => {
+  const magazineId = magazine.id.trim();
+  const magazineSlug = magazine.slug.trim().replace(/^\/+|\/+$/g, "");
+  if (!magazineId && !magazineSlug) return [] as ArticleWithRelations[];
+  if (!isSupabaseConfigured()) {
+    return magazineId ? sortMagazineHonorees(seedArticlesForMagazine(magazineId)) : [];
+  }
+
+  try {
+    const supabase = createPublicClient();
+    const now = new Date().toISOString();
+    const byId = new Map<string, unknown>();
+
+    const remember = (rows: unknown[] | null | undefined) => {
+      for (const row of rows ?? []) {
+        const record = row as { id?: string };
+        if (record.id) byId.set(record.id, row);
+      }
+    };
+
+    if (magazineId) {
+      for (const select of MAGAZINE_STORY_SELECTS) {
+        let request = supabase
+          .from("articles")
+          .select(select)
+          .eq("magazine_id", magazineId)
+          .eq("status", "published")
+          .lte("published_at", now)
+          .limit(40);
+
+        if (select.includes("magazine_sort")) {
+          request = request.order("magazine_sort", { ascending: true, nullsFirst: false });
+        }
+
+        const byRelation = await request.order("published_at", { ascending: true });
+        if (byRelation.error) {
+          if (missingArticleColumn(byRelation.error.message, "magazine_id")) break;
+          continue;
+        }
+        remember(byRelation.data);
+        break;
+      }
+    }
+
+    remember(await articlesMatchingMagazineSlug(supabase, magazineSlug, now));
+
+    const issueTitle = magazine.title?.trim();
+    if (issueTitle) {
+      remember(await articlesMatchingMagazineTitle(supabase, issueTitle, now));
+    }
+    remember(await articlesMatchingMagazineTitle(supabase, magazineSlug.replace(/-/g, " "), now));
+
+    return sortMagazineHonorees(mapMagazineArticles([...byId.values()]));
+  } catch {
+    return [];
+  }
+});
+
+async function articlesMatchingMagazineSlug(
+  supabase: ReturnType<typeof createPublicClient>,
+  magazineSlug: string,
+  now: string,
+) {
+  if (!magazineSlug || !/^[a-z0-9-]+$/.test(magazineSlug)) return [];
+
+  for (const select of MAGAZINE_STORY_SELECTS) {
+    const { data, error } = await supabase
+      .from("articles")
+      .select(select)
+      .eq("status", "published")
+      .lte("published_at", now)
+      .ilike("slug", `%${magazineSlug}%`)
+      .order("published_at", { ascending: true })
+      .limit(40);
+
+    if (error) continue;
+    return data ?? [];
+  }
+
+  return [];
+}
+
+async function articlesMatchingMagazineTitle(
+  supabase: ReturnType<typeof createPublicClient>,
+  title: string,
+  now: string,
+) {
+  const needle = title.replace(/[%*,()]/g, " ").replace(/\s+/g, " ").trim();
+  if (needle.length < 8) return [];
+
+  for (const select of MAGAZINE_STORY_SELECTS) {
+    const { data, error } = await supabase
+      .from("articles")
+      .select(select)
+      .eq("status", "published")
+      .lte("published_at", now)
+      .ilike("title", `%${needle}%`)
+      .order("published_at", { ascending: true })
+      .limit(40);
+
+    if (error) continue;
+    return data ?? [];
+  }
+
+  return [];
+}
+
+function firstHttpsUrl(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith("/")) return trimmed;
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === "https:") return trimmed;
+    } catch {
+      /* try next */
+    }
+  }
+  return "";
+}
+
+function mapMagazineArticles(rows: unknown[] | null | undefined): ArticleWithRelations[] {
+  if (!rows?.length) return [];
+  const articles: ArticleWithRelations[] = [];
+  for (const raw of rows) {
+    const row = raw as ArticleRow & {
+      id?: string;
+      slug?: string;
+      title?: string;
+      dek?: string | null;
+      excerpt?: string | null;
+      cover_image_alt?: string | null;
+      designation?: string | null;
+      subheading?: string | null;
+      company?: string | null;
+      bio?: string | null;
+      linkedin_url?: string | null;
+      website_url?: string | null;
+      flipbook_url?: string | null;
+      magazine_sort?: number | null;
+      magazine_page?: number | null;
+      is_featured?: boolean;
+      is_breaking?: boolean;
+      view_count?: number;
+      published_at?: string;
+      category_id?: string;
+      author_id?: string;
+    };
+    const mapped = mapArticleRow(row, false);
+    const slug = String(row.slug ?? mapped?.slug ?? "").trim();
+    const title = String(row.title ?? mapped?.title ?? "").trim();
+    if (!slug || !title) continue;
+
+    const fallbackCategory = mapped?.category ?? {
+      id: "magazine-issue",
+      name: "Magazine",
+      slug: "magazine",
+      description: null,
+    };
+    const fallbackAuthor = mapped?.author ?? {
+      id: "tradeflock-desk",
+      name: "TradeFlock",
+      slug: "tradeflock",
+      bio: null,
+      title: null,
+      avatar_url: null,
+    };
+
+    articles.push({
+      id: String(row.id ?? mapped?.id ?? slug),
+      slug,
+      title,
+      dek: typeof row.dek === "string" ? row.dek : mapped?.dek ?? null,
+      excerpt: typeof row.excerpt === "string" ? row.excerpt : mapped?.excerpt ?? "",
+      body: mapped?.body ?? "",
+      cover_image_url: firstHttpsUrl(row.cover_image_url, mapped?.cover_image_url),
+      cover_image_alt:
+        typeof row.cover_image_alt === "string" ? row.cover_image_alt : mapped?.cover_image_alt || title,
+      category_id: String(row.category_id ?? mapped?.category_id ?? fallbackCategory.id),
+      author_id: String(row.author_id ?? mapped?.author_id ?? fallbackAuthor.id),
+      is_featured: Boolean(row.is_featured ?? mapped?.is_featured),
+      is_breaking: Boolean(row.is_breaking ?? mapped?.is_breaking),
+      view_count: Number(row.view_count ?? mapped?.view_count ?? 0),
+      published_at: String(row.published_at ?? mapped?.published_at ?? new Date().toISOString()),
+      magazine_id: mapped?.magazine_id ?? null,
+      magazine_sort: typeof row.magazine_sort === "number" ? row.magazine_sort : null,
+      magazine_page: typeof row.magazine_page === "number" ? row.magazine_page : null,
+      designation: typeof row.designation === "string" ? row.designation : mapped?.designation ?? null,
+      subheading: typeof row.subheading === "string" ? row.subheading : mapped?.subheading ?? null,
+      company: typeof row.company === "string" ? row.company : mapped?.company ?? null,
+      bio: typeof row.bio === "string" ? row.bio : mapped?.bio ?? null,
+      linkedin_url: firstHttpsUrl(row.linkedin_url, mapped?.linkedin_url) || null,
+      website_url: firstHttpsUrl(row.website_url, mapped?.website_url) || null,
+      flipbook_url: firstHttpsUrl(row.flipbook_url, mapped?.flipbook_url) || null,
+      category: fallbackCategory,
+      author: fallbackAuthor,
+    });
+  }
+  return articles;
+}
+
 /** Category desks: match slug first, then display name, then common aliases. */
 export const getCategoryDesk = cache(async (slugOrName: string, limit = LIST_LIMIT) => {
   const raw = slugOrName.trim();

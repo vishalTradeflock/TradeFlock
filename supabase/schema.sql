@@ -64,7 +64,9 @@ returns trigger
 language plpgsql
 as $$
 begin
-  new.updated_at = now();
+  if to_jsonb(new) ? 'updated_at' then
+    new.updated_at = now();
+  end if;
   return new;
 end;
 $$;
@@ -156,10 +158,15 @@ create table if not exists public.magazines (
   description text,
   cover_image_url text,
   pdf_url text,
+  flipbook_url text,
+  honorees jsonb not null default '[]'::jsonb,
+  year integer,
+  status text not null default 'published',
   published_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint magazines_slug_format check (slug ~ '^[a-z0-9-]+$')
+  constraint magazines_slug_format check (slug ~ '^[a-z0-9-]+$'),
+  constraint magazines_status_allowed check (status in ('draft', 'published'))
 );
 
 create index if not exists magazines_published_at_idx
@@ -178,9 +185,31 @@ create policy "Public read magazines"
   on public.magazines
   for select
   to anon, authenticated
-  using (published_at is not null and published_at <= now());
+  using (
+    published_at is not null
+    and published_at <= now()
+    and coalesce(status, 'published') = 'published'
+  );
 
 grant select on public.magazines to anon, authenticated;
+
+alter table public.articles
+  add column if not exists magazine_id uuid references public.magazines (id) on delete set null;
+
+alter table public.articles
+  add column if not exists magazine_sort integer,
+  add column if not exists magazine_page integer,
+  add column if not exists designation text,
+  add column if not exists subheading text,
+  add column if not exists company text,
+  add column if not exists bio text,
+  add column if not exists linkedin_url text,
+  add column if not exists website_url text,
+  add column if not exists flipbook_url text;
+
+create index if not exists articles_magazine_id_idx
+  on public.articles (magazine_id)
+  where magazine_id is not null;
 
 -- ---------------------------------------------------------------------------
 -- processed_leads
