@@ -1,4 +1,10 @@
-import { isHttpsCoverUrl } from "@/lib/images";
+import {
+  decodeCoverHtmlEntities,
+  isHttpsCoverUrl,
+  sanitizeCoverUrl,
+  selectPublishCover,
+  type CoverArticleRef,
+} from "@/lib/images";
 
 const OG_TIMEOUT_MS = 4_000;
 const SKIP_OG_HOSTS = /(^|\.)sec\.gov$/i;
@@ -23,6 +29,19 @@ function metaContent(html: string, key: "og:image" | "twitter:image"): string | 
   return null;
 }
 
+/** Parse og:image / twitter:image from markup. Decodes `&amp;` before resolving. */
+export function ogImageFromHtml(html: string, pageUrl: string): string | null {
+  const raw = metaContent(html, "og:image") ?? metaContent(html, "twitter:image");
+  if (!raw) return null;
+  const decoded = decodeCoverHtmlEntities(raw);
+  try {
+    const absolute = new URL(decoded, pageUrl).toString();
+    return sanitizeCoverUrl(absolute);
+  } catch {
+    return null;
+  }
+}
+
 /** Best-effort og:image from the source page. Never invents a URL; returns null on timeout/block. */
 export async function fetchOgImageUrl(pageUrl: string): Promise<string | null> {
   let parsed: URL;
@@ -45,11 +64,36 @@ export async function fetchOgImageUrl(pageUrl: string): Promise<string | null> {
     });
     if (!response.ok) return null;
     const html = await response.text();
-    const raw = metaContent(html, "og:image") ?? metaContent(html, "twitter:image");
-    if (!raw) return null;
-    const absolute = new URL(raw, pageUrl).toString();
-    return isHttpsCoverUrl(absolute) ? absolute : null;
+    const fromMeta = ogImageFromHtml(html, pageUrl);
+    return fromMeta && isHttpsCoverUrl(fromMeta) ? fromMeta : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Cover for a newly published wire story:
+ * RSS/enclosure → og:image from the source page → deterministic desk Unsplash.
+ * Does not call the Unsplash API.
+ */
+export async function resolvePublishCoverUrl(input: {
+  imageUrl?: string | null;
+  notesCoverUrl?: string | null;
+  sourceUrl?: string | null;
+  article: CoverArticleRef;
+}): Promise<string> {
+  const fromFeed =
+    sanitizeCoverUrl(input.imageUrl) ?? sanitizeCoverUrl(input.notesCoverUrl);
+  if (fromFeed) {
+    return selectPublishCover({
+      rssImageUrl: fromFeed,
+      article: input.article,
+    });
+  }
+
+  const og = input.sourceUrl ? await fetchOgImageUrl(input.sourceUrl) : null;
+  return selectPublishCover({
+    ogImageUrl: og,
+    article: input.article,
+  });
 }

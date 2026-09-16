@@ -5,8 +5,8 @@ import { Newspaper } from "lucide-react";
 import { useEffect, useState, type SyntheticEvent } from "react";
 import {
   FALLBACK_COVER_IMAGE,
-  PLACEHOLDER_COVER,
   resolveCoverImage,
+  shouldBypassImageOptimizer,
 } from "@/lib/images";
 import { cn } from "@/lib/utils";
 
@@ -15,17 +15,6 @@ type SafeArticleImageProps = Omit<ImageProps, "src" | "alt"> & {
   alt: string;
   fallbackSrc?: string;
 };
-
-function skipOptimizer(url: string) {
-  try {
-    const host = new URL(url).hostname;
-    // Unsplash is in next.config remotePatterns; other https covers (Supabase, source/OG) use native img.
-    if (host === "images.unsplash.com" || host === "plus.unsplash.com") return false;
-    return true;
-  } catch {
-    return true;
-  }
-}
 
 function isUsableSrc(url: string) {
   if (!url.trim()) return false;
@@ -49,14 +38,10 @@ function CoverPlaceholder() {
   );
 }
 
-function nextFallback(current: string) {
-  if (current !== FALLBACK_COVER_IMAGE && current !== PLACEHOLDER_COVER) {
-    return FALLBACK_COVER_IMAGE;
-  }
-  if (current !== PLACEHOLDER_COVER) {
-    return PLACEHOLDER_COVER;
-  }
-  return null;
+function pickInitialSrc(resolved: string, fallbackSrc?: string) {
+  if (isUsableSrc(resolved)) return resolved;
+  if (fallbackSrc && isUsableSrc(fallbackSrc)) return fallbackSrc;
+  return FALLBACK_COVER_IMAGE;
 }
 
 export default function SafeArticleImage({
@@ -73,14 +58,13 @@ export default function SafeArticleImage({
   ...props
 }: SafeArticleImageProps) {
   const resolved = resolveCoverImage(src);
-  const initial = isUsableSrc(resolved) ? resolved : fallbackSrc || PLACEHOLDER_COVER;
+  const initial = pickInitialSrc(resolved, fallbackSrc);
   const [currentSrc, setCurrentSrc] = useState(initial);
   const [failed, setFailed] = useState(false);
-  const useNativeImg = unoptimized ?? skipOptimizer(currentSrc);
+  const useNativeImg = unoptimized ?? shouldBypassImageOptimizer(currentSrc);
 
   useEffect(() => {
-    const next = isUsableSrc(resolved) ? resolved : fallbackSrc || PLACEHOLDER_COVER;
-    setCurrentSrc(next);
+    setCurrentSrc(pickInitialSrc(resolved, fallbackSrc));
     setFailed(false);
   }, [resolved, fallbackSrc]);
 
@@ -88,19 +72,23 @@ export default function SafeArticleImage({
     const target = event.currentTarget;
     target.onerror = null;
     onError?.(event);
-    if (fallbackSrc && currentSrc !== fallbackSrc) {
+
+    if (fallbackSrc && isUsableSrc(fallbackSrc) && currentSrc !== fallbackSrc) {
       setCurrentSrc(fallbackSrc);
       return;
     }
-    const fallback = nextFallback(currentSrc);
-    if (fallback) {
-      setCurrentSrc(fallback);
+    if (currentSrc !== FALLBACK_COVER_IMAGE) {
+      setCurrentSrc(FALLBACK_COVER_IMAGE);
       return;
     }
     setFailed(true);
   };
 
   if (failed) {
+    return <CoverPlaceholder />;
+  }
+
+  if (!isUsableSrc(currentSrc)) {
     return <CoverPlaceholder />;
   }
 

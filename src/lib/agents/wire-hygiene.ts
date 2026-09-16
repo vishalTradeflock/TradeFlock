@@ -31,6 +31,16 @@ const LEAD_RELATIVE_DATE_RE =
 const RELATIVE_NOUN_RE =
   /\b(?:today|yesterday|this week|(?:on\s+)?(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday))(?:'s)?\s+(?:release|report|filing|announcement)\b/i;
 
+function decodeAmpEntities(value: string) {
+  let decoded = value.trim();
+  for (let i = 0; i < 5; i += 1) {
+    const next = decoded.replace(/&amp;/gi, "&");
+    if (next === decoded) break;
+    decoded = next;
+  }
+  return decoded;
+}
+
 function firstLine(raw: string, label: string): string | null {
   const match = raw.match(new RegExp(`^${label}:\\s*(.+)$`, "im"));
   const value = match?.[1]?.trim();
@@ -39,12 +49,13 @@ function firstLine(raw: string, label: string): string | null {
 
 export function parseLeadNotes(rawSource: string): LeadNotes {
   const sourceUrl = firstLine(rawSource, "URL");
-  const coverUrl = firstLine(rawSource, "Cover");
+  const coverLine = firstLine(rawSource, "Cover");
+  const coverToken = coverLine ? decodeAmpEntities(coverLine.split(/\s/)[0] ?? "") : "";
   return {
     sourceName: firstLine(rawSource, "Source"),
     sourceUrl: sourceUrl && /^https?:\/\//i.test(sourceUrl) ? sourceUrl.split(/\s/)[0] : null,
     publishedAt: firstLine(rawSource, "Published"),
-    coverUrl: coverUrl && /^https?:\/\//i.test(coverUrl) ? coverUrl.split(/\s/)[0] : null,
+    coverUrl: coverToken && /^https?:\/\//i.test(coverToken) ? coverToken : null,
     headline: firstLine(rawSource, "Headline"),
   };
 }

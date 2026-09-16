@@ -11,7 +11,7 @@ describe("parseFeedItems", () => {
           <link>https://www.cnbc.com/oracle</link>
           <pubDate>Tue, 15 Sep 2026 18:31:00 GMT</pubDate>
           <description>Oracle beat estimates.</description>
-          <enclosure url="https://image.cnbcfm.com/oracle.jpg" type="image/jpeg" />
+          <enclosure url="https://image.cnbcfm.com/oracle.jpg?v=1&amp;amp;w=1600" type="image/jpeg" />
         </item>
         <item>
           <title>Fed holds rates as labor cools</title>
@@ -21,7 +21,7 @@ describe("parseFeedItems", () => {
       </channel></rss>
     `;
     const items = parseFeedItems(xml);
-    assert.equal(items[0]?.imageUrl, "https://image.cnbcfm.com/oracle.jpg");
+    assert.equal(items[0]?.imageUrl, "https://image.cnbcfm.com/oracle.jpg?v=1&w=1600");
     assert.equal(items[1]?.imageUrl, "https://www.federalreserve.gov/cover.png");
   });
 });

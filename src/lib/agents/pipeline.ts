@@ -6,12 +6,12 @@ import {
   resolveWriterDesk,
   type WriterDesk,
 } from "@/lib/agents/prompts";
-import { FALLBACK_COVER_IMAGE, isHttpsCoverUrl } from "@/lib/images";
+import { FALLBACK_COVER_IMAGE, sanitizeCoverUrl } from "@/lib/images";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import { completeLlmChat, isLlmQuotaError } from "@/lib/llm";
-import { fetchOgImageUrl } from "@/lib/agents/source-cover";
+import { resolvePublishCoverUrl } from "@/lib/agents/source-cover";
 import {
   parseLeadNotes,
   polishWireBody,
@@ -273,7 +273,7 @@ function leadNotes(lead: NewsLead): LeadNotes {
   return {
     ...notes,
     sourceUrl: lead.sourceUrl ?? notes.sourceUrl,
-    coverUrl: (lead.imageUrl && isHttpsCoverUrl(lead.imageUrl) ? lead.imageUrl : null) ?? notes.coverUrl,
+    coverUrl: sanitizeCoverUrl(lead.imageUrl) ?? sanitizeCoverUrl(notes.coverUrl),
   };
 }
 
@@ -285,18 +285,6 @@ function prepareWireBody(lead: NewsLead, title: string, content: string, coverIm
   });
   const body = polishWireBody(sanitized, notes);
   return { body, notes, failures: wireHygieneFailures(body, notes, lead.rawSource) };
-}
-
-async function resolveLeadCover(lead: NewsLead): Promise<string> {
-  const notes = leadNotes(lead);
-  if (notes.coverUrl && isHttpsCoverUrl(notes.coverUrl)) return notes.coverUrl;
-  if (lead.imageUrl && isHttpsCoverUrl(lead.imageUrl)) return lead.imageUrl;
-  const pageUrl = notes.sourceUrl;
-  if (pageUrl) {
-    const og = await fetchOgImageUrl(pageUrl);
-    if (og && isHttpsCoverUrl(og)) return og;
-  }
-  return FALLBACK_COVER_IMAGE;
 }
 
 async function publishArticle(insert: ArticleInsert) {
@@ -330,15 +318,25 @@ async function commitVerdict(
   verdict: EditorVerdict,
 ): Promise<Extract<PipelineResult, { published: true }>> {
   const admin = createAdminClient();
-  const [categoryId, authorId, coverImageUrl] = await Promise.all([
-    resolveCategoryId(admin, desk, lead.category),
-    resolveAuthorId(admin, desk),
-    resolveLeadCover(lead),
-  ]);
-
   const title = verdict.editedTitle.trim();
   const excerpt = verdict.excerpt.trim().slice(0, 280);
   const slug = slugify(title);
+  const notes = leadNotes(lead);
+  const [categoryId, authorId, coverImageUrl] = await Promise.all([
+    resolveCategoryId(admin, desk, lead.category),
+    resolveAuthorId(admin, desk),
+    resolvePublishCoverUrl({
+      imageUrl: lead.imageUrl,
+      notesCoverUrl: notes.coverUrl,
+      sourceUrl: notes.sourceUrl,
+      article: {
+        id: slug,
+        title,
+        slug,
+        category: { slug: SITE_CATEGORY[desk] },
+      },
+    }),
+  ]);
   const prepared = prepareWireBody(lead, title, verdict.editedContent, coverImageUrl);
   if (prepared.failures.length) {
     throw new Error(`Wire hygiene blocked publish: ${prepared.failures.join("; ")}`);

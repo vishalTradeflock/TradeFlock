@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { BIG_TAKE_LIMIT, HOME_ARTICLE_LIMIT } from "@/lib/cache";
 import { SEED_ARTICLES } from "@/lib/data/seed";
-import { assignDistinctCovers, portraitImageUrl, resolveCoverImage } from "@/lib/images";
+import { assignDistinctCovers, articleCoverSrc, portraitImageUrl } from "@/lib/images";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { ArticleListCard, ArticleWithRelations, Author, Category } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/utils";
@@ -96,7 +96,13 @@ function mapArticleRow(row: ArticleRow, includeBody: boolean): ArticleWithRelati
   return {
     ...article,
     body: includeBody ? String(row.body ?? "") : "",
-    cover_image_url: resolveCoverImage(article.cover_image_url),
+    cover_image_url: articleCoverSrc({
+      id: article.id,
+      title: article.title,
+      slug: article.slug,
+      cover_image_url: article.cover_image_url,
+      category,
+    }),
     meta_title: typeof row.meta_title === "string" && row.meta_title.trim() ? row.meta_title : null,
     meta_description:
       typeof row.meta_description === "string" && row.meta_description.trim()
@@ -111,7 +117,7 @@ function withListCovers(articles: ArticleWithRelations[]) {
   return assignDistinctCovers(
     articles.map((article) => ({
       ...article,
-      cover_image_url: resolveCoverImage(article.cover_image_url),
+      cover_image_url: articleCoverSrc(article),
     })),
   );
 }
@@ -746,7 +752,7 @@ export const getArticleBySlug = cache(async (slug: string) => {
   if (!seed) return null;
   return {
     ...seed,
-    cover_image_url: resolveCoverImage(seed.cover_image_url),
+    cover_image_url: articleCoverSrc(seed),
   };
 });
 

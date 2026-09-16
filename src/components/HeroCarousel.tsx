@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import { FALLBACK_COVER_IMAGE } from "@/lib/images";
+import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
 import type { ArticleWithRelations } from "@/lib/types";
 import { formatPublishedAt } from "@/lib/utils";
 
@@ -37,7 +37,8 @@ export default function HeroCarousel({
   const article = slides[safeIndex] ?? slides[0];
   if (!article) return null;
 
-  const imageUrl = article.cover_image_url || FALLBACK_COVER_IMAGE;
+  const imageUrl = articleCoverSrc(article);
+  const fallbackSrc = deskCoverFallback(article);
 
   return (
     <article
@@ -57,6 +58,7 @@ export default function HeroCarousel({
             priority={safeIndex === 0}
             loading={safeIndex === 0 ? undefined : "lazy"}
             sizes="(min-width: 1024px) 50vw, 100vw"
+            fallbackSrc={fallbackSrc === imageUrl ? undefined : fallbackSrc}
             className="object-cover transition-opacity group-hover:opacity-90"
           />
         </div>
