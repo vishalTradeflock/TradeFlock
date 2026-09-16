@@ -77,18 +77,25 @@ export function unsplashEditorSrc(url: string) {
   }
 }
 
+/** True for a real https cover URL (feed enclosure / og:image). Never invents a URL. */
+export function isHttpsCoverUrl(url: string | null | undefined): url is string {
+  const trimmed = url?.trim() ?? "";
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "https:") return false;
+    if (!parsed.hostname.includes(".")) return false;
+    if (/\.(pdf|html?|xml|json|mp4|webm|mov)(\?|$)/i.test(parsed.pathname)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function resolveCoverImage(url: string | null | undefined): string {
   if (!url) return FALLBACK_COVER_IMAGE;
-
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:") return FALLBACK_COVER_IMAGE;
-    if (parsed.hostname.endsWith("supabase.co")) return url;
-    if (ALLOWED_HOSTS.has(parsed.hostname)) return url;
-    return FALLBACK_COVER_IMAGE;
-  } catch {
-    return FALLBACK_COVER_IMAGE;
-  }
+  if (!isHttpsCoverUrl(url)) return FALLBACK_COVER_IMAGE;
+  return url;
 }
 
 export function pickEditorialCover(article: CoverSource, offset = 0) {

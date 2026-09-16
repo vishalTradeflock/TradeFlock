@@ -3,6 +3,7 @@ export type ParsedFeedItem = {
   link: string;
   summary: string;
   publishedAt: number;
+  imageUrl: string | null;
 };
 
 function decodeXmlEntities(value: string): string {
@@ -72,6 +73,29 @@ function extractSummary(block: string): string {
   return innerTag(block, "content:encoded") ?? innerTag(block, "content") ?? "";
 }
 
+function attrUrl(tag: string): string | null {
+  const match = tag.match(/\b(?:url|href)=["']([^"']+)["']/i);
+  const url = match?.[1]?.trim();
+  return url && /^https?:\/\//i.test(url) ? url : null;
+}
+
+function extractImage(block: string): string | null {
+  const enclosure = [...block.matchAll(/<enclosure\b[^>]*>/gi)].map((match) => match[0]);
+  const imageEnclosure = enclosure.find((tag) => /type=["']image\//i.test(tag));
+  const fromEnclosure = imageEnclosure ? attrUrl(imageEnclosure) : null;
+  if (fromEnclosure) return fromEnclosure;
+
+  const media = [...block.matchAll(/<media:(?:content|thumbnail)\b[^>]*>/gi)].map((match) => match[0]);
+  const imageMedia = media.find((tag) => !/\bmedium=/i.test(tag) || /medium=["']image["']/i.test(tag));
+  const fromMedia = imageMedia ? attrUrl(imageMedia) : null;
+  if (fromMedia) return fromMedia;
+
+  const itunes = block.match(/<itunes:image\b[^>]*>/i);
+  if (itunes) return attrUrl(itunes[0]);
+
+  return null;
+}
+
 function extractPublishedAt(block: string): number {
   const raw =
     innerTag(block, "pubDate") ??
@@ -98,6 +122,7 @@ export function parseFeedItems(xml: string): ParsedFeedItem[] {
       link,
       summary: extractSummary(block),
       publishedAt: extractPublishedAt(block),
+      imageUrl: extractImage(block),
     });
   }
 
