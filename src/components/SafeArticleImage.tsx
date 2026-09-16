@@ -2,7 +2,7 @@
 
 import Image, { type ImageProps } from "next/image";
 import { Newspaper } from "lucide-react";
-import { useEffect, useState, type SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import {
   FALLBACK_COVER_IMAGE,
   resolveCoverImage,
@@ -58,15 +58,18 @@ export default function SafeArticleImage({
   ...props
 }: SafeArticleImageProps) {
   const resolved = resolveCoverImage(src);
-  const initial = pickInitialSrc(resolved, fallbackSrc);
-  const [currentSrc, setCurrentSrc] = useState(initial);
+  const sourceKey = `${resolved}\0${fallbackSrc ?? ""}`;
+  const [currentSrc, setCurrentSrc] = useState(() => pickInitialSrc(resolved, fallbackSrc));
   const [failed, setFailed] = useState(false);
-  const useNativeImg = unoptimized ?? shouldBypassImageOptimizer(currentSrc);
+  const [seenKey, setSeenKey] = useState(sourceKey);
 
-  useEffect(() => {
+  if (seenKey !== sourceKey) {
+    setSeenKey(sourceKey);
     setCurrentSrc(pickInitialSrc(resolved, fallbackSrc));
     setFailed(false);
-  }, [resolved, fallbackSrc]);
+  }
+
+  const useNativeImg = unoptimized ?? shouldBypassImageOptimizer(currentSrc);
 
   const handleError = (event: SyntheticEvent<HTMLImageElement, Event>) => {
     const target = event.currentTarget;
@@ -84,11 +87,7 @@ export default function SafeArticleImage({
     setFailed(true);
   };
 
-  if (failed) {
-    return <CoverPlaceholder />;
-  }
-
-  if (!isUsableSrc(currentSrc)) {
+  if (failed || !isUsableSrc(currentSrc)) {
     return <CoverPlaceholder />;
   }
 
