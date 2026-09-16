@@ -1,10 +1,15 @@
-import { HEALTHCARE_2026_HONOREES, HEALTHCARE_EDITION_SLUG, SEED_ISSUE_HONOREES } from "@/lib/data/seed-honorees";
 import {
+  HEALTHCARE_2026_HONOREES,
+  HEALTHCARE_EDITION_SLUG,
+  SEED_ISSUE_HONOREES,
+} from "@/lib/data/seed-honorees";
+import {
+  directoryDisplayName,
   honoreeBio,
   honoreeCompany,
-  honoreeName,
   honoreeRole,
 } from "@/lib/honoree";
+import { portraitImageUrl } from "@/lib/images";
 import type { ArticleWithRelations, Magazine, MagazineHonoree } from "@/lib/types";
 
 function asText(value: unknown) {
@@ -61,18 +66,88 @@ export function articleToHonoree(
   article: ArticleWithRelations,
   magazineTitle?: string,
 ): MagazineHonoree {
+  const extra = article as ArticleWithRelations & {
+    featured_image?: string | null;
+    image?: string | null;
+    image_url?: string | null;
+  };
   return {
-    name: honoreeName(article.title, magazineTitle),
+    name: directoryDisplayName(article.title, magazineTitle),
     designation: honoreeRole(article) || null,
     company: honoreeCompany(article) || null,
     bio: honoreeBio(article) || null,
-    photo_url: article.cover_image_url?.trim() || null,
+    photo_url: portraitImageUrl(
+      extra.featured_image,
+      extra.image,
+      extra.image_url,
+      extra.cover_image_url,
+    ),
     linkedin_url: article.linkedin_url ?? null,
     website_url: article.website_url ?? null,
     page: article.magazine_page ?? null,
     magazine_page: article.magazine_page ?? null,
     slug: article.slug,
   };
+}
+
+export function isCompleteHonoree(honoree: MagazineHonoree) {
+  return Boolean(honoree.name.trim()) && Boolean(portraitImageUrl(honoree.photo_url));
+}
+
+export function isCompleteMagazineProfile(
+  article: ArticleWithRelations,
+  magazineTitle?: string,
+) {
+  return isCompleteHonoree(articleToHonoree(article, magazineTitle));
+}
+
+/** Healthcare-only: overlay complete DB profiles onto the 10-person editorial roster. */
+export function mergeHealthcareDirectory(
+  articles: ArticleWithRelations[],
+  magazineTitle?: string,
+): MagazineHonoree[] {
+  const fromArticles = articles
+    .filter((article) => isCompleteMagazineProfile(article, magazineTitle))
+    .map((article) => articleToHonoree(article, magazineTitle));
+  const used = new Set<number>();
+
+  return HEALTHCARE_2026_HONOREES.map((seed, index) => {
+    const key = normalizeName(seed.name);
+    const matchIndex = fromArticles.findIndex(
+      (honoree, honoreeIndex) =>
+        !used.has(honoreeIndex) && normalizeName(honoree.name) === key,
+    );
+    const match = matchIndex >= 0 ? fromArticles[matchIndex] : undefined;
+    if (matchIndex >= 0) used.add(matchIndex);
+
+    const page = seed.magazine_page ?? seed.page ?? index * 2 + 4;
+    return {
+      name: seed.name,
+      designation: seed.designation,
+      company: match?.company || seed.company,
+      bio: match?.bio || seed.bio,
+      photo_url: portraitImageUrl(match?.photo_url, seed.photo_url),
+      linkedin_url: match?.linkedin_url || seed.linkedin_url,
+      website_url: match?.website_url || seed.website_url,
+      page,
+      magazine_page: page,
+      slug: match?.slug || seed.slug,
+    };
+  }).filter(isCompleteHonoree);
+}
+
+export function directoryHonoreesForIssue(
+  slug: string,
+  articles: ArticleWithRelations[],
+  magazineTitle?: string,
+): MagazineHonoree[] {
+  const complete = articles.filter((article) =>
+    isCompleteMagazineProfile(article, magazineTitle),
+  );
+  if (slug === HEALTHCARE_EDITION_SLUG && complete.length < 10) {
+    return mergeHealthcareDirectory(complete, magazineTitle);
+  }
+  return complete.map((article) => articleToHonoree(article, magazineTitle));
 }
 
 function mergeProfile(base: MagazineHonoree, extra?: MagazineHonoree): MagazineHonoree {
@@ -105,12 +180,9 @@ export function resolveIssueHonorees(
   magazine: Magazine,
   articles: ArticleWithRelations[],
 ): MagazineHonoree[] {
-  const fromMagazine =
-    magazine.slug === HEALTHCARE_EDITION_SLUG && articles.length < 10
-      ? HEALTHCARE_2026_HONOREES
-      : magazine.honorees?.length
-        ? magazine.honorees
-        : (SEED_ISSUE_HONOREES[magazine.slug] ?? []);
+  const fromMagazine = magazine.honorees?.length
+    ? magazine.honorees
+    : (SEED_ISSUE_HONOREES[magazine.slug] ?? []);
   const fromArticles = articles.map((article) => articleToHonoree(article, magazine.title));
   const expected = expectedHonoreeCount({
     title: magazine.title,

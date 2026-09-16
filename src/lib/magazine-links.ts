@@ -19,12 +19,19 @@ export function issueFlipbookHref(magazine: { slug: string }): string {
   return `/magazine/${magazine.slug}/read`;
 }
 
+export function honoreeSpreadPage(
+  honoree: { page?: number | null; magazine_page?: number | null },
+  index: number,
+) {
+  return honoree.magazine_page || honoree.page || (index + 1) * 2 + 2;
+}
+
 export function honoreeSpreadHref(
   magazine: { slug: string },
   honoree: { page?: number | null; magazine_page?: number | null },
+  index = 0,
 ): string {
-  const page = honoree.magazine_page || honoree.page || 4;
-  return `${issueFlipbookHref(magazine)}#page/${page}`;
+  return `${issueFlipbookHref(magazine)}#page/${honoreeSpreadPage(honoree, index)}`;
 }
 
 export function parseFlipbookPage(value: string | string[] | undefined) {

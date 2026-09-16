@@ -136,6 +136,37 @@ export function articleCoverSrc(article: {
   return resolved;
 }
 
+export function isStockCoverUrl(url: string | null | undefined) {
+  const trimmed = url?.trim() ?? "";
+  if (!trimmed) return true;
+  const lower = trimmed.toLowerCase();
+  if (
+    /building|skyscraper|placeholder|unsplash\.com|plus\.unsplash/.test(lower)
+  ) {
+    return true;
+  }
+  if (trimmed === FALLBACK_COVER_IMAGE || trimmed === PLACEHOLDER_COVER) return true;
+  const identity = coverIdentity(trimmed);
+  if (identity === coverIdentity(FALLBACK_COVER_IMAGE)) return true;
+  return EDITORIAL_COVERS.some((cover) => coverIdentity(cover) === identity);
+}
+
+export function portraitImageUrl(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (!trimmed || isStockCoverUrl(trimmed)) continue;
+    if (trimmed.startsWith("/")) return trimmed;
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === "https:") return trimmed;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
 function isWeakCover(url: string | null | undefined) {
   return !url?.trim();
 }

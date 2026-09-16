@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { BIG_TAKE_LIMIT, HOME_ARTICLE_LIMIT } from "@/lib/cache";
 import { SEED_ARTICLES } from "@/lib/data/seed";
-import { assignDistinctCovers, resolveCoverImage } from "@/lib/images";
+import { assignDistinctCovers, portraitImageUrl, resolveCoverImage } from "@/lib/images";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { ArticleListCard, ArticleWithRelations, Author, Category } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/utils";
@@ -311,6 +311,7 @@ function missingArticleColumn(message: string | undefined, column: string) {
 }
 
 const MAGAZINE_STORY_SELECTS = [
+  `${ARTICLE_LIST_SELECT},magazine_sort,designation,subheading,linkedin_url,website_url,flipbook_url,magazine_page,company,bio,featured_image`,
   `${ARTICLE_LIST_SELECT},magazine_sort,designation,subheading,linkedin_url,website_url,flipbook_url,magazine_page,company,bio`,
   `${ARTICLE_LIST_SELECT},magazine_sort,designation,subheading,linkedin_url,website_url,flipbook_url,magazine_page,company`,
   `${ARTICLE_LIST_SELECT},magazine_sort,designation,subheading`,
@@ -326,6 +327,9 @@ function seedArticlesForMagazine(magazineId: string) {
 
 function sortMagazineHonorees(articles: ArticleWithRelations[]) {
   return [...articles].sort((a, b) => {
+    const pageA = a.magazine_page ?? a.magazine_sort ?? 10_000;
+    const pageB = b.magazine_page ?? b.magazine_sort ?? 10_000;
+    if (pageA !== pageB) return pageA - pageB;
     if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1;
     const sortA = a.magazine_sort ?? 10_000;
     const sortB = b.magazine_sort ?? 10_000;
@@ -333,6 +337,59 @@ function sortMagazineHonorees(articles: ArticleWithRelations[]) {
     return new Date(a.published_at).getTime() - new Date(b.published_at).getTime();
   });
 }
+
+async function articlesLinkedByMagazineId(
+  supabase: ReturnType<typeof createPublicClient>,
+  magazineId: string,
+  now: string,
+) {
+  if (!magazineId) return [];
+
+  for (const select of MAGAZINE_STORY_SELECTS) {
+    let request = supabase
+      .from("articles")
+      .select(select)
+      .eq("magazine_id", magazineId)
+      .eq("status", "published")
+      .lte("published_at", now)
+      .limit(40);
+
+    if (select.includes("magazine_page")) {
+      request = request.order("magazine_page", { ascending: true, nullsFirst: false });
+    } else if (select.includes("magazine_sort")) {
+      request = request.order("magazine_sort", { ascending: true, nullsFirst: false });
+    }
+
+    const byRelation = await request.order("published_at", { ascending: true });
+    if (byRelation.error) {
+      if (missingArticleColumn(byRelation.error.message, "magazine_id")) return [];
+      continue;
+    }
+    return byRelation.data ?? [];
+  }
+
+  return [];
+}
+
+/** Honoree stories explicitly assigned to this issue. */
+export const getArticlesLinkedToMagazine = cache(async (magazine: {
+  id: string;
+  slug?: string;
+}) => {
+  const magazineId = magazine.id.trim();
+  if (!magazineId) return [] as ArticleWithRelations[];
+  if (!isSupabaseConfigured()) {
+    return sortMagazineHonorees(seedArticlesForMagazine(magazineId));
+  }
+
+  try {
+    const supabase = createPublicClient();
+    const rows = await articlesLinkedByMagazineId(supabase, magazineId, new Date().toISOString());
+    return sortMagazineHonorees(mapMagazineArticles(rows));
+  } catch {
+    return [];
+  }
+});
 
 export const getArticlesByMagazineId = cache(async (magazine: {
   id: string;
@@ -358,28 +415,9 @@ export const getArticlesByMagazineId = cache(async (magazine: {
       }
     };
 
-    if (magazineId) {
-      for (const select of MAGAZINE_STORY_SELECTS) {
-        let request = supabase
-          .from("articles")
-          .select(select)
-          .eq("magazine_id", magazineId)
-          .eq("status", "published")
-          .lte("published_at", now)
-          .limit(40);
-
-        if (select.includes("magazine_sort")) {
-          request = request.order("magazine_sort", { ascending: true, nullsFirst: false });
-        }
-
-        const byRelation = await request.order("published_at", { ascending: true });
-        if (byRelation.error) {
-          if (missingArticleColumn(byRelation.error.message, "magazine_id")) break;
-          continue;
-        }
-        remember(byRelation.data);
-        break;
-      }
+    remember(await articlesLinkedByMagazineId(supabase, magazineId, now));
+    if (byId.size) {
+      return sortMagazineHonorees(mapMagazineArticles([...byId.values()]));
     }
 
     remember(await articlesMatchingMagazineSlug(supabase, magazineSlug, now));
@@ -389,6 +427,7 @@ export const getArticlesByMagazineId = cache(async (magazine: {
       remember(await articlesMatchingMagazineTitle(supabase, issueTitle, now));
     }
     remember(await articlesMatchingMagazineTitle(supabase, magazineSlug.replace(/-/g, " "), now));
+    remember(await articlesMatchingMagazineCategory(supabase, magazineSlug, issueTitle, now));
 
     return sortMagazineHonorees(mapMagazineArticles([...byId.values()]));
   } catch {
@@ -410,6 +449,42 @@ async function articlesMatchingMagazineSlug(
       .eq("status", "published")
       .lte("published_at", now)
       .ilike("slug", `%${magazineSlug}%`)
+      .order("published_at", { ascending: true })
+      .limit(40);
+
+    if (error) continue;
+    return data ?? [];
+  }
+
+  return [];
+}
+
+async function articlesMatchingMagazineCategory(
+  supabase: ReturnType<typeof createPublicClient>,
+  magazineSlug: string,
+  magazineTitle: string | undefined,
+  now: string,
+) {
+  const titleNeedle = (magazineTitle ?? magazineSlug.replace(/-/g, " "))
+    .replace(/[%*,()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!magazineSlug && titleNeedle.length < 8) return [];
+
+  const filters = [
+    magazineSlug && /^[a-z0-9-]+$/.test(magazineSlug) ? `slug.eq.${magazineSlug}` : "",
+    titleNeedle.length >= 8 ? `name.ilike.%${titleNeedle}%` : "",
+  ].filter(Boolean);
+  if (!filters.length) return [];
+
+  for (const select of MAGAZINE_STORY_SELECTS) {
+    const inner = select.replace("category:categories(", "category:categories!inner(");
+    const { data, error } = await supabase
+      .from("articles")
+      .select(inner)
+      .eq("status", "published")
+      .lte("published_at", now)
+      .or(filters.join(","), { foreignTable: "categories" })
       .order("published_at", { ascending: true })
       .limit(40);
 
@@ -472,6 +547,8 @@ function mapMagazineArticles(rows: unknown[] | null | undefined): ArticleWithRel
       dek?: string | null;
       excerpt?: string | null;
       cover_image_alt?: string | null;
+      featured_image?: string | null;
+      cover_image?: string | null;
       designation?: string | null;
       subheading?: string | null;
       company?: string | null;
@@ -515,7 +592,8 @@ function mapMagazineArticles(rows: unknown[] | null | undefined): ArticleWithRel
       dek: typeof row.dek === "string" ? row.dek : mapped?.dek ?? null,
       excerpt: typeof row.excerpt === "string" ? row.excerpt : mapped?.excerpt ?? "",
       body: mapped?.body ?? "",
-      cover_image_url: firstHttpsUrl(row.cover_image_url, mapped?.cover_image_url),
+      cover_image_url:
+        portraitImageUrl(row.featured_image, row.cover_image, row.cover_image_url) ?? "",
       cover_image_alt:
         typeof row.cover_image_alt === "string" ? row.cover_image_alt : mapped?.cover_image_alt || title,
       category_id: String(row.category_id ?? mapped?.category_id ?? fallbackCategory.id),

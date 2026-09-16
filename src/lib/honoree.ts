@@ -17,6 +17,18 @@ export function honoreeName(title: string, magazineTitle?: string) {
   return name || original;
 }
 
+/** Keep hyphenated given names; drop edition suffixes after a hyphen. */
+export function directoryDisplayName(title: string, magazineTitle?: string) {
+  const cleaned = honoreeName(title, magazineTitle);
+  const cut = cleaned.split("-")[0]?.trim() ?? cleaned;
+  if (!cut || cut === cleaned) return cleaned;
+  const remainder = cleaned.slice(cut.length).replace(/^[\s-]+/, "");
+  if (/leaders|executives|watch|best|magazine|honoree|transforming|\d{4}/i.test(remainder)) {
+    return cut;
+  }
+  return cleaned;
+}
+
 function normalizeCopy(value: string) {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
