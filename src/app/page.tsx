@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import Header from "@/components/Header";
 import HeroCarousel from "@/components/HeroCarousel";
 import LatestScroller from "@/components/LatestScroller";
@@ -8,7 +7,7 @@ import SafeArticleImage from "@/components/SafeArticleImage";
 import { LATEST_SCROLLER_LIMIT } from "@/lib/cache";
 import { getCategoryDesk, getHomeLayout } from "@/lib/articles";
 import { isSuccessInsightsArticle } from "@/lib/success-insights";
-import { NAV_CATEGORIES, sectionPath, type ArticleWithRelations } from "@/lib/types";
+import { NAV_CATEGORIES, type ArticleWithRelations } from "@/lib/types";
 import { formatShortDate, formatTimeAgo } from "@/lib/utils";
 
 const DEEP_DIVE_FALLBACK =
@@ -47,20 +46,7 @@ function articlesForDesk(
 
 export const revalidate = 120;
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<{ category?: string | string[] }>;
-}) {
-  const query = await searchParams;
-  const categoryParam = Array.isArray(query.category) ? query.category[0] : query.category;
-  const categorySlug = categoryParam?.trim().toLowerCase().replace(/\s+/g, "-");
-  if (categorySlug) {
-    if (categorySlug === "technology") redirect("/tech");
-    const path = sectionPath(categorySlug);
-    if (path !== "/") redirect(path);
-  }
-
+export default async function Home() {
   const [
     {
       featured,
