@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import { getArticleBySlug, getArticleSlugs, getRelatedArticles, normalizeArticleSlug } from "@/lib/articles";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
+import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
 import { resolveSeoDescription, resolveSeoTitle, publicStoryUrl } from "@/lib/studio/seo";
 import { sectionPath } from "@/lib/types";
 import { formatPublishedAt } from "@/lib/utils";
@@ -67,6 +68,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   if (!article) notFound();
 
   const related = await getRelatedArticles(article);
+  const coverSrc = articleCoverSrc(article);
+  const coverFallback = deskCoverFallback(article);
   const body = sanitizeArticleBody(article.body, {
     title: article.title,
     coverImageUrl: article.cover_image_url,
@@ -108,12 +111,13 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
             <div className="relative mt-5 flex min-h-[200px] items-center justify-center overflow-hidden bg-neutral-100">
               <SafeArticleImage
-                src={article.cover_image_url}
+                src={coverSrc}
                 alt={article.cover_image_alt}
                 width={1600}
                 height={900}
                 priority
                 sizes="(min-width: 1024px) 66vw, 100vw"
+                fallbackSrc={coverFallback === coverSrc ? undefined : coverFallback}
                 className="mx-auto h-auto max-h-[500px] w-auto object-contain object-top"
               />
             </div>
@@ -137,11 +141,12 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                   <Link href={`/news/${item.slug}`} className="group flex gap-3">
                     <div className="relative h-16 w-24 shrink-0 overflow-hidden bg-neutral-100">
                       <SafeArticleImage
-                        src={item.cover_image_url}
+                        src={articleCoverSrc(item)}
                         alt={item.cover_image_alt}
                         fill
                         sizes="96px"
                         loading="lazy"
+                        fallbackSrc={deskCoverFallback(item)}
                       />
                     </div>
                     <div>

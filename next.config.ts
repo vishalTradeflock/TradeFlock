@@ -42,6 +42,36 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "tradeflock.us",
       },
+      {
+        protocol: "https",
+        hostname: "image.cnbcfm.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "techcrunch.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "*.techcrunch.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "mmx.prnewswire.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "www.prnewswire.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "prnewswire.com",
+        pathname: "/**",
+      },
     ],
   },
 };
