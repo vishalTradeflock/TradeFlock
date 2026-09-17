@@ -5,7 +5,6 @@ import { GlobalHeadCode } from "@/components/GlobalHeadCode";
 import { GlobalHeadScripts } from "@/components/GlobalHeadScripts";
 import { JsonLd } from "@/components/JsonLd";
 import SiteFooter from "@/components/SiteFooter";
-import { SITE_ROBOTS } from "@/lib/indexing";
 import { shouldInjectGlobalHead } from "@/lib/public-head";
 import { getGlobalHeadCode, getHeaderScripts, getSiteVerification } from "@/lib/site-settings";
 import { siteStructuredData } from "@/lib/seo";
@@ -34,8 +33,6 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     description:
       "U.S. business news on markets, technology, finance, and leadership. An editorial desk in the tradition of a national business paper.",
-    // TEMPORARY: site-wide noindex while SEO is audited. Delete this `robots` field to restore indexing.
-    robots: SITE_ROBOTS,
     ...(verification.google || verification.bing
       ? {
           verification: {

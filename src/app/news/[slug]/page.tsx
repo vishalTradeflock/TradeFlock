@@ -7,6 +7,9 @@ import { ArticleAuthorCard } from "@/components/ArticleAuthorCard";
 import { ArticleFaqAccordion } from "@/components/ArticleFaqAccordion";
 import { JsonLd } from "@/components/JsonLd";
 import {
+  resolvePublishedArticleRequest,
+} from "@/lib/article-slug-request";
+import {
   getArticleBySlug,
   getArticleSlugs,
   getRelatedArticles,
@@ -36,15 +39,26 @@ type ArticlePageProps = {
   params: Promise<{ slug: string }>;
 };
 
+async function loadPublishedArticleOrRedirect(slug: string) {
+  const requested = normalizeArticleSlug(slug);
+  const redirectToSlug = await resolvePublishedSlugRedirect(requested);
+  const redirected = resolvePublishedArticleRequest({
+    requestedSlug: requested,
+    redirectToSlug,
+    articleFound: false,
+  });
+  if (redirected.kind === "redirect") {
+    permanentRedirect(redirected.location);
+  }
+  return getArticleBySlug(requested);
+}
+
 export async function generateMetadata({
   params,
 }: ArticlePageProps): Promise<Metadata> {
   const { slug } = await params;
-  const cleanSlug = normalizeArticleSlug(slug);
-  const article = await getArticleBySlug(cleanSlug);
+  const article = await loadPublishedArticleOrRedirect(slug);
   if (!article) {
-    const redirected = await resolvePublishedSlugRedirect(cleanSlug);
-    if (redirected) permanentRedirect(`/news/${redirected}`);
     return { title: "Story not found" };
   }
 
@@ -53,11 +67,8 @@ export async function generateMetadata({
 
 export default async function ArticlePage({ params }: ArticlePageProps) {
   const { slug } = await params;
-  const cleanSlug = normalizeArticleSlug(slug);
-  const article = await getArticleBySlug(cleanSlug);
+  const article = await loadPublishedArticleOrRedirect(slug);
   if (!article) {
-    const redirected = await resolvePublishedSlugRedirect(cleanSlug);
-    if (redirected) permanentRedirect(`/news/${redirected}`);
     notFound();
   }
 

@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { exactRequestedArticleSlug } from "@/lib/article-slug-request";
 import { BIG_TAKE_LIMIT, HOME_ARTICLE_LIMIT } from "@/lib/cache";
 import { SEED_ARTICLES } from "@/lib/data/seed";
 import { assignDistinctCovers, articleCoverSrc, portraitImageUrl } from "@/lib/images";
@@ -165,15 +166,10 @@ function withListCovers(articles: ArticleWithRelations[]) {
 }
 
 export function normalizeArticleSlug(slug: string) {
-  let decoded = slug.trim();
-  try {
-    decoded = decodeURIComponent(decoded).trim();
-  } catch {
-    /* keep trimmed raw slug */
-  }
-  return decoded.replace(/^\/+|\/+$/g, "");
+  return exactRequestedArticleSlug(slug);
 }
 
+/** Used only after exact redirect lookup. Must not run before article_slug_redirects. */
 function slugFallbacks(cleanSlug: string) {
   const trimmed = cleanSlug.replace(/-+$/g, "").replace(/^-+/g, "");
   const variants = [cleanSlug, trimmed, cleanSlug.toLowerCase(), trimmed.toLowerCase()];
@@ -366,7 +362,7 @@ export const getPublishedArticlesByAuthorId = cache(async (authorId: string, lim
 });
 
 export async function resolvePublishedSlugRedirect(oldSlug: string) {
-  const clean = normalizeArticleSlug(oldSlug);
+  const clean = exactRequestedArticleSlug(oldSlug);
   if (!clean || !isSupabaseConfigured()) return null;
 
   try {

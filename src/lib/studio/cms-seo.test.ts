@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { articlePath } from "../types.ts";
 import { PRODUCTION_ORIGIN } from "../site-url.ts";
-import { SITE_ROBOTS } from "../indexing.ts";
+import {
+  exactRequestedArticleSlug,
+  resolvePublishedArticleRequest,
+} from "../article-slug-request.ts";
 import {
   firstPartyMediaUrl,
   isBlockedHostname,
@@ -127,6 +130,111 @@ describe("slug audit", () => {
   });
 });
 
+describe("published slug redirect lookup order", () => {
+  const trailingOld = "american-airlines-new-coo-inherits-a-pilot-training-bottleneck-into-the-";
+  const trailingNew = "american-airlines-new-coo-inherits-a-pilot-training-bottleneck-into-the";
+  const contentKeyOld = "amazon-microsoft-and-google-lock-multi-year-gpu-campuses-cg5faq";
+  const contentKeyNew = "amazon-microsoft-and-google-lock-multi-year-gpu-campuses";
+  const doubleHyphenOld = "networking-silicon-not-gpus-is-the-hidden-bill-in-every--ipcqqu";
+  const doubleHyphenNew = "networking-silicon-not-gpus-is-the-hidden-bill-in-every";
+
+  it("old trailing-hyphen slug → 308 even if hyphen fallback would find the article", () => {
+    assert.equal(exactRequestedArticleSlug(trailingOld), trailingOld);
+    const result = resolvePublishedArticleRequest({
+      requestedSlug: trailingOld,
+      redirectToSlug: trailingNew,
+      articleFound: true,
+    });
+    assert.equal(result.status, 308);
+    assert.equal(result.kind, "redirect");
+  });
+
+  it("Location header points to the clean current URL", () => {
+    const result = resolvePublishedArticleRequest({
+      requestedSlug: trailingOld,
+      redirectToSlug: trailingNew,
+      articleFound: true,
+    });
+    assert.equal(result.kind, "redirect");
+    if (result.kind !== "redirect") return;
+    assert.equal(result.location, `/news/${trailingNew}`);
+    assert.equal(result.location.endsWith("-"), false);
+    assert.equal(result.location.includes(trailingOld), false);
+  });
+
+  it("clean slug → 200", () => {
+    const result = resolvePublishedArticleRequest({
+      requestedSlug: trailingNew,
+      redirectToSlug: null,
+      articleFound: true,
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.kind, "render");
+  });
+
+  it("old content-key slug → existing 308 behavior", () => {
+    assert.equal(exactRequestedArticleSlug(contentKeyOld), contentKeyOld);
+    const result = resolvePublishedArticleRequest({
+      requestedSlug: contentKeyOld,
+      redirectToSlug: contentKeyNew,
+      articleFound: false,
+    });
+    assert.equal(result.status, 308);
+    assert.equal(result.kind, "redirect");
+    if (result.kind !== "redirect") return;
+    assert.equal(result.location, `/news/${contentKeyNew}`);
+  });
+
+  it("old double-hyphen slug → existing 308 behavior", () => {
+    assert.equal(exactRequestedArticleSlug(doubleHyphenOld), doubleHyphenOld);
+    const result = resolvePublishedArticleRequest({
+      requestedSlug: doubleHyphenOld,
+      redirectToSlug: doubleHyphenNew,
+      articleFound: false,
+    });
+    assert.equal(result.status, 308);
+    assert.equal(result.kind, "redirect");
+    if (result.kind !== "redirect") return;
+    assert.equal(result.location, `/news/${doubleHyphenNew}`);
+  });
+
+  it("public pages are indexable and studio stays noindex", () => {
+    const layout = readFileSync(new URL("../../app/layout.tsx", import.meta.url), "utf8");
+    assert.doesNotMatch(layout, /SITE_ROBOTS/);
+    assert.doesNotMatch(layout, /index:\s*false/);
+    assert.doesNotMatch(layout, /noindex/);
+    assert.doesNotMatch(layout, /robots:/);
+    const studio = readFileSync(new URL("../../app/studio/layout.tsx", import.meta.url), "utf8");
+    assert.match(studio, /robots:\s*\{\s*index:\s*false,\s*follow:\s*false\s*\}/);
+    const robots = readFileSync(new URL("../../app/robots.ts", import.meta.url), "utf8");
+    assert.match(robots, /allow:\s*"\/"/);
+    assert.match(robots, /disallow:\s*\["\/studio\/",\s*"\/api\/"\]/);
+    assert.match(robots, /sitemap\.xml/);
+    assert.match(robots, /tradeflock\.net\/sitemap\.xml|`\$\{origin\}\/sitemap\.xml`/);
+  });
+
+  it("article page checks exact redirects before getArticleBySlug", () => {
+    const page = readFileSync(new URL("../../app/news/[slug]/page.tsx", import.meta.url), "utf8");
+    const helperStart = page.indexOf("async function loadPublishedArticleOrRedirect");
+    const helperEnd = page.indexOf("export async function generateMetadata");
+    const helper = page.slice(helperStart, helperEnd);
+    assert.ok(helperStart >= 0);
+    const redirectIdx = helper.indexOf("resolvePublishedSlugRedirect");
+    const articleIdx = helper.lastIndexOf("getArticleBySlug");
+    assert.ok(redirectIdx >= 0);
+    assert.ok(articleIdx >= 0);
+    assert.ok(redirectIdx < articleIdx);
+    assert.match(helper, /resolvePublishedArticleRequest/);
+    assert.doesNotMatch(page, /getArticleBySlug\(cleanSlug\);\s*if \(!article\) \{\s*const redirected = await resolvePublishedSlugRedirect/);
+
+    const articles = readFileSync(new URL("../articles.ts", import.meta.url), "utf8");
+    assert.match(articles, /exactRequestedArticleSlug/);
+    const fallbackComment = articles.indexOf("Used only after exact redirect lookup");
+    const fallbackFn = articles.indexOf("function slugFallbacks");
+    assert.ok(fallbackComment >= 0 && fallbackComment < fallbackFn);
+  });
+});
+
 describe("sitemap article URLs", () => {
   it("only emits /news/{slug} and drops trailing hyphens", () => {
     assert.equal(sitemapNewsPath("salesforce-ceo-warns-of-ai-risks"), "/news/salesforce-ceo-warns-of-ai-risks");
@@ -206,14 +314,13 @@ describe("global head code", () => {
     assert.match(sql, /header_scripts/);
   });
 
-  it("is wired into the root layout without changing noindex", () => {
+  it("is wired into the root layout with indexable public robots", () => {
     const layout = readFileSync(new URL("../../app/layout.tsx", import.meta.url), "utf8");
-    assert.match(layout, /SITE_ROBOTS/);
+    assert.doesNotMatch(layout, /SITE_ROBOTS/);
+    assert.doesNotMatch(layout, /TEMPORARY: site-wide noindex/);
+    assert.doesNotMatch(layout, /robots:/);
     assert.match(layout, /GlobalHeadCode/);
     assert.match(layout, /shouldInjectGlobalHead/);
-    assert.match(layout, /TEMPORARY: site-wide noindex/);
-    assert.equal(SITE_ROBOTS.index, false);
-    assert.equal(SITE_ROBOTS.follow, false);
     const seo = readFileSync(new URL("../seo.ts", import.meta.url), "utf8");
     assert.match(seo, /DEFAULT_OG_IMAGE_PATH = "\/og\/default"/);
     assert.match(seo, /PUBLISHER_LOGO_PATH = "\/brand\/logo"/);
