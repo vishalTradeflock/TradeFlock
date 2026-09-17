@@ -6,6 +6,20 @@ export type StudioCategory = {
   slug: string;
 };
 
+export type StudioAuthor = {
+  id: string;
+  name: string;
+  slug: string;
+  bio: string;
+  title: string;
+  avatarUrl: string;
+};
+
+export type StudioFaqDraft = {
+  question: string;
+  answer: string;
+};
+
 export type StudioStoryStatus = "draft" | "review" | "published";
 
 export type DeskStory = {

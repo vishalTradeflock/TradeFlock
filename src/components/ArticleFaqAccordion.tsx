@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { sanitizeFaqAnswer } from "@/lib/studio/faqs";
 import { cn } from "@/lib/utils";
 
 export function ArticleFaqAccordion({
@@ -25,6 +26,7 @@ export function ArticleFaqAccordion({
         {faqs.map((faq, index) => {
           const expanded = Boolean(open[index]);
           const panelId = `${baseId}-panel-${index}`;
+          const answer = sanitizeFaqAnswer(faq.answer);
           return (
             <div key={`${faq.question}-${index}`}>
               <h3 className="m-0">
@@ -56,7 +58,14 @@ export function ArticleFaqAccordion({
                 )}
               >
                 <div className="overflow-hidden">
-                  <p className="pb-4 text-sm leading-relaxed text-neutral-600">{faq.answer}</p>
+                  {/<[a-z][\s\S]*>/i.test(answer) ? (
+                    <div
+                      className="prose prose-neutral pb-4 text-sm leading-relaxed prose-p:my-0 prose-a:text-[#c41e3a]"
+                      dangerouslySetInnerHTML={{ __html: answer }}
+                    />
+                  ) : (
+                    <p className="pb-4 text-sm leading-relaxed text-neutral-600">{answer}</p>
+                  )}
                 </div>
               </div>
             </div>

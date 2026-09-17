@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import Header from "@/components/Header";
 import { ArticleAuthorCard } from "@/components/ArticleAuthorCard";
 import { ArticleFaqAccordion } from "@/components/ArticleFaqAccordion";
 import { JsonLd } from "@/components/JsonLd";
-import { getArticleBySlug, getArticleSlugs, getRelatedArticles, normalizeArticleSlug } from "@/lib/articles";
+import {
+  getArticleBySlug,
+  getArticleSlugs,
+  getRelatedArticles,
+  normalizeArticleSlug,
+  resolvePublishedSlugRedirect,
+} from "@/lib/articles";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
 import {
@@ -37,6 +43,8 @@ export async function generateMetadata({
   const cleanSlug = normalizeArticleSlug(slug);
   const article = await getArticleBySlug(cleanSlug);
   if (!article) {
+    const redirected = await resolvePublishedSlugRedirect(cleanSlug);
+    if (redirected) permanentRedirect(`/news/${redirected}`);
     return { title: "Story not found" };
   }
 
@@ -47,7 +55,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   const { slug } = await params;
   const cleanSlug = normalizeArticleSlug(slug);
   const article = await getArticleBySlug(cleanSlug);
-  if (!article) notFound();
+  if (!article) {
+    const redirected = await resolvePublishedSlugRedirect(cleanSlug);
+    if (redirected) permanentRedirect(`/news/${redirected}`);
+    notFound();
+  }
 
   const related = await getRelatedArticles(article);
   const coverSrc = articleCoverSrc(article);
@@ -56,9 +68,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
     title: article.title,
     coverImageUrl: article.cover_image_url,
   });
-  const showCoverCaption =
-    Boolean(article.cover_image_alt) &&
-    article.cover_image_alt.trim().toLowerCase() !== article.title.trim().toLowerCase();
+  const showCoverCaption = Boolean(
+    (article.featured_image_alt?.trim() || article.cover_image_alt?.trim()) &&
+      (article.featured_image_alt?.trim() || article.cover_image_alt).trim().toLowerCase() !==
+        article.title.trim().toLowerCase(),
+  );
   const canonical = newsArticleUrl(article.slug);
   const image = storyShareImage(article);
 
@@ -84,7 +98,13 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 border-y border-neutral-200 py-3 text-sm">
               <div>
                 <span className="font-semibold text-neutral-950">
-                  {article.author?.name?.trim() || "TradeFlock Editorial Desk"}
+                  {article.author?.slug ? (
+                    <Link href={`/author/${article.author.slug}`} className="hover:text-[#c41e3a]">
+                      {article.author?.name?.trim() || "TradeFlock Editorial Desk"}
+                    </Link>
+                  ) : (
+                    article.author?.name?.trim() || "TradeFlock Editorial Desk"
+                  )}
                 </span>
                 {article.author?.title ? (
                   <span className="mt-0.5 block text-xs text-neutral-500">{article.author.title}</span>
@@ -99,7 +119,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             <div className="relative mt-5 flex min-h-[200px] items-center justify-center overflow-hidden bg-neutral-100">
               <SafeArticleImage
                 src={coverSrc}
-                alt={article.cover_image_alt}
+                alt={article.featured_image_alt?.trim() || article.cover_image_alt}
                 width={1600}
                 height={900}
                 priority
@@ -109,7 +129,9 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               />
             </div>
             {showCoverCaption ? (
-              <p className="mt-2 text-[11px] text-neutral-500">{article.cover_image_alt}</p>
+              <p className="mt-2 text-[11px] text-neutral-500">
+                {article.featured_image_alt?.trim() || article.cover_image_alt}
+              </p>
             ) : null}
 
             <div

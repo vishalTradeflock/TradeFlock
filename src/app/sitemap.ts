@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { SEED_ARTICLES } from "@/lib/data/seed";
 import { getMagazines } from "@/lib/magazines";
+import { listPublicAuthorSlugs, authorPath } from "@/lib/authors";
 import { getCanonicalUrl, magazineIssueUrl, newsArticleUrl } from "@/lib/seo";
 import { createPublicClient } from "@/lib/supabase/public";
 import { isSupabaseConfigured } from "@/lib/utils";
@@ -127,7 +128,11 @@ async function publishedArticles(): Promise<SitemapRow[]> {
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  const [articles, magazines] = await Promise.all([publishedArticles(), getMagazines()]);
+  const [articles, magazines, authorSlugs] = await Promise.all([
+    publishedArticles(),
+    getMagazines(),
+    listPublicAuthorSlugs(),
+  ]);
 
   const entries: MetadataRoute.Sitemap = [
     ...staticPages(now),
@@ -145,6 +150,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }) ?? now,
       changeFrequency: "weekly" as const,
       priority: 0.6,
+    })),
+    ...authorSlugs.map((slug) => ({
+      url: getCanonicalUrl(authorPath(slug)),
+      lastModified: now,
+      changeFrequency: "weekly" as const,
+      priority: 0.5,
     })),
   ];
 

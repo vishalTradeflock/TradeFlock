@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { FALLBACK_COVER_IMAGE } from "@/lib/images";
 import { getBaseUrl } from "@/lib/site-url";
+import { faqAnswerPlainText } from "@/lib/studio/faqs";
 import { publicStoryPath, resolveSeoDescription, resolveSeoTitle } from "@/lib/studio/seo";
-import type { ArticleWithRelations } from "@/lib/types";
+import { sectionPath, type ArticleWithRelations, type Magazine } from "@/lib/types";
 
 export const SITE_NAME = "TradeFlock USA";
 export const PUBLISHER_LOGO_URL =
@@ -21,6 +22,23 @@ export type ShareImage = {
   alt: string;
 };
 
+export type BreadcrumbItem = {
+  name: string;
+  path: string;
+};
+
+/**
+ * First-party OG file to use once `public/og/default.jpg` exists.
+ * Do not generate that asset here — swap DEFAULT_OG_IMAGE.url to
+ * getCanonicalUrl(FIRST_PARTY_OG_IMAGE_PATH) when it is published.
+ */
+export const FIRST_PARTY_OG_IMAGE_PATH = "/og/default.jpg";
+
+/**
+ * Global OG fallback. Currently the Unsplash building photo at
+ * FALLBACK_COVER_IMAGE (`photo-1486406146926-c627a92ad1ab` in src/lib/images.ts).
+ * All pages without a dedicated share image use this via getOgImage().
+ */
 export const DEFAULT_OG_IMAGE: ShareImage = {
   url: FALLBACK_COVER_IMAGE,
   alt: SITE_NAME,
@@ -63,14 +81,14 @@ export function absoluteUrl(path: string) {
 /** Canonical URL on the production origin. Never includes query strings. */
 export function getCanonicalUrl(path: string) {
   const trimmed = path.trim();
-  if (!trimmed || trimmed === "/") return `${origin()}/`;
+  if (!trimmed || trimmed === "/") return origin();
 
   if (/^https?:\/\//i.test(trimmed)) {
     try {
       const parsed = stripTracking(new URL(trimmed));
       return canonicalFromPathname(parsed.pathname);
     } catch {
-      return `${origin()}/`;
+      return origin();
     }
   }
 
@@ -81,7 +99,7 @@ export function getCanonicalUrl(path: string) {
 
 function canonicalFromPathname(pathname: string) {
   const path = pathnameWithoutSlash(pathname);
-  if (path === "/") return `${origin()}/`;
+  if (path === "/") return origin();
   return `${origin()}${path}`;
 }
 
@@ -199,7 +217,7 @@ export function storyShareImage(article: {
   if (!url) return null;
   return {
     url,
-    alt: article.featured_image_alt?.trim() || article.cover_image_alt?.trim() || article.title,
+    alt: article.featured_image_alt?.trim() || article.cover_image_alt?.trim() || "",
   };
 }
 
@@ -257,7 +275,9 @@ export function articlePageMetadata(article: ArticleWithRelations): Metadata {
   return {
     title,
     description,
-    authors: [{ name: article.author.name }],
+    authors: article.author.slug
+      ? [{ name: article.author.name, url: getCanonicalUrl(`/author/${article.author.slug}`) }]
+      : [{ name: article.author.name }],
     alternates: { canonical: url },
     openGraph: {
       title,
@@ -322,14 +342,108 @@ function asIsoDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
+export function organizationId() {
+  return `${getBaseUrl()}/#organization`;
+}
+
+export function websiteId() {
+  return `${getBaseUrl()}/#website`;
+}
+
+function publisherRef() {
+  return {
+    "@id": organizationId(),
+    "@type": "NewsMediaOrganization" as const,
+    name: SITE_NAME,
+    logo: {
+      "@type": "ImageObject" as const,
+      url: PUBLISHER_LOGO_URL,
+    },
+  };
+}
+
+export function publicSectionPath(slug: string) {
+  const clean = slug.trim().toLowerCase();
+  if (clean === "technology") return "/tech";
+  return sectionPath(clean);
+}
+
+export function siteStructuredData() {
+  const url = getCanonicalUrl("/");
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": ["NewsMediaOrganization", "Organization"],
+        "@id": organizationId(),
+        name: SITE_NAME,
+        url,
+        logo: {
+          "@type": "ImageObject",
+          url: PUBLISHER_LOGO_URL,
+        },
+        description:
+          "An independent business desk covering markets, technology, finance, and the people who run American companies.",
+        email: "info@tradeflock.com",
+        telephone: "+1-201-379-2252",
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: "River Point, 17th Floor, 444 W Lake Street",
+          addressLocality: "Chicago",
+          addressRegion: "IL",
+          postalCode: "60606",
+          addressCountry: "US",
+        },
+        sameAs: [
+          "https://www.linkedin.com/company/tradeflock-usa",
+          "https://www.linkedin.com/company/tradeflock",
+        ],
+      },
+      {
+        "@type": "WebSite",
+        "@id": websiteId(),
+        name: SITE_NAME,
+        url,
+        inLanguage: "en-US",
+        publisher: { "@id": organizationId() },
+      },
+    ],
+  };
+}
+
+export function breadcrumbListStructuredData(items: BreadcrumbItem[]) {
+  return {
+    "@type": "BreadcrumbList" as const,
+    itemListElement: items.map((item, index) => ({
+      "@type": "ListItem" as const,
+      position: index + 1,
+      name: item.name,
+      item: getCanonicalUrl(item.path),
+    })),
+  };
+}
+
+export function categoryStructuredData(categoryTitle: string, categorySlug: string) {
+  return {
+    "@context": "https://schema.org",
+    ...breadcrumbListStructuredData([
+      { name: "Home", path: "/" },
+      { name: categoryTitle, path: publicSectionPath(categorySlug) },
+    ]),
+  };
+}
+
 export function articleStructuredData(
   article: ArticleWithRelations,
   canonical: string,
   image: ShareImage | null,
 ) {
   const share = image ? getOgImage(image) : getOgImage(storyShareImage(article));
+  const categoryHref = publicSectionPath(article.category.slug);
   const newsArticle = {
     "@type": "NewsArticle",
+    "@id": `${canonical}#article`,
+    url: canonical,
     headline: article.title,
     description: article.excerpt,
     datePublished: asIsoDate(article.published_at),
@@ -340,42 +454,121 @@ export function articleStructuredData(
     },
     author: {
       "@type": "Person",
-      name: article.author.name,
+      name: article.author?.name?.trim() || "TradeFlock Editorial Desk",
+      ...(article.author?.slug
+        ? { url: getCanonicalUrl(`/author/${article.author.slug}`) }
+        : {}),
     },
-    publisher: {
-      "@type": "NewsMediaOrganization",
-      name: SITE_NAME,
-      logo: {
-        "@type": "ImageObject",
-        url: PUBLISHER_LOGO_URL,
-      },
-    },
+    publisher: publisherRef(),
     image: [share.url],
+    isPartOf: { "@id": websiteId() },
   };
 
+  const graph: Record<string, unknown>[] = [
+    newsArticle,
+    breadcrumbListStructuredData([
+      { name: "Home", path: "/" },
+      ...(categoryHref !== "/"
+        ? [{ name: article.category.name, path: categoryHref }]
+        : []),
+      { name: article.title, path: `/news/${article.slug}` },
+    ]),
+  ];
+
   const faqs = article.faqs ?? [];
-  if (!faqs.length) {
-    return {
-      "@context": "https://schema.org",
-      ...newsArticle,
-    };
+  if (faqs.length) {
+    const entities = faqs
+      .map((faq) => {
+        const question = faq.question.trim();
+        const answer = faqAnswerPlainText(faq.answer);
+        if (!question || !answer) return null;
+        return {
+          "@type": "Question",
+          name: question,
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: answer,
+          },
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+    if (entities.length) {
+      graph.push({
+        "@type": "FAQPage",
+        mainEntity: entities,
+      });
+    }
   }
 
   return {
     "@context": "https://schema.org",
+    "@graph": graph,
+  };
+}
+
+export function magazineStructuredData(magazine: Magazine, canonical: string) {
+  const image = getOgImage(
+    magazine.cover_image_url
+      ? { url: magazine.cover_image_url, alt: magazine.title }
+      : null,
+  );
+  const description =
+    magazine.description?.trim() ||
+    `Digital edition of ${magazine.title} from the TradeFlock USA magazine desk.`;
+
+  return {
+    "@context": "https://schema.org",
     "@graph": [
-      newsArticle,
       {
-        "@type": "FAQPage",
-        mainEntity: faqs.map((faq) => ({
-          "@type": "Question",
-          name: faq.question,
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: faq.answer,
-          },
-        })),
+        "@type": "Article",
+        "@id": `${canonical}#article`,
+        url: canonical,
+        headline: magazine.title,
+        description,
+        datePublished: asIsoDate(magazine.published_at),
+        mainEntityOfPage: {
+          "@type": "WebPage",
+          "@id": canonical,
+        },
+        publisher: publisherRef(),
+        image: [image.url],
+        isPartOf: { "@id": websiteId() },
       },
+      breadcrumbListStructuredData([
+        { name: "Home", path: "/" },
+        { name: "Magazine", path: "/magazine" },
+        { name: magazine.title, path: `/magazine/${magazine.slug}` },
+      ]),
+    ],
+  };
+}
+
+export function authorPersonStructuredData(author: {
+  name: string;
+  slug: string;
+  bio?: string | null;
+  title?: string | null;
+  avatar_url?: string | null;
+}) {
+  const url = getCanonicalUrl(`/author/${author.slug}`);
+  const image = absoluteMediaUrl(author.avatar_url);
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Person",
+        "@id": `${url}#person`,
+        name: author.name,
+        url,
+        ...(author.title ? { jobTitle: author.title } : {}),
+        ...(author.bio ? { description: author.bio } : {}),
+        ...(image ? { image } : {}),
+        worksFor: { "@id": organizationId() },
+      },
+      breadcrumbListStructuredData([
+        { name: "Home", path: "/" },
+        { name: author.name, path: `/author/${author.slug}` },
+      ]),
     ],
   };
 }

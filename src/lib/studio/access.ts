@@ -16,3 +16,11 @@ export function canPublishArticle(role: StudioRole) {
 export function canInviteStaff(role: StudioRole) {
   return isModerator(role);
 }
+
+export function canManageSiteSettings(role: StudioRole) {
+  return isModerator(role);
+}
+
+export function canAssignAnyAuthor(role: StudioRole) {
+  return isModerator(role);
+}

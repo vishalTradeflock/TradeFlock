@@ -276,19 +276,51 @@ export type Database = {
         Row: {
           id: string;
           header_scripts: string | null;
+          google_site_verification: string | null;
+          bing_site_verification: string | null;
           updated_at: string;
         };
         Insert: {
           id?: string;
           header_scripts?: string | null;
+          google_site_verification?: string | null;
+          bing_site_verification?: string | null;
           updated_at?: string;
         };
         Update: {
           id?: string;
           header_scripts?: string | null;
+          google_site_verification?: string | null;
+          bing_site_verification?: string | null;
           updated_at?: string;
         };
         Relationships: [];
+      };
+      article_slug_redirects: {
+        Row: {
+          old_slug: string;
+          article_id: string;
+          created_at: string;
+        };
+        Insert: {
+          old_slug: string;
+          article_id: string;
+          created_at?: string;
+        };
+        Update: {
+          old_slug?: string;
+          article_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "article_slug_redirects_article_id_fkey";
+            columns: ["article_id"];
+            isOneToOne: false;
+            referencedRelation: "articles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       profiles: {
         Row: {

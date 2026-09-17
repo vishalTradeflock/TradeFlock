@@ -3,10 +3,11 @@ import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import { MagazineHonoreeCard } from "@/components/MagazineHonoreeCard";
 import { MagazineIssueHero } from "@/components/MagazineIssueHero";
+import { JsonLd } from "@/components/JsonLd";
 import { getArticlesByMagazineId } from "@/lib/articles";
 import { directoryHonoreesForIssue } from "@/lib/magazine-honorees";
 import { getMagazineBySlug, getMagazines } from "@/lib/magazines";
-import { magazinePageMetadata } from "@/lib/seo";
+import { magazinePageMetadata, magazineStructuredData, magazineIssueUrl } from "@/lib/seo";
 
 export const revalidate = 60;
 export const dynamicParams = true;
@@ -54,10 +55,12 @@ export default async function MagazineOverviewPage({
 
   const articles = await getArticlesByMagazineId(magazine);
   const honorees = directoryHonoreesForIssue(slug, articles, magazine.title);
+  const canonical = magazineIssueUrl(magazine.slug);
 
   return (
     <>
       <Header activePage="magazine" />
+      <JsonLd data={magazineStructuredData(magazine, canonical)} />
       <main className="bg-[#faf9f7]">
         <MagazineIssueHero
           magazine={magazine}

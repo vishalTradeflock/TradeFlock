@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { sanitizeVerificationToken } from "@/lib/studio/head-meta";
 import { createPublicClient } from "@/lib/supabase/public";
 import { isSupabaseConfigured } from "@/lib/utils";
 
@@ -65,5 +66,35 @@ export const getHeaderScripts = cache(async (): Promise<HeaderScript[]> => {
     return asHeaderScripts(raw);
   } catch {
     return [];
+  }
+});
+
+export type SiteVerification = {
+  google: string | null;
+  bing: string | null;
+};
+
+export const getSiteVerification = cache(async (): Promise<SiteVerification> => {
+  const empty = { google: null, bing: null };
+  if (!isSupabaseConfigured()) return empty;
+
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("google_site_verification, bing_site_verification")
+      .eq("id", "default")
+      .maybeSingle();
+    if (error || !data) return empty;
+    return {
+      google: sanitizeVerificationToken(
+        typeof data.google_site_verification === "string" ? data.google_site_verification : "",
+      ),
+      bing: sanitizeVerificationToken(
+        typeof data.bing_site_verification === "string" ? data.bing_site_verification : "",
+      ),
+    };
+  } catch {
+    return empty;
   }
 });

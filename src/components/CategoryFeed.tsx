@@ -1,8 +1,10 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import { JsonLd } from "@/components/JsonLd";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { getCategoryDesk } from "@/lib/articles";
 import { HOME_ARTICLE_LIMIT } from "@/lib/cache";
+import { categoryStructuredData } from "@/lib/seo";
 import { articlePath } from "@/lib/types";
 import { formatPublishedAt, formatShortDate } from "@/lib/utils";
 
@@ -26,6 +28,7 @@ export default async function CategoryFeed({
   return (
     <>
       <Header activeCategory={activeSlug} tickerArticles={articles.slice(0, 12)} />
+      <JsonLd data={categoryStructuredData(categoryTitle, categorySlug)} />
       <main className="mx-auto max-w-[1240px] px-4 py-8">
         <nav aria-label="Breadcrumb" className="text-xs text-neutral-500">
           <ol className="flex flex-wrap items-center gap-1.5">
@@ -62,7 +65,7 @@ export default async function CategoryFeed({
               >
                 <SafeArticleImage
                   src={featured.cover_image_url}
-                  alt={featured.cover_image_alt || featured.title}
+                  alt={featured.cover_image_alt}
                   fill
                   priority
                   sizes="(min-width: 1024px) 55vw, 100vw"
@@ -103,7 +106,7 @@ export default async function CategoryFeed({
                       <div className="relative aspect-[16/9] overflow-hidden bg-neutral-100">
                         <SafeArticleImage
                           src={article.cover_image_url}
-                          alt={article.cover_image_alt || article.title}
+                          alt={article.cover_image_alt}
                           fill
                           sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
                           loading="lazy"

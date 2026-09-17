@@ -100,7 +100,7 @@ function LatestCard({ article }: { article: ArticleWithRelations }) {
       <div className="relative mb-3 aspect-[16/9] w-full overflow-hidden rounded-md bg-neutral-100">
         <SafeArticleImage
           src={src}
-          alt={article.cover_image_alt || article.title}
+          alt={article.cover_image_alt}
           fill
           sizes="(min-width: 768px) 33vw, 100vw"
           fallbackSrc={fallbackSrc === src ? undefined : fallbackSrc}

@@ -128,7 +128,7 @@ export default async function Home() {
                     <div className="relative mb-3 aspect-[16/10] w-full overflow-hidden rounded bg-muted">
                       <SafeArticleImage
                         src={article.cover_image_url}
-                        alt={article.cover_image_alt || article.title}
+                        alt={article.cover_image_alt}
                         fill
                         sizes="(min-width: 640px) 25vw, 100vw"
                         loading="lazy"

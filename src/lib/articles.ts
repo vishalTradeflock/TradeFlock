@@ -87,6 +87,7 @@ type ListQuery = {
   categoryName?: string;
   categoryId?: string;
   categoryIds?: string[];
+  authorId?: string;
   excludeId?: string;
   excludeCategoryIds?: string[];
   excludeSuccessInsights?: boolean;
@@ -273,6 +274,9 @@ async function queryList(options: ListQuery): Promise<ArticleWithRelations[] | n
     if (options.categoryIds?.length) {
       request = request.in("category_id", options.categoryIds);
     }
+    if (options.authorId) {
+      request = request.eq("author_id", options.authorId);
+    }
     if (options.excludeId) {
       request = request.neq("id", options.excludeId);
     }
@@ -352,6 +356,45 @@ export const getArticles = cache(async (categorySlug?: string, limit = LIST_LIMI
     (await queryList({ categorySlug, limit })) ?? filterSeed({ categorySlug, limit });
   return withListCovers(rows);
 });
+
+export const getPublishedArticlesByAuthorId = cache(async (authorId: string, limit = 60) => {
+  if (!authorId) return [];
+  const rows =
+    (await queryList({ authorId, limit })) ??
+    filterSeed({ limit }).filter((article) => article.author.id === authorId);
+  return withListCovers(rows);
+});
+
+export async function resolvePublishedSlugRedirect(oldSlug: string) {
+  const clean = normalizeArticleSlug(oldSlug);
+  if (!clean || !isSupabaseConfigured()) return null;
+
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("article_slug_redirects")
+      .select("article_id")
+      .eq("old_slug", clean)
+      .maybeSingle();
+    if (error || !data?.article_id) return null;
+
+    const article = await supabase
+      .from("articles")
+      .select("slug, status, published_at")
+      .eq("id", data.article_id)
+      .maybeSingle();
+    if (article.error || !article.data) return null;
+    if (article.data.status !== "published") return null;
+    if (article.data.published_at && article.data.published_at > new Date().toISOString()) {
+      return null;
+    }
+    const next = article.data.slug?.trim();
+    if (!next || next === clean) return null;
+    return next;
+  } catch {
+    return null;
+  }
+}
 
 function missingArticleColumn(message: string | undefined, column: string) {
   return (message ?? "").toLowerCase().includes(column);
@@ -642,7 +685,7 @@ function mapMagazineArticles(rows: unknown[] | null | undefined): ArticleWithRel
       cover_image_url:
         portraitImageUrl(row.featured_image, row.cover_image, row.cover_image_url) ?? "",
       cover_image_alt:
-        typeof row.cover_image_alt === "string" ? row.cover_image_alt : mapped?.cover_image_alt || title,
+        typeof row.cover_image_alt === "string" ? row.cover_image_alt : mapped?.cover_image_alt || "",
       category_id: String(row.category_id ?? mapped?.category_id ?? fallbackCategory.id),
       author_id: String(row.author_id ?? mapped?.author_id ?? fallbackAuthor.id),
       is_featured: Boolean(row.is_featured ?? mapped?.is_featured),

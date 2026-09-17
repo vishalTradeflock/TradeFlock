@@ -38,9 +38,9 @@ export async function generateMetadata({
     : null;
 
   return magazinePageMetadata({
-    title: `Read ${magazine.title}`,
+    title: magazine.title,
     description,
-    path: `/magazine/${magazine.slug}/read`,
+    path: `/magazine/${magazine.slug}`,
     publishedTime: magazine.published_at,
     image,
   });

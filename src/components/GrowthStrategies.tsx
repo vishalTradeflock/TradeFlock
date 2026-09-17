@@ -153,7 +153,7 @@ export default function GrowthStrategies({
                   <LeaderPortrait
                     src={article.cover_image_url}
                     name={article.authorName}
-                    alt={article.cover_image_alt || article.title}
+                    alt={article.cover_image_alt}
                   />
                 </div>
                 <div className="min-w-0 flex-1">

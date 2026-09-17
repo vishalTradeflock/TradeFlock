@@ -1,5 +1,7 @@
 import Image from "next/image";
+import Link from "next/link";
 import type { Author } from "@/lib/types";
+import { authorPath } from "@/lib/authors";
 
 const DESK_NAME = "TradeFlock Editorial Desk";
 
@@ -35,7 +37,15 @@ export function ArticleAuthorCard({ author }: { author: Author | null | undefine
         </span>
       )}
       <div className="min-w-0">
-        <h2 className="font-serif text-lg font-bold text-neutral-900">{name}</h2>
+        {author?.slug ? (
+          <h2 className="font-serif text-lg font-bold text-neutral-900">
+            <Link href={authorPath(author.slug)} className="hover:text-[#c41e3a]">
+              {name}
+            </Link>
+          </h2>
+        ) : (
+          <h2 className="font-serif text-lg font-bold text-neutral-900">{name}</h2>
+        )}
         {designation ? (
           <p className="text-xs font-semibold uppercase tracking-wider text-red-600">{designation}</p>
         ) : null}

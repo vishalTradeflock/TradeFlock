@@ -49,6 +49,12 @@ export function StudioTopBar({
           >
             Write
           </Link>
+          <Link
+            href="/studio/settings"
+            className="h-8 px-2 text-[11px] font-semibold uppercase tracking-widest leading-8 hover:text-[#c41e3a]"
+          >
+            Settings
+          </Link>
           {canInvite ? <StudioInviteStaff /> : null}
           {onSignOut !== false ? (
             <button
