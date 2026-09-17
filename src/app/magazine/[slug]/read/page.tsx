@@ -6,6 +6,7 @@ import { IssueShareButton } from "@/components/IssueShareButton";
 import { MagazineFlipbookFrame } from "@/components/MagazineFlipbookFrame";
 import { magazineExternalHref, parseFlipbookPage } from "@/lib/magazine-links";
 import { getMagazineBySlug, getMagazines } from "@/lib/magazines";
+import { magazineIssueUrl } from "@/lib/seo";
 
 export const revalidate = 120;
 export const dynamicParams = true;
@@ -29,16 +30,31 @@ export async function generateMetadata({
     return { title: "Edition not found" };
   }
 
+  const description =
+    magazine.description ??
+    `Digital flipbook of ${magazine.title} from the TradeFlock USA magazine desk.`;
+  const url = `${magazineIssueUrl(magazine.slug)}/read`;
+  const image = magazine.cover_image_url
+    ? { url: magazine.cover_image_url, alt: magazine.title }
+    : undefined;
+
   return {
     title: `Read ${magazine.title}`,
-    description:
-      magazine.description ??
-      `Digital flipbook of ${magazine.title} from the TradeFlock USA magazine desk.`,
+    description,
+    alternates: { canonical: url },
     openGraph: {
       title: magazine.title,
-      description: magazine.description ?? "TradeFlock USA magazine edition.",
+      description,
       type: "article",
+      url,
       publishedTime: magazine.published_at,
+      ...(image ? { images: [image] } : {}),
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title: magazine.title,
+      description,
+      ...(image ? { images: [image.url] } : {}),
     },
   };
 }

@@ -6,6 +6,7 @@ import { MagazineIssueHero } from "@/components/MagazineIssueHero";
 import { getArticlesByMagazineId } from "@/lib/articles";
 import { directoryHonoreesForIssue } from "@/lib/magazine-honorees";
 import { getMagazineBySlug, getMagazines } from "@/lib/magazines";
+import { magazineIssueUrl } from "@/lib/seo";
 
 export const revalidate = 60;
 export const dynamicParams = true;
@@ -31,6 +32,7 @@ export async function generateMetadata({
   const description =
     magazine.description ??
     `Digital edition of ${magazine.title} from the TradeFlock USA magazine desk.`;
+  const url = magazineIssueUrl(magazine.slug);
   const image = magazine.cover_image_url
     ? { url: magazine.cover_image_url, alt: magazine.title }
     : undefined;
@@ -38,11 +40,12 @@ export async function generateMetadata({
   return {
     title: magazine.title,
     description,
+    alternates: { canonical: url },
     openGraph: {
       title: magazine.title,
       description,
       type: "article",
-      url: `/magazine/${magazine.slug}`,
+      url,
       publishedTime: magazine.published_at,
       ...(image ? { images: [image] } : {}),
     },

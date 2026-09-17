@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import type { ArticleListCard } from "@/lib/types";
+import { articlePath, type ArticleListCard } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 3;
@@ -60,7 +60,7 @@ export default function LeadershipSpotlight({
         {visible.map((article) => (
           <Link
             key={article.id}
-            href={`/news/${article.slug}`}
+            href={articlePath(article.slug)}
             className="group border-t border-neutral-200 pt-4"
           >
             <div className="relative aspect-[16/10] overflow-hidden bg-neutral-100">

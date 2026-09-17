@@ -3,11 +3,20 @@ import Link from "next/link";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
+import { ArticleAuthorCard } from "@/components/ArticleAuthorCard";
+import { ArticleFaqAccordion } from "@/components/ArticleFaqAccordion";
+import { JsonLd } from "@/components/JsonLd";
 import { getArticleBySlug, getArticleSlugs, getRelatedArticles, normalizeArticleSlug } from "@/lib/articles";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
-import { resolveSeoDescription, resolveSeoTitle, publicStoryUrl } from "@/lib/studio/seo";
-import { sectionPath } from "@/lib/types";
+import {
+  articleStructuredData,
+  newsArticleUrl,
+  storyShareImage,
+  usableCanonicalUrl,
+} from "@/lib/seo";
+import { resolveSeoDescription, resolveSeoTitle } from "@/lib/studio/seo";
+import { articlePath, sectionPath } from "@/lib/types";
 import { formatPublishedAt } from "@/lib/utils";
 
 export const revalidate = 120;
@@ -34,29 +43,29 @@ export async function generateMetadata({
 
   const seoTitle = resolveSeoTitle(article.meta_title, article.title);
   const seoDescription = resolveSeoDescription(article.meta_description, article.excerpt);
-  const image = {
-    url: article.cover_image_url,
-    alt: article.cover_image_alt || article.title,
-  };
+  const canonical = usableCanonicalUrl(article.canonical_url, newsArticleUrl(article.slug));
+  const image = storyShareImage(article);
 
   return {
     title: seoTitle,
     description: seoDescription,
     authors: [{ name: article.author.name }],
+    alternates: { canonical },
     openGraph: {
       title: seoTitle,
       description: seoDescription,
       type: "article",
-      url: publicStoryUrl(article.slug),
+      url: newsArticleUrl(article.slug),
       publishedTime: article.published_at,
+      modifiedTime: article.updated_at ?? article.published_at,
       authors: [article.author.name],
-      images: [image],
+      ...(image ? { images: [{ url: image.url, alt: image.alt }] } : {}),
     },
     twitter: {
-      card: "summary_large_image",
+      card: image ? "summary_large_image" : "summary",
       title: seoTitle,
       description: seoDescription,
-      images: [image.url],
+      ...(image ? { images: [image.url] } : {}),
     },
   };
 }
@@ -77,18 +86,21 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   const showCoverCaption =
     Boolean(article.cover_image_alt) &&
     article.cover_image_alt.trim().toLowerCase() !== article.title.trim().toLowerCase();
+  const canonical = usableCanonicalUrl(article.canonical_url, newsArticleUrl(article.slug));
+  const image = storyShareImage(article);
 
   return (
     <>
       <Header activeCategory={article.category.slug} />
+      <JsonLd data={articleStructuredData(article, canonical, image)} />
       <main className="mx-auto max-w-[1240px] px-4 py-6">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-0">
           <article className="lg:col-span-8 lg:pr-10">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">
               <Link href={sectionPath(article.category.slug)} className="hover:underline">
                 {article.category.name}
               </Link>
-            </p>
+            </span>
             <h1 className="mt-2 font-serif text-3xl font-semibold leading-tight tracking-tight text-neutral-950 sm:text-5xl">
               {article.title}
             </h1>
@@ -98,9 +110,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
             <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 border-y border-neutral-200 py-3 text-sm">
               <div>
-                <p className="font-semibold text-neutral-950">{article.author.name}</p>
-                {article.author.title ? (
-                  <p className="text-xs text-neutral-500">{article.author.title}</p>
+                <span className="font-semibold text-neutral-950">
+                  {article.author?.name?.trim() || "TradeFlock Editorial Desk"}
+                </span>
+                {article.author?.title ? (
+                  <span className="mt-0.5 block text-xs text-neutral-500">{article.author.title}</span>
                 ) : null}
               </div>
               <span className="hidden h-8 w-px bg-neutral-200 sm:block" />
@@ -126,9 +140,12 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             ) : null}
 
             <div
-              className="prose-article prose prose-neutral mt-8 max-w-none prose-p:mb-5 prose-p:leading-relaxed prose-h3:mt-8 prose-h3:mb-3 prose-a:inline prose-a:font-normal [&_a]:inline [&_a]:font-normal [&_a]:underline [&_a]:text-[#c41e3a] hover:[&_a]:text-[#9f1830]"
+              className="prose-article prose prose-neutral mt-8 max-w-none prose-p:mb-5 prose-p:leading-relaxed prose-h2:mt-10 prose-h2:mb-3 prose-h3:mt-8 prose-h3:mb-3 prose-a:inline prose-a:font-normal [&_a]:inline [&_a]:font-normal [&_a]:underline [&_a]:text-[#c41e3a] hover:[&_a]:text-[#9f1830]"
               dangerouslySetInnerHTML={{ __html: body }}
             />
+
+            <ArticleAuthorCard author={article.author} />
+            <ArticleFaqAccordion faqs={article.faqs ?? []} />
           </article>
 
           <aside className="lg:col-span-4 lg:border-l lg:border-neutral-200 lg:pl-8">
@@ -138,7 +155,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             <ul className="divide-y divide-neutral-200">
               {related.map((item) => (
                 <li key={item.id} className="py-4">
-                  <Link href={`/news/${item.slug}`} className="group flex gap-3">
+                  <Link href={articlePath(item.slug)} className="group flex gap-3">
                     <div className="relative h-16 w-24 shrink-0 overflow-hidden bg-neutral-100">
                       <SafeArticleImage
                         src={articleCoverSrc(item)}

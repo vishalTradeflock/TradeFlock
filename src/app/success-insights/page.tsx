@@ -10,18 +10,15 @@ import {
   toArticleListCard,
 } from "@/lib/articles";
 import type { ArticleWithRelations } from "@/lib/types";
+import { publicPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
   title: "Success Insights",
   description:
     "Executive interviews, growth strategies, and leadership spotlights from the TradeFlock USA desk.",
-  openGraph: {
-    title: "Success Insights | TradeFlock USA",
-    description:
-      "How American operators grow companies — interviews, strategy, and leadership reporting.",
-    type: "website",
-  },
-};
+  path: "/success-insights",
+  ogTitle: "Success Insights | TradeFlock USA",
+});
 
 export const revalidate = 120;
 

@@ -1,6 +1,8 @@
+import { getBaseUrl } from "@/lib/site-url";
+import { articlePath } from "@/lib/types";
+
 export const SEO_TITLE_LIMIT = 60;
 export const SEO_DESCRIPTION_LIMIT = 160;
-export const PUBLIC_SITE_HOST = "www.tradeflockusa.com";
 
 export function resolveSeoTitle(metaTitle: string | null | undefined, title: string) {
   const custom = metaTitle?.trim();
@@ -21,12 +23,11 @@ export function emptyToNull(value: string | null | undefined) {
 }
 
 export function publicStoryPath(slug: string) {
-  const clean = slug.trim().replace(/^\/+|\/+$/g, "");
-  return clean ? `/news/${clean}` : "/news/";
+  return articlePath(slug);
 }
 
 export function publicStoryUrl(slug: string) {
-  return `https://${PUBLIC_SITE_HOST}${publicStoryPath(slug)}`;
+  return `${getBaseUrl()}${publicStoryPath(slug)}`;
 }
 
 export function previewSlug(slug: string, title: string) {

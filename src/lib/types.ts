@@ -22,9 +22,15 @@ export type Article = {
   excerpt: string;
   meta_title?: string | null;
   meta_description?: string | null;
+  canonical_url?: string | null;
+  featured_image?: string | null;
+  featured_image_alt?: string | null;
+  image_url?: string | null;
+  faqs?: { question: string; answer: string }[];
   body: string;
   cover_image_url: string;
   cover_image_alt: string;
+  updated_at?: string | null;
   category_id: string;
   author_id: string;
   is_featured: boolean;
@@ -102,4 +108,10 @@ export function sectionPath(slug: string) {
     return `/${clean}`;
   }
   return "/";
+}
+
+/** Public story URL — never includes a category segment. */
+export function articlePath(slug: string) {
+  const clean = slug.trim().replace(/^\/+|\/+$/g, "");
+  return clean ? `/news/${clean}` : "/news/";
 }

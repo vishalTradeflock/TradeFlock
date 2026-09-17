@@ -1,3 +1,5 @@
+import { articlePath } from "@/lib/types";
+
 export type StudioCategory = {
   id: string;
   name: string;
@@ -20,7 +22,7 @@ export type DeskStory = {
 };
 
 export function storyPreviewHref(story: { status: StudioStoryStatus; slug: string; id: string }) {
-  if (story.status === "published") return `/news/${story.slug}`;
+  if (story.status === "published") return articlePath(story.slug);
   return `/studio/write?id=${story.id}`;
 }
 

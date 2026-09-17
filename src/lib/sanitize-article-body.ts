@@ -164,5 +164,70 @@ export function sanitizeArticleBody(
   html = stripLeadingChrome(html, options.title);
   html = html.replace(/\s*style\s*=\s*(["'])[\s\S]*?\1/gi, "");
   html = repairInlineAnchors(html);
+  html = normalizeArticleHeadings(html);
+  html = rewriteInternalArticleHrefs(html);
   return html;
+}
+
+const DESK_PREFIX =
+  /^(?:https?:\/\/(?:www\.)?tradeflockusa\.com)?\/(tech|technology|markets|leadership|finance|success-insights)\/([a-z0-9][a-z0-9-]*)\/?$/i;
+
+/** Map category-prefixed story URLs onto `/news/{slug}`. */
+export function toNewsArticleHref(href: string) {
+  const trimmed = href.trim();
+  if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("mailto:")) return trimmed;
+
+  const newsMatch = trimmed.match(/^(?:https?:\/\/(?:www\.)?tradeflockusa\.com)?\/news\/([a-z0-9][a-z0-9-]*)\/?$/i);
+  if (newsMatch?.[1]) return `/news/${newsMatch[1]}`;
+
+  try {
+    const url = new URL(trimmed, "https://www.tradeflockusa.com");
+    const desk = `${url.pathname}`.replace(/\/+$/, "") || "/";
+    const match = desk.match(/^\/(tech|technology|markets|leadership|finance|success-insights)\/([a-z0-9][a-z0-9-]*)$/i);
+    if (match?.[2]) return `/news/${match[2]}`;
+  } catch {
+    /* keep original */
+  }
+
+  const relative = trimmed.match(DESK_PREFIX);
+  if (relative?.[2]) return `/news/${relative[2]}`;
+  return trimmed;
+}
+
+export function rewriteInternalArticleHrefs(html: string) {
+  return html.replace(/\bhref\s*=\s*(["'])([^"']*)\1/gi, (_full, quote: string, href: string) => {
+    return `href=${quote}${toNewsArticleHref(href)}${quote}`;
+  });
+}
+
+function headingTagForMarkdown(hashCount: number) {
+  const level = Math.min(Math.max(hashCount + 1, 2), 6);
+  return `h${level}`;
+}
+
+function convertMarkdownHeadings(html: string) {
+  let out = html.replace(
+    /<p>\s*(#{1,6})\s+([\s\S]*?)<\/p>/gi,
+    (_full, hashes: string, inner: string) => {
+      const tag = headingTagForMarkdown(hashes.length);
+      return `<${tag}>${inner.trim()}</${tag}>`;
+    },
+  );
+  out = out.replace(
+    /(^|\n)(#{1,6})\s+([^\n<]+)/g,
+    (_full, lead: string, hashes: string, title: string) => {
+      const tag = headingTagForMarkdown(hashes.length);
+      return `${lead}<${tag}>${title.trim()}</${tag}>`;
+    },
+  );
+  return out;
+}
+
+function demoteHtmlH1(html: string) {
+  return html.replace(/<h1(\b[^>]*)>/gi, "<h2$1>").replace(/<\/h1>/gi, "</h2>");
+}
+
+/** Page already has the story <h1>; body headings start at h2. */
+export function normalizeArticleHeadings(html: string) {
+  return demoteHtmlH1(convertMarkdownHeadings(html));
 }

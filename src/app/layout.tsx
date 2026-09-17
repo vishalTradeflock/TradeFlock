@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Playfair_Display, Source_Sans_3 } from "next/font/google";
+import { GlobalHeadScripts } from "@/components/GlobalHeadScripts";
 import SiteFooter from "@/components/SiteFooter";
+import { getHeaderScripts } from "@/lib/site-settings";
+import { getBaseUrl } from "@/lib/site-url";
 import "./globals.css";
 
 const playfair = Playfair_Display({
@@ -16,6 +19,7 @@ const sourceSans = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(getBaseUrl()),
   title: {
     default: "TradeFlock USA — Business & Markets",
     template: "%s | TradeFlock USA",
@@ -24,13 +28,16 @@ export const metadata: Metadata = {
     "U.S. business news on markets, technology, finance, and leadership. An editorial desk in the tradition of a national business paper.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const headerScripts = await getHeaderScripts();
+
   return (
     <html
       lang="en"
       className={`${playfair.variable} ${sourceSans.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-white font-sans text-neutral-900">
+        <GlobalHeadScripts scripts={headerScripts} />
         {children}
         <SiteFooter />
       </body>

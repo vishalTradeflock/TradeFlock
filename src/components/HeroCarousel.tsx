@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
-import type { ArticleWithRelations } from "@/lib/types";
+import { articlePath, type ArticleWithRelations } from "@/lib/types";
 import { formatPublishedAt } from "@/lib/utils";
 
 const INTERVAL_MS = 2000;
@@ -48,7 +48,7 @@ export default function HeroCarousel({
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={() => setPaused(false)}
     >
-      <Link href={`/news/${article.slug}`} className="block">
+      <Link href={articlePath(article.slug)} className="block">
         <div className="relative aspect-[16/10] overflow-hidden rounded bg-neutral-100">
           <SafeArticleImage
             key={article.id}

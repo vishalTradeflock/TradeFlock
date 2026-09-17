@@ -40,4 +40,25 @@ describe("sanitizeArticleBody", () => {
     assert.match(html, /<a href="\/x">Jane Doe<\/a>'s firm/);
     assert.doesNotMatch(html, /<\/a><\/p>/);
   });
+
+  it("demotes body h1 and converts markdown headings to h2–h6", () => {
+    const html = sanitizeArticleBody(
+      `<h1>Standfirst</h1><p>## Markets</p>\n### Policy\n<p>Body copy.</p>`,
+      { title: "A different headline" },
+    );
+    assert.match(html, /<h2[^>]*>Standfirst<\/h2>/);
+    assert.match(html, /<h3>Markets<\/h3>/);
+    assert.match(html, /<h4>Policy<\/h4>/);
+    assert.doesNotMatch(html, /<h1\b/i);
+  });
+
+  it("rewrites category-prefixed article hrefs to /news/{slug}", () => {
+    const html = sanitizeArticleBody(
+      `<p>See <a href="/tech/apple-on-device-ai-suppliers-recalibrate">the story</a> and <a href="https://www.tradeflockusa.com/finance/foo-bar">another</a>.</p>`,
+      { title: "A story" },
+    );
+    assert.match(html, /href="\/news\/apple-on-device-ai-suppliers-recalibrate"/);
+    assert.match(html, /href="\/news\/foo-bar"/);
+    assert.doesNotMatch(html, /href="\/tech\//);
+  });
 });

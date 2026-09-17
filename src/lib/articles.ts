@@ -2,6 +2,7 @@ import { cache } from "react";
 import { BIG_TAKE_LIMIT, HOME_ARTICLE_LIMIT } from "@/lib/cache";
 import { SEED_ARTICLES } from "@/lib/data/seed";
 import { assignDistinctCovers, articleCoverSrc, portraitImageUrl } from "@/lib/images";
+import { parseArticleFaqs } from "@/lib/seo";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { ArticleListCard, ArticleWithRelations, Author, Category } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/utils";
@@ -27,21 +28,42 @@ const ARTICLE_LIST_SELECT = [
   "is_featured",
   "is_breaking",
   "category:categories(id,name,slug)",
-  "author:authors(id,name,slug,title,avatar_url)",
+  "author:authors(id,name,slug,title,avatar_url,bio)",
 ].join(",");
 
 const ARTICLE_DETAIL_SELECT = `${ARTICLE_LIST_SELECT},body`;
 const ARTICLE_DETAIL_SEO_SELECT = `${ARTICLE_DETAIL_SELECT},meta_title,meta_description`;
+const ARTICLE_DETAIL_TECH_SELECT = `${ARTICLE_DETAIL_SEO_SELECT},canonical_url,faqs,featured_image,featured_image_alt,image_url,updated_at`;
 
-let articleSeoColumns = true;
+type ArticleDetailMode = "tech" | "seo" | "base";
+let articleDetailMode: ArticleDetailMode = "tech";
 
 function missingSeoColumn(message: string | undefined) {
   const haystack = (message ?? "").toLowerCase();
   return haystack.includes("meta_title") || haystack.includes("meta_description");
 }
 
+function missingTechSeoColumn(message: string | undefined) {
+  const haystack = (message ?? "").toLowerCase();
+  return /canonical_url|faqs|featured_image|image_url/.test(haystack);
+}
+
 function articleDetailSelect() {
-  return articleSeoColumns ? ARTICLE_DETAIL_SEO_SELECT : ARTICLE_DETAIL_SELECT;
+  if (articleDetailMode === "tech") return ARTICLE_DETAIL_TECH_SELECT;
+  if (articleDetailMode === "seo") return ARTICLE_DETAIL_SEO_SELECT;
+  return ARTICLE_DETAIL_SELECT;
+}
+
+function downgradeArticleDetailSelect(message: string | undefined) {
+  if (articleDetailMode === "tech" && missingTechSeoColumn(message)) {
+    articleDetailMode = "seo";
+    return true;
+  }
+  if (articleDetailMode !== "base" && missingSeoColumn(message)) {
+    articleDetailMode = "base";
+    return true;
+  }
+  return false;
 }
 
 type ArticleRow = Record<string, unknown> & {
@@ -52,6 +74,12 @@ type ArticleRow = Record<string, unknown> & {
   cover_image_url?: string | null;
   meta_title?: string | null;
   meta_description?: string | null;
+  canonical_url?: string | null;
+  featured_image?: string | null;
+  featured_image_alt?: string | null;
+  image_url?: string | null;
+  faqs?: unknown;
+  updated_at?: string | null;
 };
 
 type ListQuery = {
@@ -108,6 +136,19 @@ function mapArticleRow(row: ArticleRow, includeBody: boolean): ArticleWithRelati
       typeof row.meta_description === "string" && row.meta_description.trim()
         ? row.meta_description
         : null,
+    canonical_url:
+      typeof row.canonical_url === "string" && row.canonical_url.trim() ? row.canonical_url : null,
+    featured_image:
+      typeof row.featured_image === "string" && row.featured_image.trim()
+        ? row.featured_image
+        : null,
+    featured_image_alt:
+      typeof row.featured_image_alt === "string" && row.featured_image_alt.trim()
+        ? row.featured_image_alt
+        : null,
+    image_url: typeof row.image_url === "string" && row.image_url.trim() ? row.image_url : null,
+    updated_at: typeof row.updated_at === "string" && row.updated_at.trim() ? row.updated_at : null,
+    faqs: parseArticleFaqs(row.faqs),
     category,
     author,
   };
@@ -692,8 +733,7 @@ async function fetchArticleBySlugFromSupabase(cleanSlug: string) {
       .lte("published_at", now)
       .maybeSingle();
 
-    if (articleSeoColumns && missingSeoColumn(exact.error?.message)) {
-      articleSeoColumns = false;
+    if (downgradeArticleDetailSelect(exact.error?.message)) {
       return fetchArticleBySlugFromSupabase(cleanSlug);
     }
 
@@ -800,7 +840,7 @@ const ARCHIVE_SELECT = [
   "is_featured",
   "is_breaking",
   "categories!inner(id,name,slug)",
-  "author:authors(id,name,slug,title,avatar_url)",
+  "author:authors(id,name,slug,title,avatar_url,bio)",
 ].join(",");
 
 /** Full Success Insights archive — list fields only, bypasses the 100-row PostgREST cap. */

@@ -1,17 +1,14 @@
 import type { Metadata } from "next";
 import Header from "@/components/Header";
+import { publicPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
   title: "About Us",
   description:
     "TradeFlock USA is a leading U.S. business and leadership publication covering markets, technology, finance, and the executives who run American companies.",
-  openGraph: {
-    title: "About Us | TradeFlock USA",
-    description:
-      "A business and leadership desk for the U.S. market — honest, rigorous coverage of companies, capital, and the people who run them.",
-    type: "website",
-  },
-};
+  path: "/about",
+  ogTitle: "About Us | TradeFlock USA",
+});
 
 export const revalidate = 120;
 

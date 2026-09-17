@@ -5,20 +5,17 @@ import Header from "@/components/Header";
 import MagazineCard from "@/components/MagazineCard";
 import MagazineCover from "@/components/MagazineCover";
 import { getMagazines } from "@/lib/magazines";
+import { publicPageMetadata } from "@/lib/seo";
 import type { Magazine } from "@/lib/types";
 import { formatShortDate } from "@/lib/utils";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
   title: "Featured Issue",
   description:
     "The current TradeFlock USA digital exclusive and previous executive editions.",
-  openGraph: {
-    title: "Featured Issue | TradeFlock USA",
-    description:
-      "Read the current TradeFlock USA digital exclusive and browse previous editions.",
-    type: "website",
-  },
-};
+  path: "/magazine",
+  ogTitle: "Featured Issue | TradeFlock USA",
+});
 
 export const revalidate = 120;
 

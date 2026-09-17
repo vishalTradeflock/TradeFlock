@@ -3,6 +3,7 @@ import Header from "@/components/Header";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { getCategoryDesk } from "@/lib/articles";
 import { HOME_ARTICLE_LIMIT } from "@/lib/cache";
+import { articlePath } from "@/lib/types";
 import { formatPublishedAt, formatShortDate } from "@/lib/utils";
 
 type CategoryFeedProps = {
@@ -56,7 +57,7 @@ export default async function CategoryFeed({
           <>
             <section className="mt-8 grid grid-cols-1 items-center gap-8 border-b border-neutral-200 pb-10 lg:grid-cols-12">
               <Link
-                href={`/news/${featured.slug}`}
+                href={articlePath(featured.slug)}
                 className="group relative block aspect-[16/9] overflow-hidden bg-neutral-100 lg:col-span-7"
               >
                 <SafeArticleImage
@@ -74,7 +75,7 @@ export default async function CategoryFeed({
                 </p>
                 <h2 className="mt-2 font-serif text-3xl font-bold leading-tight tracking-tight">
                   <Link
-                    href={`/news/${featured.slug}`}
+                    href={articlePath(featured.slug)}
                     className="transition hover:text-[#c41e3a]"
                   >
                     {featured.title}
@@ -98,7 +99,7 @@ export default async function CategoryFeed({
               <section className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
                 {rest.map((article) => (
                   <article key={article.id}>
-                    <Link href={`/news/${article.slug}`} className="group block">
+                    <Link href={articlePath(article.slug)} className="group block">
                       <div className="relative aspect-[16/9] overflow-hidden bg-neutral-100">
                         <SafeArticleImage
                           src={article.cover_image_url}

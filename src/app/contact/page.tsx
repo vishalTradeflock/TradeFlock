@@ -1,18 +1,15 @@
 import type { Metadata } from "next";
 import ContactForm from "@/components/ContactForm";
 import Header from "@/components/Header";
+import { publicPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
   title: "Contact Us",
   description:
     "Reach the TradeFlock USA desk — newsroom pitches, partnership inquiries, and reader notes. Chicago office and editorial guidance.",
-  openGraph: {
-    title: "Contact Us | TradeFlock USA",
-    description:
-      "Write to the TradeFlock USA newsroom. Official email, U.S. office, and how to submit an editorial pitch.",
-    type: "website",
-  },
-};
+  path: "/contact",
+  ogTitle: "Contact Us | TradeFlock USA",
+});
 
 export const revalidate = 120;
 

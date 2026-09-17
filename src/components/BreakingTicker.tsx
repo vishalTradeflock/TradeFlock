@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import type { ArticleWithRelations } from "@/lib/types";
+import { articlePath, type ArticleWithRelations } from "@/lib/types";
 
 /** Constant reading pace: one copy of the strip crosses in width / this many px per second. */
 const PX_PER_SECOND = 48;
@@ -40,7 +40,7 @@ export function BreakingTicker({ articles }: { articles: ArticleWithRelations[] 
         {loop.map((article, index) => (
           <Link
             key={`${article.id}-${index}`}
-            href={`/news/${article.slug}`}
+            href={articlePath(article.slug)}
             className="shrink-0 whitespace-nowrap hover:text-white"
           >
             <span className="mr-2 font-semibold uppercase tracking-wider text-[#ff6b81]">

@@ -88,6 +88,11 @@ export type Database = {
           linkedin_url: string | null;
           website_url: string | null;
           flipbook_url: string | null;
+          canonical_url: string | null;
+          featured_image: string | null;
+          featured_image_alt: string | null;
+          image_url: string | null;
+          faqs: Json;
         };
         Insert: {
           id?: string;
@@ -119,6 +124,11 @@ export type Database = {
           linkedin_url?: string | null;
           website_url?: string | null;
           flipbook_url?: string | null;
+          canonical_url?: string | null;
+          featured_image?: string | null;
+          featured_image_alt?: string | null;
+          image_url?: string | null;
+          faqs?: Json;
         };
         Update: {
           id?: string;
@@ -150,6 +160,11 @@ export type Database = {
           linkedin_url?: string | null;
           website_url?: string | null;
           flipbook_url?: string | null;
+          canonical_url?: string | null;
+          featured_image?: string | null;
+          featured_image_alt?: string | null;
+          image_url?: string | null;
+          faqs?: Json;
         };
         Relationships: [
           {
@@ -254,6 +269,24 @@ export type Database = {
           desk?: string | null;
           outcome?: string | null;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      site_settings: {
+        Row: {
+          id: string;
+          header_scripts: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          header_scripts?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          header_scripts?: string | null;
+          updated_at?: string;
         };
         Relationships: [];
       };

@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
-import type { ArticleWithRelations } from "@/lib/types";
+import { articlePath, type ArticleWithRelations } from "@/lib/types";
 import { cn, formatShortDate } from "@/lib/utils";
 
 const PAGE_SIZE = 3;
@@ -96,7 +96,7 @@ function LatestCard({ article }: { article: ArticleWithRelations }) {
   const fallbackSrc = deskCoverFallback(article);
 
   return (
-    <Link href={`/news/${article.slug}`} className="group block">
+    <Link href={articlePath(article.slug)} className="group block">
       <div className="relative mb-3 aspect-[16/9] w-full overflow-hidden rounded-md bg-neutral-100">
         <SafeArticleImage
           src={src}

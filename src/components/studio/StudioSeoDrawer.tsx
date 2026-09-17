@@ -2,13 +2,13 @@
 
 import { useEffect } from "react";
 import {
-  PUBLIC_SITE_HOST,
   SEO_DESCRIPTION_LIMIT,
   SEO_TITLE_LIMIT,
   previewSlug,
   resolveSeoDescription,
   resolveSeoTitle,
 } from "@/lib/studio/seo";
+import { getSiteHost } from "@/lib/site-url";
 import { cn } from "@/lib/utils";
 
 const inputClass =
@@ -49,7 +49,7 @@ export function StudioSeoDrawer({
   const previewTitle = resolveSeoTitle(metaTitle, title);
   const previewDescription = resolveSeoDescription(metaDescription, opening);
   const pathSlug = previewSlug(slug, title);
-  const displayUrl = `${PUBLIC_SITE_HOST} › news › ${pathSlug}`;
+  const displayUrl = `${getSiteHost()} › news › ${pathSlug}`;
 
   return (
     <div className="fixed inset-0 z-50">

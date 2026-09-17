@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Header from "@/components/Header";
 import HeroCarousel from "@/components/HeroCarousel";
@@ -6,7 +7,8 @@ import MiddleScroller from "@/components/MiddleScroller";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { LATEST_SCROLLER_LIMIT } from "@/lib/cache";
 import { getCategoryDesk, getHomeLayout, getSuccessInsightsArticles } from "@/lib/articles";
-import { NAV_CATEGORIES, type ArticleWithRelations } from "@/lib/types";
+import { publicPageMetadata } from "@/lib/seo";
+import { NAV_CATEGORIES, articlePath, type ArticleWithRelations } from "@/lib/types";
 import { formatShortDate, formatTimeAgo } from "@/lib/utils";
 
 const DEEP_DIVE_FALLBACK =
@@ -40,6 +42,19 @@ function articlesForDesk(
 }
 
 export const revalidate = 120;
+
+export const metadata: Metadata = {
+  ...publicPageMetadata({
+    title: "TradeFlock USA — Business & Markets",
+    description:
+      "U.S. business news on markets, technology, finance, and leadership. An editorial desk in the tradition of a national business paper.",
+    path: "/",
+    ogTitle: "TradeFlock USA — Business & Markets",
+  }),
+  title: {
+    absolute: "TradeFlock USA — Business & Markets",
+  },
+};
 
 export default async function Home() {
   const [
@@ -109,7 +124,7 @@ export default async function Home() {
             {deepDiveTop.length ? (
               <div className="mb-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {deepDiveTop.map((article) => (
-                  <Link key={article.id} href={`/news/${article.slug}`} className="group block">
+                  <Link key={article.id} href={articlePath(article.slug)} className="group block">
                     <div className="relative mb-3 aspect-[16/10] w-full overflow-hidden rounded bg-muted">
                       <SafeArticleImage
                         src={article.cover_image_url}
@@ -140,7 +155,7 @@ export default async function Home() {
             {deepDiveSub.length ? (
               <div className="grid grid-cols-1 gap-x-5 gap-y-4 border-t border-border/60 pt-4 sm:grid-cols-2">
                 {deepDiveSub.map((article) => (
-                  <Link key={article.id} href={`/news/${article.slug}`} className="group block">
+                  <Link key={article.id} href={articlePath(article.slug)} className="group block">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-[#c41e3a]">
                       {article.category.name}
                     </p>
@@ -213,7 +228,7 @@ function RankedRail({
           <ol>
             {articles.map((article, index) => (
               <li key={article.id} className="py-3">
-                <Link href={`/news/${article.slug}`} className="group flex gap-3">
+                <Link href={articlePath(article.slug)} className="group flex gap-3">
                   <span className="font-serif text-2xl font-semibold leading-none text-[#c41e3a]">
                     {index + 1}
                   </span>
@@ -234,7 +249,7 @@ function RankedRail({
         <ol className="divide-y divide-neutral-200">
           {articles.map((article, index) => (
             <li key={article.id} className="py-3">
-              <Link href={`/news/${article.slug}`} className="group flex gap-3">
+              <Link href={articlePath(article.slug)} className="group flex gap-3">
                 <span className="font-serif text-2xl font-semibold leading-none text-[#c41e3a]">
                   {index + 1}
                 </span>
