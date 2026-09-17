@@ -35,7 +35,7 @@ export default function LatestScroller({
   return (
     <section>
       <div className="mb-6 flex items-center justify-between gap-4">
-        <h3 className="text-2xl font-bold uppercase tracking-wide">{title}</h3>
+        <h2 className="text-2xl font-bold uppercase tracking-wide">{title}</h2>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -115,9 +115,9 @@ function LatestCard({ article }: { article: ArticleWithRelations }) {
           {formatShortDate(article.published_at)}
         </time>
       </div>
-      <h4 className="mt-1 line-clamp-2 text-base font-semibold leading-snug group-hover:underline">
+      <h3 className="mt-1 line-clamp-2 text-base font-semibold leading-snug group-hover:underline">
         {article.title}
-      </h4>
+      </h3>
       <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{article.excerpt}</p>
       <p className="mt-3 text-[11px] text-muted-foreground">{article.author.name}</p>
     </Link>

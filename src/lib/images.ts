@@ -7,6 +7,8 @@ export const PLACEHOLDER_COVER = "/placeholder.jpg";
 const OPTIMIZED_COVER_HOSTS = new Set([
   "images.unsplash.com",
   "plus.unsplash.com",
+  "www.tradeflock.net",
+  "tradeflock.net",
   "www.tradeflockusa.com",
   "tradeflockusa.com",
   "tradeflock.com",

@@ -10,12 +10,11 @@ import { getArticleBySlug, getArticleSlugs, getRelatedArticles, normalizeArticle
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
 import {
+  articlePageMetadata,
   articleStructuredData,
   newsArticleUrl,
   storyShareImage,
-  usableCanonicalUrl,
 } from "@/lib/seo";
-import { resolveSeoDescription, resolveSeoTitle } from "@/lib/studio/seo";
 import { articlePath, sectionPath } from "@/lib/types";
 import { formatPublishedAt } from "@/lib/utils";
 
@@ -41,33 +40,7 @@ export async function generateMetadata({
     return { title: "Story not found" };
   }
 
-  const seoTitle = resolveSeoTitle(article.meta_title, article.title);
-  const seoDescription = resolveSeoDescription(article.meta_description, article.excerpt);
-  const canonical = usableCanonicalUrl(article.canonical_url, newsArticleUrl(article.slug));
-  const image = storyShareImage(article);
-
-  return {
-    title: seoTitle,
-    description: seoDescription,
-    authors: [{ name: article.author.name }],
-    alternates: { canonical },
-    openGraph: {
-      title: seoTitle,
-      description: seoDescription,
-      type: "article",
-      url: newsArticleUrl(article.slug),
-      publishedTime: article.published_at,
-      modifiedTime: article.updated_at ?? article.published_at,
-      authors: [article.author.name],
-      ...(image ? { images: [{ url: image.url, alt: image.alt }] } : {}),
-    },
-    twitter: {
-      card: image ? "summary_large_image" : "summary",
-      title: seoTitle,
-      description: seoDescription,
-      ...(image ? { images: [image.url] } : {}),
-    },
-  };
+  return articlePageMetadata(article);
 }
 
 export default async function ArticlePage({ params }: ArticlePageProps) {
@@ -86,7 +59,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   const showCoverCaption =
     Boolean(article.cover_image_alt) &&
     article.cover_image_alt.trim().toLowerCase() !== article.title.trim().toLowerCase();
-  const canonical = usableCanonicalUrl(article.canonical_url, newsArticleUrl(article.slug));
+  const canonical = newsArticleUrl(article.slug);
   const image = storyShareImage(article);
 
   return (

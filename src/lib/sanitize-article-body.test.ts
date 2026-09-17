@@ -54,11 +54,12 @@ describe("sanitizeArticleBody", () => {
 
   it("rewrites category-prefixed article hrefs to /news/{slug}", () => {
     const html = sanitizeArticleBody(
-      `<p>See <a href="/tech/apple-on-device-ai-suppliers-recalibrate">the story</a> and <a href="https://www.tradeflockusa.com/finance/foo-bar">another</a>.</p>`,
+      `<p>See <a href="/tech/apple-on-device-ai-suppliers-recalibrate">the story</a>, <a href="https://www.tradeflockusa.com/finance/foo-bar">another</a>, and <a href="https://www.tradeflock.net/business/another-story">net</a>.</p>`,
       { title: "A story" },
     );
     assert.match(html, /href="\/news\/apple-on-device-ai-suppliers-recalibrate"/);
     assert.match(html, /href="\/news\/foo-bar"/);
+    assert.match(html, /href="\/news\/another-story"/);
     assert.doesNotMatch(html, /href="\/tech\//);
   });
 });

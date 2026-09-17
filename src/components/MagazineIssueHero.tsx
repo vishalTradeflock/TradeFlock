@@ -26,7 +26,7 @@ function CoverMockup({ magazine }: { magazine: Magazine }) {
   return (
     <div className="relative flex aspect-[3/4] w-full flex-col justify-between border border-neutral-800 bg-neutral-950 p-6 text-white shadow-md">
       <p className="font-serif text-sm font-bold tracking-[0.18em]">TRADEFLOCK</p>
-      <h2 className="font-serif text-xl font-semibold leading-tight tracking-tight">{magazine.title}</h2>
+      <p className="font-serif text-xl font-semibold leading-tight tracking-tight">{magazine.title}</p>
       <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Digital Edition</p>
     </div>
   );

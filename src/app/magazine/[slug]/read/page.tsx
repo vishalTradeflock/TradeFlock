@@ -6,7 +6,7 @@ import { IssueShareButton } from "@/components/IssueShareButton";
 import { MagazineFlipbookFrame } from "@/components/MagazineFlipbookFrame";
 import { magazineExternalHref, parseFlipbookPage } from "@/lib/magazine-links";
 import { getMagazineBySlug, getMagazines } from "@/lib/magazines";
-import { magazineIssueUrl } from "@/lib/seo";
+import { magazinePageMetadata } from "@/lib/seo";
 
 export const revalidate = 120;
 export const dynamicParams = true;
@@ -33,30 +33,17 @@ export async function generateMetadata({
   const description =
     magazine.description ??
     `Digital flipbook of ${magazine.title} from the TradeFlock USA magazine desk.`;
-  const url = `${magazineIssueUrl(magazine.slug)}/read`;
   const image = magazine.cover_image_url
     ? { url: magazine.cover_image_url, alt: magazine.title }
-    : undefined;
+    : null;
 
-  return {
+  return magazinePageMetadata({
     title: `Read ${magazine.title}`,
     description,
-    alternates: { canonical: url },
-    openGraph: {
-      title: magazine.title,
-      description,
-      type: "article",
-      url,
-      publishedTime: magazine.published_at,
-      ...(image ? { images: [image] } : {}),
-    },
-    twitter: {
-      card: image ? "summary_large_image" : "summary",
-      title: magazine.title,
-      description,
-      ...(image ? { images: [image.url] } : {}),
-    },
-  };
+    path: `/magazine/${magazine.slug}/read`,
+    publishedTime: magazine.published_at,
+    image,
+  });
 }
 
 export default async function MagazineReadPage({
@@ -80,9 +67,9 @@ export default async function MagazineReadPage({
         >
           ← Back to Issue
         </Link>
-        <p className="hidden max-w-xl truncate font-serif text-sm text-white sm:block">
+        <h1 className="hidden max-w-xl truncate font-serif text-sm font-normal text-white sm:block">
           {magazine.title}
-        </p>
+        </h1>
         <div className="flex items-center gap-4">
           <IssueShareButton
             title={magazine.title}

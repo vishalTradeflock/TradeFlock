@@ -12,6 +12,7 @@ type HeaderProps = {
   activeCategory?: string;
   activePage?: "magazine" | "success-insights";
   tickerArticles?: ArticleWithRelations[];
+  mastheadAsH1?: boolean;
 };
 
 const TICKER_LIMIT = 8;
@@ -20,6 +21,7 @@ export default async function Header({
   activeCategory,
   activePage,
   tickerArticles,
+  mastheadAsH1 = false,
 }: HeaderProps) {
   const tickerSource =
     tickerArticles && tickerArticles.length > 0
@@ -52,7 +54,13 @@ export default async function Header({
 
       <div className="mx-auto flex max-w-[1240px] items-end justify-between px-4 pb-3 pt-4">
         <Link href="/" className="group block" aria-label="TradeFlock USA">
-          <TradeFlockLogo className="text-4xl sm:text-5xl" />
+          {mastheadAsH1 ? (
+            <h1 className="m-0 p-0 text-inherit">
+              <TradeFlockLogo className="text-4xl sm:text-5xl" />
+            </h1>
+          ) : (
+            <TradeFlockLogo className="text-4xl sm:text-5xl" />
+          )}
         </Link>
         <form
           action="/"

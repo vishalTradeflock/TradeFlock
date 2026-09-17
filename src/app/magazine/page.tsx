@@ -9,13 +9,20 @@ import { publicPageMetadata } from "@/lib/seo";
 import type { Magazine } from "@/lib/types";
 import { formatShortDate } from "@/lib/utils";
 
-export const metadata: Metadata = publicPageMetadata({
-  title: "Featured Issue",
-  description:
-    "The current TradeFlock USA digital exclusive and previous executive editions.",
-  path: "/magazine",
-  ogTitle: "Featured Issue | TradeFlock USA",
-});
+export async function generateMetadata(): Promise<Metadata> {
+  const magazines = await getMagazines();
+  const featured = magazines[0];
+  return publicPageMetadata({
+    title: "Featured Issue",
+    description:
+      "The current TradeFlock USA digital exclusive and previous executive editions.",
+    path: "/magazine",
+    ogTitle: "Featured Issue | TradeFlock USA",
+    images: featured?.cover_image_url
+      ? [{ url: featured.cover_image_url, alt: featured.title }]
+      : undefined,
+  });
+}
 
 export const revalidate = 120;
 

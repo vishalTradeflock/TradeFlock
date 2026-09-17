@@ -20,6 +20,14 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
+        hostname: "www.tradeflock.net",
+      },
+      {
+        protocol: "https",
+        hostname: "tradeflock.net",
+      },
+      {
+        protocol: "https",
         hostname: "www.tradeflockusa.com",
       },
       {
@@ -81,6 +89,9 @@ const nextConfig: NextConfig = {
       { source: "/markets/:slug", destination: "/news/:slug", permanent: true },
       { source: "/leadership/:slug", destination: "/news/:slug", permanent: true },
       { source: "/finance/:slug", destination: "/news/:slug", permanent: true },
+      { source: "/business/:slug", destination: "/news/:slug", permanent: true },
+      { source: "/success-insights/:slug", destination: "/news/:slug", permanent: true },
+      { source: "/technology", destination: "/tech", permanent: true },
     ];
   },
 };

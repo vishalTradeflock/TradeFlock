@@ -169,21 +169,27 @@ export function sanitizeArticleBody(
   return html;
 }
 
-const DESK_PREFIX =
-  /^(?:https?:\/\/(?:www\.)?tradeflockusa\.com)?\/(tech|technology|markets|leadership|finance|success-insights)\/([a-z0-9][a-z0-9-]*)\/?$/i;
+const SITE_HOSTS = "(?:www\\.)?tradeflock(?:usa)?\\.(?:com|net|us)";
+const DESK_SLUGS = "tech|technology|markets|leadership|finance|business|success-insights";
+const DESK_PREFIX = new RegExp(
+  `^(?:https?:\\/\\/${SITE_HOSTS})?\\/(${DESK_SLUGS})\\/([a-z0-9][a-z0-9-]*)\\/?$`,
+  "i",
+);
 
 /** Map category-prefixed story URLs onto `/news/{slug}`. */
 export function toNewsArticleHref(href: string) {
   const trimmed = href.trim();
   if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("mailto:")) return trimmed;
 
-  const newsMatch = trimmed.match(/^(?:https?:\/\/(?:www\.)?tradeflockusa\.com)?\/news\/([a-z0-9][a-z0-9-]*)\/?$/i);
+  const newsMatch = trimmed.match(
+    new RegExp(`^(?:https?:\\/\\/${SITE_HOSTS})?\\/news\\/([a-z0-9][a-z0-9-]*)\\/?$`, "i"),
+  );
   if (newsMatch?.[1]) return `/news/${newsMatch[1]}`;
 
   try {
-    const url = new URL(trimmed, "https://www.tradeflockusa.com");
+    const url = new URL(trimmed, "https://www.tradeflock.net");
     const desk = `${url.pathname}`.replace(/\/+$/, "") || "/";
-    const match = desk.match(/^\/(tech|technology|markets|leadership|finance|success-insights)\/([a-z0-9][a-z0-9-]*)$/i);
+    const match = desk.match(new RegExp(`^\\/(${DESK_SLUGS})\\/([a-z0-9][a-z0-9-]*)$`, "i"));
     if (match?.[2]) return `/news/${match[2]}`;
   } catch {
     /* keep original */
