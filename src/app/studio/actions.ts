@@ -13,11 +13,13 @@ import {
   canInviteStaff,
   canManageSiteSettings,
   canPublishArticle,
+  canWriteGlobalHeadCode,
 } from "@/lib/studio/access";
 import { prepareStudioFaqs, type StudioFaq } from "@/lib/studio/faqs";
 import { BIO_MAX, sanitizeAltText, sanitizeBio, sanitizeVerificationToken } from "@/lib/studio/head-meta";
 import { emptyToNull } from "@/lib/studio/seo";
-import { isValidPublicSlug, sanitizeSlug, slugFromTitle } from "@/lib/studio/slug";
+import { allocateArticleSlug, isValidPublicSlug, sanitizeSlug } from "@/lib/studio/slug";
+import { prepareGlobalHeadCode } from "@/lib/public-head";
 import { isModerator, type StudioRole } from "@/lib/studio/roles";
 import { getStudioSession } from "@/lib/studio/session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -116,13 +118,7 @@ async function nextAvailableSlug(
   base: string,
   excludeId?: string,
 ) {
-  const root = base || "story";
-  for (let n = 0; n < 50; n += 1) {
-    const suffix = n === 0 ? "" : `-${n + 1}`;
-    const candidate = `${root.slice(0, Math.max(1, 80 - suffix.length))}${suffix}`;
-    if (!(await slugTakenByOther(admin, candidate, excludeId))) return candidate;
-  }
-  return `${root.slice(0, 70)}-${Date.now().toString(36)}`;
+  return allocateArticleSlug(base, base, (slug) => slugTakenByOther(admin, slug, excludeId));
 }
 
 async function resolveAssignedAuthorId(
@@ -220,11 +216,13 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         return { ok: false, error: "Only a moderator can publish." };
       }
 
-      const requestedSlug = sanitizeSlug(input.slug ?? "");
+      const rawSlug = (input.slug ?? "").trim();
       let nextSlug = existing.slug;
       const commitSlug = requested != null || existing.status !== "published";
       if (commitSlug) {
-        if (requestedSlug) {
+        const keepPublishedDirty = existing.status === "published" && rawSlug === existing.slug;
+        if (!keepPublishedDirty && rawSlug) {
+          const requestedSlug = sanitizeSlug(rawSlug);
           if (!isValidPublicSlug(requestedSlug)) {
             return { ok: false, error: "Use a lowercase URL-safe slug with letters, numbers, and hyphens." };
           }
@@ -300,7 +298,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     const authorId = assigned.authorId;
 
     const requestedSlug = sanitizeSlug(input.slug ?? "");
-    if (requestedSlug && !isValidPublicSlug(requestedSlug)) {
+    if ((input.slug ?? "").trim() && !isValidPublicSlug(requestedSlug)) {
       return { ok: false, error: "Use a lowercase URL-safe slug with letters, numbers, and hyphens." };
     }
     if (requestedSlug && (await slugTakenByOther(admin, requestedSlug))) {
@@ -308,7 +306,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     }
     const slug = requestedSlug
       ? requestedSlug
-      : await nextAvailableSlug(admin, slugFromTitle(title));
+      : await nextAvailableSlug(admin, title);
 
     const insert = {
       slug,
@@ -489,6 +487,42 @@ export async function saveSiteVerification(
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save site settings.";
+    return { ok: false, error: message };
+  }
+}
+
+export type SaveGlobalHeadCodeResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Persists site_settings.global_head_code.
+ * Site-wide executable HTML — masthead/admin only; no public write path.
+ */
+export async function saveGlobalHeadCode(input: {
+  code?: string | null;
+}): Promise<SaveGlobalHeadCodeResult> {
+  try {
+    const session = await getStudioSession();
+    if (!session || !canWriteGlobalHeadCode(session.profile.role)) {
+      return { ok: false, error: "Only a masthead editor can change global head code." };
+    }
+
+    const prepared = prepareGlobalHeadCode(input.code ?? "");
+    if (!prepared.ok) return prepared;
+
+    const admin = createAdminClient();
+    const written = await admin.from("site_settings").upsert(
+      {
+        id: "default",
+        global_head_code: prepared.value,
+      },
+      { onConflict: "id" },
+    );
+    if (written.error) return { ok: false, error: written.error.message };
+
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not save global head code.";
     return { ok: false, error: message };
   }
 }

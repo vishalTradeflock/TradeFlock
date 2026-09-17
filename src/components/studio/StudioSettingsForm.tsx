@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { saveSiteVerification, saveStudioAuthor } from "@/app/studio/actions";
+import { saveGlobalHeadCode, saveSiteVerification, saveStudioAuthor } from "@/app/studio/actions";
 import type { StudioAuthor } from "@/components/studio/types";
 import { BIO_MAX } from "@/lib/studio/head-meta";
 
@@ -21,17 +21,22 @@ export function StudioSettingsForm({
   canEditVerification,
   google,
   bing,
+  globalHeadCode,
   authors,
   initialAuthorId,
 }: {
   canEditVerification: boolean;
   google: string;
   bing: string;
+  globalHeadCode: string;
   authors: StudioAuthor[];
   initialAuthorId: string;
 }) {
   const [googleValue, setGoogleValue] = useState(google);
   const [bingValue, setBingValue] = useState(bing);
+  const [headCode, setHeadCode] = useState(globalHeadCode);
+  const [headStatus, setHeadStatus] = useState("");
+  const [headError, setHeadError] = useState("");
   const [siteStatus, setSiteStatus] = useState("");
   const [siteError, setSiteError] = useState("");
   const [authorId, setAuthorId] = useState(initialAuthorId || authors[0]?.id || "");
@@ -180,6 +185,7 @@ export function StudioSettingsForm({
       </section>
 
       {canEditVerification ? (
+        <>
         <section className="border-t border-neutral-200 pt-8">
           <h2 className="font-serif text-2xl font-semibold tracking-tight">Search verification</h2>
           <p className="mt-2 max-w-2xl text-sm text-neutral-600">
@@ -233,6 +239,49 @@ export function StudioSettingsForm({
             Save verification
           </button>
         </section>
+
+        <section className="border-t border-neutral-200 pt-8">
+          <h2 className="font-serif text-2xl font-semibold tracking-tight">Global Head Code</h2>
+          <p className="mt-2 max-w-2xl text-sm text-neutral-600">
+            {"Code added here is inserted inside <head> on all public pages."}
+          </p>
+          <p className="mt-2 max-w-2xl text-xs text-neutral-500">
+            This field can run scripts, pixels, JSON-LD, and custom meta tags on every public page.
+            Only a masthead editor can change it. It is not injected into Studio or API routes.
+          </p>
+          <label className="mt-4 block max-w-3xl">
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
+              Global Head Code
+            </span>
+            <textarea
+              rows={12}
+              value={headCode}
+              onChange={(event) => setHeadCode(event.target.value)}
+              spellCheck={false}
+              className={`${inputClass} font-mono text-[13px]`}
+              placeholder={'<meta name="example" content="…" />\n<script>…</script>'}
+            />
+          </label>
+          {headError ? <p className="mt-3 text-sm text-[#c41e3a]">{headError}</p> : null}
+          {headStatus ? <p className="mt-3 text-sm text-neutral-600">{headStatus}</p> : null}
+          <button
+            type="button"
+            className="mt-4 h-8 bg-[#c41e3a] px-3 text-[11px] font-semibold uppercase tracking-widest text-white"
+            onClick={async () => {
+              setHeadError("");
+              setHeadStatus("");
+              const result = await saveGlobalHeadCode({ code: headCode });
+              if (!result.ok) {
+                setHeadError(result.error);
+                return;
+              }
+              setHeadStatus("Global head code saved.");
+            }}
+          >
+            Save
+          </button>
+        </section>
+        </>
       ) : (
         <p className="border-t border-neutral-200 pt-8 text-sm text-neutral-500">
           Site-wide verification metadata can only be edited by a masthead editor.

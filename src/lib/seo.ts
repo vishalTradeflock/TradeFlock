@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
-import { FALLBACK_COVER_IMAGE } from "@/lib/images";
-import { getBaseUrl } from "@/lib/site-url";
+import { firstPartyMediaUrl } from "@/lib/media-proxy";
+import { PRODUCTION_ORIGIN, getBaseUrl } from "@/lib/site-url";
 import { faqAnswerPlainText } from "@/lib/studio/faqs";
 import { publicStoryPath, resolveSeoDescription, resolveSeoTitle } from "@/lib/studio/seo";
 import { sectionPath, type ArticleWithRelations, type Magazine } from "@/lib/types";
 
 export const SITE_NAME = "TradeFlock USA";
-export const PUBLISHER_LOGO_URL =
-  "https://www.tradeflockusa.com/wp-content/uploads/2025/03/Tradeflock-Logo_1-02.png";
+export const DEFAULT_OG_IMAGE_PATH = "/og/default";
+export const PUBLISHER_LOGO_PATH = "/brand/logo";
+export const PUBLISHER_LOGO_URL = `${PRODUCTION_ORIGIN}${PUBLISHER_LOGO_PATH}`;
 
 const CATEGORY_STORY_PREFIX =
   /^(?:\/)?(tech|technology|markets|leadership|finance|business|success-insights)\/([a-z0-9][a-z0-9-]*)$/i;
@@ -27,20 +28,14 @@ export type BreadcrumbItem = {
   path: string;
 };
 
-/**
- * First-party OG file to use once `public/og/default.jpg` exists.
- * Do not generate that asset here — swap DEFAULT_OG_IMAGE.url to
- * getCanonicalUrl(FIRST_PARTY_OG_IMAGE_PATH) when it is published.
- */
-export const FIRST_PARTY_OG_IMAGE_PATH = "/og/default.jpg";
+export const FIRST_PARTY_OG_IMAGE_PATH = DEFAULT_OG_IMAGE_PATH;
 
 /**
- * Global OG fallback. Currently the Unsplash building photo at
- * FALLBACK_COVER_IMAGE (`photo-1486406146926-c627a92ad1ab` in src/lib/images.ts).
- * All pages without a dedicated share image use this via getOgImage().
+ * Global OG fallback. First-party wordmark card at /og/default.
+ * Article source images may remain external in the database; OG uses a proxied URL.
  */
 export const DEFAULT_OG_IMAGE: ShareImage = {
-  url: FALLBACK_COVER_IMAGE,
+  url: `${PRODUCTION_ORIGIN}${DEFAULT_OG_IMAGE_PATH}`,
   alt: SITE_NAME,
 };
 
@@ -170,7 +165,7 @@ export function absoluteMediaUrl(value: string | null | undefined): string | nul
 }
 
 export function getOgImage(image?: ShareImage | null): ShareImage {
-  const url = image?.url ? absoluteMediaUrl(image.url) : null;
+  const url = image?.url ? firstPartyMediaUrl(image.url) : null;
   if (url) {
     return { url, alt: image?.alt?.trim() || SITE_NAME };
   }
@@ -551,7 +546,7 @@ export function authorPersonStructuredData(author: {
   avatar_url?: string | null;
 }) {
   const url = getCanonicalUrl(`/author/${author.slug}`);
-  const image = absoluteMediaUrl(author.avatar_url);
+  const image = firstPartyMediaUrl(author.avatar_url) ?? absoluteMediaUrl(author.avatar_url);
   return {
     "@context": "https://schema.org",
     "@graph": [

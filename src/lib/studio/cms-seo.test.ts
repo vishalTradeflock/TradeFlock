@@ -1,8 +1,27 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { articlePath } from "../types.ts";
+import { PRODUCTION_ORIGIN } from "../site-url.ts";
+import { SITE_ROBOTS } from "../indexing.ts";
+import {
+  firstPartyMediaUrl,
+  isBlockedHostname,
+  isBlockedIp,
+  parseExternalImageUrl,
+} from "../media-proxy.ts";
+import { prepareGlobalHeadCode, roleCanWriteGlobalHeadCode, shouldInjectGlobalHead } from "../public-head.ts";
+import { sitemapImageUrl, sitemapNewsPath } from "../sitemap-urls.ts";
 import { faqAnswerPlainText, prepareStudioFaqs, sanitizeFaqAnswer } from "./faqs.ts";
 import { sanitizeAltText, sanitizeBio, sanitizeVerificationToken } from "./head-meta.ts";
-import { isValidPublicSlug, sanitizeSlug, slugFromTitle } from "./slug.ts";
+import { auditPublishedSlugs, buildSlugCleanupReport, classifySlugProblem } from "./slug-audit.ts";
+import {
+  allocateArticleSlug,
+  isValidPublicSlug,
+  proposeCleanSlug,
+  sanitizeSlug,
+  slugFromTitle,
+} from "./slug.ts";
 
 describe("sanitizeSlug", () => {
   it("builds a URL-safe slug from a headline", () => {
@@ -10,16 +29,196 @@ describe("sanitizeSlug", () => {
     assert.equal(isValidPublicSlug("apple-announces-new-ai-strategy"), true);
   });
 
-  it("does not append a timestamp", () => {
+  it("does not append a timestamp or content key", () => {
     const slug = slugFromTitle("Desk Note");
     assert.equal(slug, "desk-note");
     assert.equal(/\d/.test(slug), false);
   });
 
-  it("rejects empty or unsafe values", () => {
+  it("rejects empty, unsafe, and trailing-hyphen values", () => {
     assert.equal(sanitizeSlug("@@@"), "");
     assert.equal(isValidPublicSlug(""), false);
     assert.equal(isValidPublicSlug("Hello World"), false);
+    assert.equal(isValidPublicSlug("article-title-"), false);
+    assert.equal(sanitizeSlug("article-title-"), "article-title");
+  });
+
+  it("strips database/content keys from generated slugs", () => {
+    assert.equal(
+      sanitizeSlug("salesforce-ceo-warns-of-ai-risks-mu39m09z"),
+      "salesforce-ceo-warns-of-ai-risks",
+    );
+    assert.equal(slugFromTitle("Salesforce CEO warns of AI risks-mu39m09z"), "salesforce-ceo-warns-of-ai-risks");
+    assert.equal(
+      sanitizeSlug("oracle-s-ai-cloud-wins-force-a-rethink-of-who-counts-as--8mrr16"),
+      "oracle-s-ai-cloud-wins-force-a-rethink-of-who-counts-as",
+    );
+    assert.equal(
+      sanitizeSlug("networking-silicon-not-gpus-is-the-hidden-bill-in-every--ipcqqu"),
+      "networking-silicon-not-gpus-is-the-hidden-bill-in-every",
+    );
+  });
+
+  it("matches the public slug validation pattern", () => {
+    const pattern = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+    assert.equal(pattern.test("salesforce-ceo-warns-of-ai-risks"), true);
+    assert.equal(pattern.test("salesforce-ceo-warns-of-ai-risks-"), false);
+    assert.equal(isValidPublicSlug("a"), true);
+  });
+
+  it("does not put category names in article URLs", () => {
+    const slug = sanitizeSlug("Salesforce CEO warns of AI risks");
+    assert.equal(articlePath(slug), "/news/salesforce-ceo-warns-of-ai-risks");
+    assert.equal(articlePath(slug).includes("/technology/"), false);
+    assert.equal(articlePath(slug).includes("/tech/"), false);
+    assert.equal(sanitizeSlug("technology/salesforce-ceo-warns-of-ai-risks"), "salesforce-ceo-warns-of-ai-risks");
+  });
+
+  it("keeps years and uniqueness suffixes", () => {
+    assert.equal(sanitizeSlug("40-under-40-usa-2025"), "40-under-40-usa-2025");
+    assert.equal(sanitizeSlug("desk-note-2"), "desk-note-2");
+  });
+
+  it("allocates unique slugs without content keys", async () => {
+    const taken = new Set(["desk-note"]);
+    const slug = await allocateArticleSlug(null, "Desk Note", async (value) => taken.has(value));
+    assert.equal(slug, "desk-note-2");
+    assert.equal(isValidPublicSlug(slug), true);
+  });
+});
+
+describe("slug audit", () => {
+  it("proposes cleaned URLs without rewriting", () => {
+    const rows = auditPublishedSlugs([
+      { id: "keep", slug: "apple-announces-new-ai-strategy" },
+      { id: "key", slug: "salesforce-ceo-warns-of-ai-risks-mu39m09z" },
+      { id: "hyphen", slug: "salesforce-ceo-warns-of-ai-risks-" },
+    ]);
+    assert.equal(rows.some((row) => row.articleId === "keep"), false);
+    const keyed = rows.find((row) => row.articleId === "key");
+    assert.equal(keyed?.proposedSlug, "salesforce-ceo-warns-of-ai-risks");
+    assert.equal(keyed?.currentPublicUrl, `${PRODUCTION_ORIGIN}/news/salesforce-ceo-warns-of-ai-risks-mu39m09z`);
+    assert.equal(keyed?.proposedPublicUrl, `${PRODUCTION_ORIGIN}/news/salesforce-ceo-warns-of-ai-risks`);
+    assert.equal(proposeCleanSlug("salesforce-ceo-warns-of-ai-risks-"), "salesforce-ceo-warns-of-ai-risks");
+  });
+
+  it("classifies problem types and marks collisions instead of inventing a slug", () => {
+    assert.equal(classifySlugProblem("salesforce-ceo-warns-of-ai-risks-mu39m09z"), "content_key_suffix");
+    assert.equal(classifySlugProblem("oracle-counts-as--8mrr16"), "double_hyphen_key");
+    assert.equal(classifySlugProblem("fortune-50-"), "trailing_hyphen");
+
+    const report = buildSlugCleanupReport([
+      { id: "clean", slug: "apple-announces-new-ai-strategy" },
+      { id: "taken", slug: "salesforce-ceo-warns-of-ai-risks" },
+      { id: "key", slug: "salesforce-ceo-warns-of-ai-risks-mu39m09z" },
+      { id: "a", slug: "same-headline-abc123xy" },
+      { id: "b", slug: "same-headline-def456zz" },
+    ]);
+    const keyed = report.find((row) => row.articleId === "key");
+    assert.equal(keyed?.collisionStatus, "COLLISION");
+    assert.equal(keyed?.redirectRequired, true);
+    const a = report.find((row) => row.articleId === "a");
+    const b = report.find((row) => row.articleId === "b");
+    assert.equal(a?.proposedSlug, "same-headline");
+    assert.equal(b?.proposedSlug, "same-headline");
+    assert.equal(a?.collisionStatus, "COLLISION");
+    assert.equal(b?.collisionStatus, "COLLISION");
+    assert.equal(report.some((row) => row.articleId === "clean"), false);
+  });
+});
+
+describe("sitemap article URLs", () => {
+  it("only emits /news/{slug} and drops trailing hyphens", () => {
+    assert.equal(sitemapNewsPath("salesforce-ceo-warns-of-ai-risks"), "/news/salesforce-ceo-warns-of-ai-risks");
+    assert.equal(sitemapNewsPath("salesforce-ceo-warns-of-ai-risks-"), null);
+    assert.equal(sitemapNewsPath("Hello World"), null);
+    const path = sitemapNewsPath("apple-announces-new-ai-strategy");
+    assert.equal(path?.startsWith("/news/"), true);
+    assert.equal(path?.includes("/technology/"), false);
+    assert.equal(path?.includes("/markets/"), false);
+  });
+
+  it("uses first-party URLs for sitemap images", () => {
+    const proxied = sitemapImageUrl("https://image.cnbcfm.com/api/v1/image/cover.jpg");
+    assert.match(proxied ?? "", /^https:\/\/www\.tradeflock\.net\/media\/proxy\?src=/);
+    assert.equal(sitemapImageUrl("/covers/issue.jpg"), `${PRODUCTION_ORIGIN}/covers/issue.jpg`);
+  });
+});
+
+describe("image proxy helpers", () => {
+  it("rejects localhost, private IPs, and non-http sources", () => {
+    assert.equal(parseExternalImageUrl("http://127.0.0.1/x.jpg"), null);
+    assert.equal(parseExternalImageUrl("http://localhost/x.jpg"), null);
+    assert.equal(parseExternalImageUrl("http://192.168.1.4/x.jpg"), null);
+    assert.equal(parseExternalImageUrl("http://10.0.0.8/x.jpg"), null);
+    assert.equal(parseExternalImageUrl("file:///etc/passwd"), null);
+    assert.equal(isBlockedHostname("localhost"), true);
+    assert.equal(isBlockedIp("169.254.169.254"), true);
+    assert.ok(parseExternalImageUrl("https://image.cnbcfm.com/cover.jpg"));
+  });
+
+  it("converts third-party sources to first-party proxy URLs", () => {
+    const url = firstPartyMediaUrl("https://images.unsplash.com/photo-1");
+    assert.match(url ?? "", /^https:\/\/www\.tradeflock\.net\/media\/proxy\?src=/);
+    assert.equal(
+      firstPartyMediaUrl("https://www.tradeflock.net/og/default"),
+      "https://www.tradeflock.net/og/default",
+    );
+  });
+});
+
+describe("global head code", () => {
+  it("persists script, meta, link, and JSON-LD markup", () => {
+    const html = `<meta name="foo" content="bar" />
+<link rel="preconnect" href="https://example.com" />
+<script type="application/ld+json">{"@type":"WebSite"}</script>
+<script src="https://example.com/pixel.js"></script>`;
+    const prepared = prepareGlobalHeadCode(html);
+    assert.equal(prepared.ok, true);
+    if (!prepared.ok) return;
+    assert.equal(prepared.value, html);
+    assert.match(prepared.value ?? "", /<script/);
+    assert.match(prepared.value ?? "", /application\/ld\+json/);
+  });
+
+  it("renders only on public pages", () => {
+    assert.equal(shouldInjectGlobalHead("/"), true);
+    assert.equal(shouldInjectGlobalHead("/news/a-story"), true);
+    assert.equal(shouldInjectGlobalHead("/studio"), false);
+    assert.equal(shouldInjectGlobalHead("/studio/settings"), false);
+    assert.equal(shouldInjectGlobalHead("/api/studio/write"), false);
+  });
+
+  it("is admin/masthead-only to write", () => {
+    assert.equal(roleCanWriteGlobalHeadCode(null), false);
+    assert.equal(roleCanWriteGlobalHeadCode("writer"), false);
+    assert.equal(roleCanWriteGlobalHeadCode("moderator"), true);
+    assert.equal(roleCanWriteGlobalHeadCode("editor"), true);
+    assert.equal(roleCanWriteGlobalHeadCode("admin"), true);
+  });
+
+  it("documents RLS so anon cannot select executable columns", () => {
+    const sql = readFileSync(new URL("../../../supabase/migrations/20260917_global_head_code.sql", import.meta.url), "utf8");
+    assert.match(sql, /grant select \(id, google_site_verification, bing_site_verification, updated_at\)/i);
+    assert.match(sql, /revoke all on table public\.site_settings from anon, authenticated/i);
+    assert.doesNotMatch(sql, /grant insert on table public\.site_settings to anon/i);
+    assert.match(sql, /global_head_code/);
+    assert.match(sql, /header_scripts/);
+  });
+
+  it("is wired into the root layout without changing noindex", () => {
+    const layout = readFileSync(new URL("../../app/layout.tsx", import.meta.url), "utf8");
+    assert.match(layout, /SITE_ROBOTS/);
+    assert.match(layout, /GlobalHeadCode/);
+    assert.match(layout, /shouldInjectGlobalHead/);
+    assert.match(layout, /TEMPORARY: site-wide noindex/);
+    assert.equal(SITE_ROBOTS.index, false);
+    assert.equal(SITE_ROBOTS.follow, false);
+    const seo = readFileSync(new URL("../seo.ts", import.meta.url), "utf8");
+    assert.match(seo, /DEFAULT_OG_IMAGE_PATH = "\/og\/default"/);
+    assert.match(seo, /PUBLISHER_LOGO_PATH = "\/brand\/logo"/);
+    assert.doesNotMatch(seo, /unsplash/i);
+    assert.doesNotMatch(seo, /tradeflockusa\.com\/wp-content/);
   });
 });
 

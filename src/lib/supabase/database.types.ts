@@ -278,6 +278,7 @@ export type Database = {
           header_scripts: string | null;
           google_site_verification: string | null;
           bing_site_verification: string | null;
+          global_head_code: string | null;
           updated_at: string;
         };
         Insert: {
@@ -285,6 +286,7 @@ export type Database = {
           header_scripts?: string | null;
           google_site_verification?: string | null;
           bing_site_verification?: string | null;
+          global_head_code?: string | null;
           updated_at?: string;
         };
         Update: {
@@ -292,6 +294,7 @@ export type Database = {
           header_scripts?: string | null;
           google_site_verification?: string | null;
           bing_site_verification?: string | null;
+          global_head_code?: string | null;
           updated_at?: string;
         };
         Relationships: [];

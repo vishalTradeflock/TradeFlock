@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Playfair_Display, Source_Sans_3 } from "next/font/google";
+import { GlobalHeadCode } from "@/components/GlobalHeadCode";
 import { GlobalHeadScripts } from "@/components/GlobalHeadScripts";
 import { JsonLd } from "@/components/JsonLd";
 import SiteFooter from "@/components/SiteFooter";
-import { getHeaderScripts, getSiteVerification } from "@/lib/site-settings";
+import { SITE_ROBOTS } from "@/lib/indexing";
+import { shouldInjectGlobalHead } from "@/lib/public-head";
+import { getGlobalHeadCode, getHeaderScripts, getSiteVerification } from "@/lib/site-settings";
 import { siteStructuredData } from "@/lib/seo";
 import { getBaseUrl } from "@/lib/site-url";
 import "./globals.css";
@@ -31,7 +35,7 @@ export async function generateMetadata(): Promise<Metadata> {
     description:
       "U.S. business news on markets, technology, finance, and leadership. An editorial desk in the tradition of a national business paper.",
     // TEMPORARY: site-wide noindex while SEO is audited. Delete this `robots` field to restore indexing.
-    robots: { index: false, follow: false },
+    robots: SITE_ROBOTS,
     ...(verification.google || verification.bing
       ? {
           verification: {
@@ -44,16 +48,22 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const headerScripts = await getHeaderScripts();
+  const headerList = await headers();
+  const injectPublicHead = shouldInjectGlobalHead(headerList.get("x-tradeflock-path"));
+  const [headerScripts, globalHeadCode] = await Promise.all([
+    injectPublicHead ? getHeaderScripts() : Promise.resolve([]),
+    injectPublicHead ? getGlobalHeadCode() : Promise.resolve(""),
+  ]);
 
   return (
     <html
       lang="en"
       className={`${playfair.variable} ${sourceSans.variable} h-full antialiased`}
     >
+      <head>{injectPublicHead ? <GlobalHeadCode html={globalHeadCode} /> : null}</head>
       <body className="flex min-h-full flex-col bg-white font-sans text-neutral-900">
         <JsonLd data={siteStructuredData()} />
-        <GlobalHeadScripts scripts={headerScripts} />
+        {injectPublicHead ? <GlobalHeadScripts scripts={headerScripts} /> : null}
         {children}
         <SiteFooter />
       </body>

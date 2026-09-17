@@ -7,6 +7,7 @@ import {
   type WriterDesk,
 } from "@/lib/agents/prompts";
 import { FALLBACK_COVER_IMAGE, sanitizeCoverUrl } from "@/lib/images";
+import { allocateArticleSlug } from "@/lib/studio/slug";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
@@ -112,13 +113,11 @@ function parseEditorVerdict(raw: string): EditorVerdict {
   return parsed;
 }
 
-function slugify(title: string) {
-  const base = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 72);
-  return `${base || "desk-note"}-${Date.now().toString(36)}`;
+async function uniquePublishSlug(admin: ReturnType<typeof createAdminClient>, title: string) {
+  return allocateArticleSlug(null, title, async (slug) => {
+    const { data } = await admin.from("articles").select("id").eq("slug", slug).maybeSingle();
+    return Boolean(data?.id);
+  });
 }
 
 function toHtmlBody(content: string) {
@@ -320,7 +319,7 @@ async function commitVerdict(
   const admin = createAdminClient();
   const title = verdict.editedTitle.trim();
   const excerpt = verdict.excerpt.trim().slice(0, 280);
-  const slug = slugify(title);
+  const slug = await uniquePublishSlug(admin, title);
   const notes = leadNotes(lead);
   const [categoryId, authorId, coverImageUrl] = await Promise.all([
     resolveCategoryId(admin, desk, lead.category),

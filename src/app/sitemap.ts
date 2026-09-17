@@ -3,6 +3,7 @@ import { SEED_ARTICLES } from "@/lib/data/seed";
 import { getMagazines } from "@/lib/magazines";
 import { listPublicAuthorSlugs, authorPath } from "@/lib/authors";
 import { getCanonicalUrl, magazineIssueUrl, newsArticleUrl } from "@/lib/seo";
+import { sitemapNewsPath } from "@/lib/sitemap-urls";
 import { createPublicClient } from "@/lib/supabase/public";
 import { isSupabaseConfigured } from "@/lib/utils";
 
@@ -136,12 +137,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const entries: MetadataRoute.Sitemap = [
     ...staticPages(now),
-    ...articles.map((article) => ({
-      url: newsArticleUrl(article.slug),
-      lastModified: lastModified(article) ?? now,
-      changeFrequency: "weekly" as const,
-      priority: 0.7,
-    })),
+    ...articles.flatMap((article) => {
+      const path = sitemapNewsPath(article.slug);
+      if (!path) return [];
+      return [
+        {
+          url: newsArticleUrl(article.slug),
+          lastModified: lastModified(article) ?? now,
+          changeFrequency: "weekly" as const,
+          priority: 0.7,
+        },
+      ];
+    }),
     ...magazines.map((magazine) => ({
       url: magazineIssueUrl(magazine.slug),
       lastModified: lastModified({

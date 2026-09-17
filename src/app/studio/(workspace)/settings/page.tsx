@@ -31,14 +31,16 @@ export default async function StudioSettingsPage() {
 
   let google = "";
   let bing = "";
+  let globalHeadCode = "";
   if (canManageSiteSettings(session.profile.role)) {
     const { data } = await admin
       .from("site_settings")
-      .select("google_site_verification, bing_site_verification")
+      .select("google_site_verification, bing_site_verification, global_head_code")
       .eq("id", "default")
       .maybeSingle();
     google = typeof data?.google_site_verification === "string" ? data.google_site_verification : "";
     bing = typeof data?.bing_site_verification === "string" ? data.bing_site_verification : "";
+    globalHeadCode = typeof data?.global_head_code === "string" ? data.global_head_code : "";
   }
 
   return (
@@ -54,6 +56,7 @@ export default async function StudioSettingsPage() {
             canEditVerification={canManageSiteSettings(session.profile.role)}
             google={google}
             bing={bing}
+            globalHeadCode={globalHeadCode}
             authors={authors}
             initialAuthorId={authors.find((author) => ownIds.includes(author.id))?.id ?? authors[0]?.id ?? ""}
           />

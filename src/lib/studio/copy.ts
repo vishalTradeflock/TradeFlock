@@ -1,12 +1,8 @@
 import { FALLBACK_COVER_IMAGE } from "@/lib/images";
+import { slugFromTitle } from "@/lib/studio/slug";
 
 export function slugifyTitle(title: string) {
-  const base = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 72);
-  return `${base || "desk-note"}-${Date.now().toString(36)}`;
+  return slugFromTitle(title);
 }
 
 export function excerptFromHtml(html: string) {

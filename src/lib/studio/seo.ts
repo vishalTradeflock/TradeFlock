@@ -1,4 +1,5 @@
 import { getBaseUrl } from "@/lib/site-url";
+import { slugFromTitle } from "@/lib/studio/slug";
 import { articlePath } from "@/lib/types";
 
 export const SEO_TITLE_LIMIT = 60;
@@ -33,10 +34,5 @@ export function publicStoryUrl(slug: string) {
 export function previewSlug(slug: string, title: string) {
   const saved = slug.trim();
   if (saved) return saved;
-  const fromTitle = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 72);
-  return fromTitle || "story";
+  return slugFromTitle(title);
 }

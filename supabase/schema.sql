@@ -254,7 +254,9 @@ alter table public.processed_leads enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- site_settings
--- Singleton row (id = 'default') for global head scripts and similar desk config.
+-- Singleton row (id = 'default') for verification tokens and desk config.
+-- header_scripts and global_head_code are executable site-wide HTML/JS.
+-- Writes are service-role only (Studio masthead). Anon cannot SELECT those columns.
 -- ---------------------------------------------------------------------------
 
 create table if not exists public.site_settings (
@@ -275,18 +277,25 @@ execute procedure public.set_updated_at();
 
 alter table public.site_settings enable row level security;
 
+alter table public.site_settings
+  add column if not exists google_site_verification text,
+  add column if not exists bing_site_verification text,
+  add column if not exists global_head_code text;
+
+revoke all on table public.site_settings from anon, authenticated;
+
 drop policy if exists "Public read site settings" on public.site_settings;
-create policy "Public read site settings"
+drop policy if exists "Public read site verification" on public.site_settings;
+create policy "Public read site verification"
   on public.site_settings
   for select
   to anon, authenticated
   using (true);
 
-grant select on public.site_settings to anon, authenticated;
+grant select (id, google_site_verification, bing_site_verification, updated_at)
+  on table public.site_settings to anon, authenticated;
 
-alter table public.site_settings
-  add column if not exists google_site_verification text,
-  add column if not exists bing_site_verification text;
+grant select, insert, update, delete on table public.site_settings to service_role;
 
 -- ---------------------------------------------------------------------------
 -- article_slug_redirects
