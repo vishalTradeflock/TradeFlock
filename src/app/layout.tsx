@@ -26,6 +26,8 @@ export const metadata: Metadata = {
   },
   description:
     "U.S. business news on markets, technology, finance, and leadership. An editorial desk in the tradition of a national business paper.",
+  // TEMPORARY: site-wide noindex while SEO is audited. Delete this `robots` field to restore indexing.
+  robots: { index: false, follow: false },
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
