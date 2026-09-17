@@ -4,12 +4,7 @@ import FeaturedInsightsSlider from "@/components/FeaturedInsightsSlider";
 import GrowthStrategies from "@/components/GrowthStrategies";
 import LeadershipSpotlight from "@/components/LeadershipSpotlight";
 import { SUCCESS_INSIGHTS_SPOTLIGHT_COUNT } from "@/lib/cache";
-import {
-  getArticles,
-  getSuccessInsightsArchive,
-  toArticleListCard,
-} from "@/lib/articles";
-import type { ArticleWithRelations } from "@/lib/types";
+import { getSuccessInsightsArchive, toArticleListCard } from "@/lib/articles";
 
 export const metadata: Metadata = {
   title: "Success Insights",
@@ -25,27 +20,11 @@ export const metadata: Metadata = {
 
 export const revalidate = 120;
 
-function takeFeaturedInterviews(
-  insights: ArticleWithRelations[],
-  latest: ArticleWithRelations[],
-) {
-  if (insights.length >= 10) return insights.slice(0, 10);
-
-  const merged = [...insights];
-  for (const article of latest) {
-    if (merged.length >= 10) break;
-    if (!merged.some((row) => row.id === article.id)) merged.push(article);
-  }
-  return merged.slice(0, 10);
-}
-
 export default async function SuccessInsightsPage() {
   const insights = await getSuccessInsightsArchive();
-  const latest = insights.length >= 10 ? [] : await getArticles(undefined, 36);
-  const desk = insights.length ? insights : latest;
-  const featuredList = takeFeaturedInterviews(insights, latest);
+  const featuredList = insights.slice(0, 10);
   const featuredIds = new Set(featuredList.map((article) => article.id));
-  const afterFeatured = desk.filter((article) => !featuredIds.has(article.id));
+  const afterFeatured = insights.filter((article) => !featuredIds.has(article.id));
   const interviews = afterFeatured
     .slice(0, SUCCESS_INSIGHTS_SPOTLIGHT_COUNT)
     .map(toArticleListCard);
@@ -56,7 +35,7 @@ export default async function SuccessInsightsPage() {
 
   return (
     <>
-      <Header activePage="success-insights" tickerArticles={desk.slice(0, 12)} />
+      <Header activePage="success-insights" tickerArticles={insights.slice(0, 12)} />
       <main className="mx-auto max-w-[1240px] px-4 py-8">
         <section className="max-w-3xl border-b border-neutral-200 pb-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">

@@ -2,14 +2,27 @@ import { cache } from "react";
 import { BIG_TAKE_LIMIT, HOME_ARTICLE_LIMIT } from "@/lib/cache";
 import { SEED_ARTICLES } from "@/lib/data/seed";
 import { assignDistinctCovers, portraitImageUrl, resolveCoverImage } from "@/lib/images";
+import {
+  isSuccessInsightsArticle,
+  isSuccessInsightsCategory,
+  partitionHomeArticles,
+  SUCCESS_INSIGHTS_NAME,
+  SUCCESS_INSIGHTS_SLUG,
+  withoutSuccessInsights,
+} from "@/lib/success-insights";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { ArticleListCard, ArticleWithRelations, Author, Category } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/utils";
 
 const LIST_LIMIT = HOME_ARTICLE_LIMIT;
 
-export const SUCCESS_INSIGHTS_SLUG = "success-insights";
-export const SUCCESS_INSIGHTS_NAME = "Success Insights";
+export {
+  isSuccessInsightsArticle,
+  partitionHomeArticles,
+  SUCCESS_INSIGHTS_NAME,
+  SUCCESS_INSIGHTS_SLUG,
+  withoutSuccessInsights,
+} from "@/lib/success-insights";
 
 /** Homepage/rails never select `body`. There is no `desk` column — category is joined instead. */
 const ARTICLE_LIST_SELECT = [
@@ -236,9 +249,14 @@ async function queryList(options: ListQuery): Promise<ArticleWithRelations[] | n
     const { data, error } = await request;
     if (error || !data?.length) return null;
 
-    const mapped = data
+    let mapped = data
       .map((row) => mapArticleRow(row as unknown as ArticleRow, false))
       .filter((row): row is ArticleWithRelations => Boolean(row));
+
+    if (options.excludeSuccessInsights) {
+      mapped = withoutSuccessInsights(mapped);
+      return mapped;
+    }
 
     return mapped.length ? mapped : null;
   } catch {
@@ -246,23 +264,14 @@ async function queryList(options: ListQuery): Promise<ArticleWithRelations[] | n
   }
 }
 
-export function isSuccessInsightsArticle(article: { category: { slug: string; name: string } }) {
-  const slug = article.category.slug.trim().toLowerCase();
-  const name = article.category.name.trim().toLowerCase();
-  return slug === SUCCESS_INSIGHTS_SLUG || name === "success insights";
+function isSuccessInsightsDesk(slugOrName?: string) {
+  const raw = slugOrName?.trim().toLowerCase() ?? "";
+  if (!raw) return false;
+  return raw === SUCCESS_INSIGHTS_SLUG || raw === SUCCESS_INSIGHTS_NAME.toLowerCase();
 }
 
-export function partitionHomeArticles(articles: ArticleWithRelations[]) {
-  const editorialArticles: ArticleWithRelations[] = [];
-  const successInsightsArticles: ArticleWithRelations[] = [];
-  for (const article of articles) {
-    if (isSuccessInsightsArticle(article)) {
-      successInsightsArticles.push(article);
-    } else {
-      editorialArticles.push(article);
-    }
-  }
-  return { editorialArticles, successInsightsArticles };
+function editorialQueryLimit(limit: number) {
+  return Math.min(Math.max(limit * 2, limit + 80), 400);
 }
 
 const getSuccessInsightsCategoryIds = cache(async () => {
@@ -272,11 +281,7 @@ const getSuccessInsightsCategoryIds = cache(async () => {
     const { data, error } = await supabase.from("categories").select("id,name,slug");
     if (error || !data?.length) return [] as string[];
     return data
-      .filter((row) => {
-        const slug = String(row.slug ?? "").trim().toLowerCase();
-        const name = String(row.name ?? "").trim().toLowerCase();
-        return slug === SUCCESS_INSIGHTS_SLUG || name === "success insights";
-      })
+      .filter((row) => isSuccessInsightsCategory(row))
       .map((row) => String(row.id));
   } catch {
     return [] as string[];
@@ -285,25 +290,33 @@ const getSuccessInsightsCategoryIds = cache(async () => {
 
 export const getEditorialArticles = cache(async (limit = HOME_ARTICLE_LIMIT) => {
   const siIds = await getSuccessInsightsCategoryIds();
-  const queried =
-    (await queryList({
-      excludeCategoryIds: siIds.length ? siIds : undefined,
-      excludeSuccessInsights: siIds.length === 0,
-      limit,
-    })) ??
-    ((await queryList({ limit: Math.min(limit + 150, 400) })) ?? []).filter(
-      (article) => !isSuccessInsightsArticle(article),
-    );
-  const rows = queried.length
-    ? queried.slice(0, limit)
-    : filterSeed({ excludeSuccessInsights: true, limit });
-  return withListCovers(rows.filter((article) => !isSuccessInsightsArticle(article)));
+  const fetchLimit = editorialQueryLimit(limit);
+  const queried = await queryList({
+    excludeCategoryIds: siIds.length ? siIds : undefined,
+    excludeSuccessInsights: true,
+    limit: fetchLimit,
+  });
+  if (queried) {
+    return withListCovers(withoutSuccessInsights(queried).slice(0, limit));
+  }
+  if (isSupabaseConfigured()) {
+    const fallback = withoutSuccessInsights((await queryList({ limit: fetchLimit })) ?? []);
+    return withListCovers(fallback.slice(0, limit));
+  }
+  return withListCovers(filterSeed({ excludeSuccessInsights: true, limit }));
 });
 
 export const getArticles = cache(async (categorySlug?: string, limit = LIST_LIMIT) => {
+  const excludeSuccessInsights = !isSuccessInsightsDesk(categorySlug);
+  const fetchLimit = excludeSuccessInsights ? editorialQueryLimit(limit) : limit;
   const rows =
-    (await queryList({ categorySlug, limit })) ?? filterSeed({ categorySlug, limit });
-  return withListCovers(rows);
+    (await queryList({
+      categorySlug,
+      excludeSuccessInsights,
+      limit: fetchLimit,
+    })) ?? filterSeed({ categorySlug, excludeSuccessInsights, limit: fetchLimit });
+  const filtered = excludeSuccessInsights ? withoutSuccessInsights(rows) : rows;
+  return withListCovers(filtered.slice(0, limit));
 });
 
 function missingArticleColumn(message: string | undefined, column: string) {
@@ -623,6 +636,7 @@ function mapMagazineArticles(rows: unknown[] | null | undefined): ArticleWithRel
 export const getCategoryDesk = cache(async (slugOrName: string, limit = LIST_LIMIT) => {
   const raw = slugOrName.trim();
   const slug = raw.toLowerCase().replace(/\s+/g, "-");
+  const excludeSuccessInsights = !isSuccessInsightsDesk(raw) && !isSuccessInsightsDesk(slug);
   const slugAliases =
     slug === "technology" || slug === "tech" ? ["tech", "technology"] : [slug];
 
@@ -637,11 +651,25 @@ export const getCategoryDesk = cache(async (slugOrName: string, limit = LIST_LIM
     names.add("Technology");
   }
 
+  const fetchLimit = excludeSuccessInsights ? editorialQueryLimit(limit) : limit;
   for (const name of names) {
-    const fromDb = await queryList({ categoryName: name, limit });
-    if (fromDb?.length) return withListCovers(fromDb);
-    const seeded = filterSeed({ categoryName: name, limit });
-    if (seeded.length) return withListCovers(seeded);
+    const fromDb = await queryList({
+      categoryName: name,
+      excludeSuccessInsights,
+      limit: fetchLimit,
+    });
+    if (fromDb) {
+      const dbRows = excludeSuccessInsights ? withoutSuccessInsights(fromDb) : fromDb;
+      return withListCovers(dbRows.slice(0, limit));
+    }
+    if (isSupabaseConfigured()) continue;
+    const seeded = filterSeed({
+      categoryName: name,
+      excludeSuccessInsights,
+      limit: fetchLimit,
+    });
+    const seedRows = excludeSuccessInsights ? withoutSuccessInsights(seeded) : seeded;
+    if (seedRows.length) return withListCovers(seedRows.slice(0, limit));
   }
 
   return [];
@@ -859,9 +887,20 @@ export const getSuccessInsightsArchive = cache(async () => {
 });
 
 export const getBreakingArticles = cache(async () => {
-  const rows =
-    (await queryList({ breaking: true, limit: 5 })) ?? filterSeed({ breaking: true, limit: 5 });
-  const source = rows.length ? rows : ((await queryList({ limit: 3 })) ?? filterSeed({ limit: 3 }));
+  const fetchLimit = editorialQueryLimit(5);
+  const rows = withoutSuccessInsights(
+    (await queryList({
+      breaking: true,
+      excludeSuccessInsights: true,
+      limit: fetchLimit,
+    })) ?? filterSeed({ breaking: true, excludeSuccessInsights: true, limit: fetchLimit }),
+  );
+  const source = rows.length
+    ? rows
+    : withoutSuccessInsights(
+        (await queryList({ excludeSuccessInsights: true, limit: fetchLimit })) ??
+          filterSeed({ excludeSuccessInsights: true, limit: fetchLimit }),
+      );
   return withListCovers(source.slice(0, 3));
 });
 
@@ -880,15 +919,37 @@ export function toArticleListCard(article: ArticleWithRelations): ArticleListCar
 }
 
 export const getRelatedArticles = cache(async (article: ArticleWithRelations, limit = 5) => {
-  const sameDesk =
-    (await queryList({ categoryId: article.category_id, excludeId: article.id, limit })) ??
-    filterSeed({ categoryId: article.category_id, excludeId: article.id, limit });
+  const excludeSuccessInsights = !isSuccessInsightsArticle(article);
+  const fetchLimit = excludeSuccessInsights ? editorialQueryLimit(limit) : limit;
+  const sameDeskRaw =
+    (await queryList({
+      categoryId: article.category_id,
+      excludeId: article.id,
+      excludeSuccessInsights,
+      limit: fetchLimit,
+    })) ??
+    filterSeed({
+      categoryId: article.category_id,
+      excludeId: article.id,
+      excludeSuccessInsights,
+      limit: fetchLimit,
+    });
+  const sameDesk = excludeSuccessInsights ? withoutSuccessInsights(sameDeskRaw) : sameDeskRaw;
 
   if (sameDesk.length >= limit) return withListCovers(sameDesk.slice(0, limit));
 
-  const filler =
-    (await queryList({ excludeId: article.id, limit })) ??
-    filterSeed({ excludeId: article.id, limit });
+  const fillerRaw =
+    (await queryList({
+      excludeId: article.id,
+      excludeSuccessInsights,
+      limit: fetchLimit,
+    })) ??
+    filterSeed({
+      excludeId: article.id,
+      excludeSuccessInsights,
+      limit: fetchLimit,
+    });
+  const filler = excludeSuccessInsights ? withoutSuccessInsights(fillerRaw) : fillerRaw;
   const merged = [
     ...sameDesk,
     ...filler.filter((item) => !sameDesk.some((desk) => desk.id === item.id)),
@@ -901,7 +962,9 @@ export const getHomeLayout = cache(async (categorySlug?: string) => {
     ? await getArticles(categorySlug, HOME_ARTICLE_LIMIT)
     : await getEditorialArticles(HOME_ARTICLE_LIMIT);
   const { editorialArticles, successInsightsArticles } = partitionHomeArticles(articles);
-  const pool = editorialArticles.length ? editorialArticles : articles;
+  const pool = withoutSuccessInsights(
+    editorialArticles.length ? editorialArticles : articles,
+  );
   const featured = pool.find((article) => article.is_featured) ?? pool[0];
   const mostRead = [...pool]
     .sort((a, b) => b.view_count - a.view_count)
