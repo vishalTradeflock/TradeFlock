@@ -1,7 +1,7 @@
 import { articlePath } from "./types.ts";
 
 /**
- * Decode and trim a requested /news/{slug} segment without stripping trailing
+ * Decode and trim a requested /{slug} segment without stripping trailing
  * hyphens or generated keys. Redirect rows are stored as the exact old slug.
  */
 export function exactRequestedArticleSlug(slug: string) {

@@ -23,6 +23,7 @@ const DAILY_PATHS = [
 ] as const;
 
 const WEEKLY_PATHS = ["/magazine", "/magazine/all"] as const;
+const MONTHLY_PATHS = ["/about", "/contact"] as const;
 
 type SitemapRow = {
   slug: string;
@@ -56,6 +57,12 @@ function staticPages(): MetadataRoute.Sitemap {
       lastModified: nowIso,
       changeFrequency: "weekly" as const,
       priority: 0.8,
+    })),
+    ...MONTHLY_PATHS.map((path) => ({
+      url: absoluteUrl(path),
+      lastModified: nowIso,
+      changeFrequency: "monthly" as const,
+      priority: 0.4,
     })),
   ];
 }
@@ -152,7 +159,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const path = sitemapNewsPath(article.slug);
     if (!path) continue;
     articleEntries.push({
-      url: `${BASE_URL}/news/${article.slug}`,
+      url: `${BASE_URL}/${article.slug}`,
       lastModified: toIso(article.updated_at || article.published_at),
       changeFrequency: "weekly",
       priority: 0.7,

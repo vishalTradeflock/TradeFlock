@@ -588,7 +588,7 @@ export default function StudioWriter({
           <span className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
             URL
           </span>
-          <span className="text-xs">https://{getSiteHost()}/news/</span>
+          <span className="text-xs">https://{getSiteHost()}/</span>
           <input
             value={slug}
             onChange={(event) => setSlug(event.target.value)}

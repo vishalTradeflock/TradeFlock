@@ -156,8 +156,8 @@ async function recordPublishedSlugRedirect(
 
 function revalidateStoryPaths(slug: string, previousSlug?: string | null, authorSlug?: string | null) {
   revalidatePath("/", "layout");
-  revalidatePath(`/news/${slug}`);
-  if (previousSlug && previousSlug !== slug) revalidatePath(`/news/${previousSlug}`);
+  revalidatePath(`/${slug}`);
+  if (previousSlug && previousSlug !== slug) revalidatePath(`/${previousSlug}`);
   if (authorSlug) revalidatePath(`/author/${authorSlug}`);
   revalidatePath("/sitemap.xml");
 }

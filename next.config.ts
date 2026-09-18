@@ -84,13 +84,21 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
-      { source: "/tech/:slug", destination: "/news/:slug", permanent: true },
-      { source: "/technology/:slug", destination: "/news/:slug", permanent: true },
-      { source: "/markets/:slug", destination: "/news/:slug", permanent: true },
-      { source: "/leadership/:slug", destination: "/news/:slug", permanent: true },
-      { source: "/finance/:slug", destination: "/news/:slug", permanent: true },
-      { source: "/business/:slug", destination: "/news/:slug", permanent: true },
-      { source: "/success-insights/:slug", destination: "/news/:slug", permanent: true },
+      {
+        source: "/news/:slug",
+        destination: "/:slug",
+        permanent: true,
+      },
+      {
+        source: "/:category(tech|markets|leadership|finance|success-insights)/:slug",
+        destination: "/:slug",
+        permanent: true,
+      },
+      {
+        source: "/:category(technology|business)/:slug",
+        destination: "/:slug",
+        permanent: true,
+      },
       { source: "/technology", destination: "/tech", permanent: true },
     ];
   },

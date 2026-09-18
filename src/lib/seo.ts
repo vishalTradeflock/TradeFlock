@@ -3,7 +3,7 @@ import { firstPartyMediaUrl } from "@/lib/media-proxy";
 import { PRODUCTION_ORIGIN, getBaseUrl } from "@/lib/site-url";
 import { faqAnswerPlainText } from "@/lib/studio/faqs";
 import { publicStoryPath, resolveSeoDescription, resolveSeoTitle } from "@/lib/studio/seo";
-import { sectionPath, type ArticleWithRelations, type Magazine } from "@/lib/types";
+import { articlePath, sectionPath, type ArticleWithRelations, type Magazine } from "@/lib/types";
 
 export const SITE_NAME = "TradeFlock USA";
 export const DEFAULT_OG_IMAGE_PATH = "/og/default";
@@ -126,6 +126,8 @@ export function usableCanonicalUrl(value: string | null | undefined, fallback: s
     if (isPreviewHost(parsed.hostname)) return fallbackUrl;
 
     const path = pathnameWithoutSlash(parsed.pathname);
+    const newsMatch = path.match(/^\/news\/([^/]+)$/i);
+    if (newsMatch?.[1]) return newsArticleUrl(newsMatch[1]);
     const categoryMatch = path.replace(/^\//, "").match(CATEGORY_STORY_PREFIX);
     if (categoryMatch?.[2]) return newsArticleUrl(categoryMatch[2]);
 
@@ -466,7 +468,7 @@ export function articleStructuredData(
       ...(categoryHref !== "/"
         ? [{ name: article.category.name, path: categoryHref }]
         : []),
-      { name: article.title, path: `/news/${article.slug}` },
+      { name: article.title, path: articlePath(article.slug) },
     ]),
   ];
 

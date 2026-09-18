@@ -53,7 +53,7 @@ pause). Do not introduce a global client wrapper.
 - Read from Supabase in Server Components via `src/lib/supabase/server.ts`.
   Fall back to `src/lib/data/seed.ts` when env vars are missing so the UI
   remains populated in local/dev builds.
-- Dynamic article routes live at `/news/[slug]` and must export
+- Dynamic article routes live at `/[slug]` and must export
   `generateMetadata` (title, description, Open Graph).
 - Images: `next/image` with explicit `sizes`. Remote hosts must be allowlisted
   in `next.config.ts`.

@@ -52,15 +52,16 @@ describe("sanitizeArticleBody", () => {
     assert.doesNotMatch(html, /<h1\b/i);
   });
 
-  it("rewrites category-prefixed article hrefs to /news/{slug}", () => {
+  it("rewrites category-prefixed article hrefs to /{slug}", () => {
     const html = sanitizeArticleBody(
       `<p>See <a href="/tech/apple-on-device-ai-suppliers-recalibrate">the story</a>, <a href="https://www.tradeflockusa.com/finance/foo-bar">another</a>, and <a href="https://www.tradeflock.net/business/another-story">net</a>.</p>`,
       { title: "A story" },
     );
-    assert.match(html, /href="\/news\/apple-on-device-ai-suppliers-recalibrate"/);
-    assert.match(html, /href="\/news\/foo-bar"/);
-    assert.match(html, /href="\/news\/another-story"/);
+    assert.match(html, /href="\/apple-on-device-ai-suppliers-recalibrate"/);
+    assert.match(html, /href="\/foo-bar"/);
+    assert.match(html, /href="\/another-story"/);
     assert.doesNotMatch(html, /href="\/tech\//);
+    assert.doesNotMatch(html, /href="\/news\//);
   });
 
   it("strips the leftover Featured Magazine promo and All Magazines link", () => {

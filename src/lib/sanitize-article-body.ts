@@ -183,7 +183,7 @@ const DESK_PREFIX = new RegExp(
   "i",
 );
 
-/** Map category-prefixed story URLs onto `/news/{slug}`. */
+/** Map category-prefixed and legacy /news story URLs onto `/{slug}`. */
 export function toNewsArticleHref(href: string) {
   const trimmed = href.trim();
   if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("mailto:")) return trimmed;
@@ -191,19 +191,19 @@ export function toNewsArticleHref(href: string) {
   const newsMatch = trimmed.match(
     new RegExp(`^(?:https?:\\/\\/${SITE_HOSTS})?\\/news\\/([a-z0-9][a-z0-9-]*)\\/?$`, "i"),
   );
-  if (newsMatch?.[1]) return `/news/${newsMatch[1]}`;
+  if (newsMatch?.[1]) return `/${newsMatch[1]}`;
 
   try {
     const url = new URL(trimmed, "https://www.tradeflock.net");
     const desk = `${url.pathname}`.replace(/\/+$/, "") || "/";
     const match = desk.match(new RegExp(`^\\/(${DESK_SLUGS})\\/([a-z0-9][a-z0-9-]*)$`, "i"));
-    if (match?.[2]) return `/news/${match[2]}`;
+    if (match?.[2]) return `/${match[2]}`;
   } catch {
     /* keep original */
   }
 
   const relative = trimmed.match(DESK_PREFIX);
-  if (relative?.[2]) return `/news/${relative[2]}`;
+  if (relative?.[2]) return `/${relative[2]}`;
   return trimmed;
 }
 

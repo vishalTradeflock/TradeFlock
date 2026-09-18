@@ -26,14 +26,17 @@ import {
   newsArticleUrl,
   storyShareImage,
 } from "@/lib/seo";
-import { articlePath, sectionPath } from "@/lib/types";
+import { articlePath, sectionPath, RESERVED_ROOT_SLUGS } from "@/lib/types";
 
 export const revalidate = 120;
 export const dynamicParams = true;
 
 export async function generateStaticParams() {
   const slugs = await getArticleSlugs();
-  return slugs.slice(0, 12).map((slug) => ({ slug }));
+  return slugs
+    .filter((slug) => !RESERVED_ROOT_SLUGS.has(slug.trim().toLowerCase()))
+    .slice(0, 12)
+    .map((slug) => ({ slug }));
 }
 
 type ArticlePageProps = {
@@ -42,6 +45,9 @@ type ArticlePageProps = {
 
 async function loadPublishedArticleOrRedirect(slug: string) {
   const requested = normalizeArticleSlug(slug);
+  if (RESERVED_ROOT_SLUGS.has(requested.toLowerCase())) {
+    return null;
+  }
   const redirectToSlug = await resolvePublishedSlugRedirect(requested);
   const redirected = resolvePublishedArticleRequest({
     requestedSlug: requested,

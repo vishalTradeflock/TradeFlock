@@ -111,7 +111,22 @@ export function sectionPath(slug: string) {
 }
 
 /** Public story URL — never includes a category segment. */
+export const RESERVED_ROOT_SLUGS = new Set([
+  "about",
+  "contact",
+  "tech",
+  "markets",
+  "leadership",
+  "finance",
+  "success-insights",
+  "magazine",
+  "studio",
+  "author",
+  "api",
+  "news",
+]);
+
 export function articlePath(slug: string) {
   const clean = slug.trim().replace(/^\/+|\/+$/g, "");
-  return clean ? `/news/${clean}` : "/news/";
+  return clean ? `/${clean}` : "/";
 }

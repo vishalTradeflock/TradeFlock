@@ -130,7 +130,7 @@ export function StudioSeoDrawer({
                 className={inputClass}
               />
               <p className="mt-1 text-xs text-neutral-500">
-                Live URL: https://{getSiteHost()}/news/{pathSlug || "…"}. Changing the title does not
+                Live URL: https://{getSiteHost()}/{pathSlug || "…"}. Changing the title does not
                 change this. {published ? "Saving a new slug on a published story adds a permanent redirect from the old URL." : ""}
               </p>
             </label>

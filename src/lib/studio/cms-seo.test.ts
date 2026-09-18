@@ -71,7 +71,7 @@ describe("sanitizeSlug", () => {
 
   it("does not put category names in article URLs", () => {
     const slug = sanitizeSlug("Salesforce CEO warns of AI risks");
-    assert.equal(articlePath(slug), "/news/salesforce-ceo-warns-of-ai-risks");
+    assert.equal(articlePath(slug), "/salesforce-ceo-warns-of-ai-risks");
     assert.equal(articlePath(slug).includes("/technology/"), false);
     assert.equal(articlePath(slug).includes("/tech/"), false);
     assert.equal(sanitizeSlug("technology/salesforce-ceo-warns-of-ai-risks"), "salesforce-ceo-warns-of-ai-risks");
@@ -100,8 +100,8 @@ describe("slug audit", () => {
     assert.equal(rows.some((row) => row.articleId === "keep"), false);
     const keyed = rows.find((row) => row.articleId === "key");
     assert.equal(keyed?.proposedSlug, "salesforce-ceo-warns-of-ai-risks");
-    assert.equal(keyed?.currentPublicUrl, `${PRODUCTION_ORIGIN}/news/salesforce-ceo-warns-of-ai-risks-mu39m09z`);
-    assert.equal(keyed?.proposedPublicUrl, `${PRODUCTION_ORIGIN}/news/salesforce-ceo-warns-of-ai-risks`);
+    assert.equal(keyed?.currentPublicUrl, `${PRODUCTION_ORIGIN}/salesforce-ceo-warns-of-ai-risks-mu39m09z`);
+    assert.equal(keyed?.proposedPublicUrl, `${PRODUCTION_ORIGIN}/salesforce-ceo-warns-of-ai-risks`);
     assert.equal(proposeCleanSlug("salesforce-ceo-warns-of-ai-risks-"), "salesforce-ceo-warns-of-ai-risks");
   });
 
@@ -157,7 +157,7 @@ describe("published slug redirect lookup order", () => {
     });
     assert.equal(result.kind, "redirect");
     if (result.kind !== "redirect") return;
-    assert.equal(result.location, `/news/${trailingNew}`);
+    assert.equal(result.location, `/${trailingNew}`);
     assert.equal(result.location.endsWith("-"), false);
     assert.equal(result.location.includes(trailingOld), false);
   });
@@ -182,7 +182,7 @@ describe("published slug redirect lookup order", () => {
     assert.equal(result.status, 308);
     assert.equal(result.kind, "redirect");
     if (result.kind !== "redirect") return;
-    assert.equal(result.location, `/news/${contentKeyNew}`);
+    assert.equal(result.location, `/${contentKeyNew}`);
   });
 
   it("old double-hyphen slug → existing 308 behavior", () => {
@@ -195,7 +195,7 @@ describe("published slug redirect lookup order", () => {
     assert.equal(result.status, 308);
     assert.equal(result.kind, "redirect");
     if (result.kind !== "redirect") return;
-    assert.equal(result.location, `/news/${doubleHyphenNew}`);
+    assert.equal(result.location, `/${doubleHyphenNew}`);
   });
 
   it("public pages are indexable and studio stays noindex", () => {
@@ -214,7 +214,7 @@ describe("published slug redirect lookup order", () => {
   });
 
   it("article page checks exact redirects before getArticleBySlug", () => {
-    const page = readFileSync(new URL("../../app/news/[slug]/page.tsx", import.meta.url), "utf8");
+    const page = readFileSync(new URL("../../app/[slug]/page.tsx", import.meta.url), "utf8");
     const helperStart = page.indexOf("async function loadPublishedArticleOrRedirect");
     const helperEnd = page.indexOf("export async function generateMetadata");
     const helper = page.slice(helperStart, helperEnd);
@@ -236,12 +236,13 @@ describe("published slug redirect lookup order", () => {
 });
 
 describe("sitemap article URLs", () => {
-  it("only emits /news/{slug} and drops trailing hyphens", () => {
-    assert.equal(sitemapNewsPath("salesforce-ceo-warns-of-ai-risks"), "/news/salesforce-ceo-warns-of-ai-risks");
+  it("only emits /{slug} and drops trailing hyphens", () => {
+    assert.equal(sitemapNewsPath("salesforce-ceo-warns-of-ai-risks"), "/salesforce-ceo-warns-of-ai-risks");
     assert.equal(sitemapNewsPath("salesforce-ceo-warns-of-ai-risks-"), null);
     assert.equal(sitemapNewsPath("Hello World"), null);
     const path = sitemapNewsPath("apple-announces-new-ai-strategy");
-    assert.equal(path?.startsWith("/news/"), true);
+    assert.equal(path?.startsWith("/"), true);
+    assert.equal(path?.startsWith("/news/"), false);
     assert.equal(path?.includes("/technology/"), false);
     assert.equal(path?.includes("/markets/"), false);
   });
@@ -252,15 +253,16 @@ describe("sitemap article URLs", () => {
     assert.equal(sitemapNewsPath("untitled-draft"), null);
     assert.equal(
       sitemapNewsPath("private-credit-stress-tests-regulators"),
-      "/news/private-credit-stress-tests-regulators",
+      "/private-credit-stress-tests-regulators",
     );
   });
 
-  it("builds sitemap article URLs on www.tradeflock.net/news/{slug}", () => {
+  it("builds sitemap article URLs on www.tradeflock.net/{slug}", () => {
     const source = readFileSync(new URL("../../app/sitemap.ts", import.meta.url), "utf8");
     assert.match(source, /const BASE_URL = PRODUCTION_ORIGIN/);
-    assert.match(source, /\$\{BASE_URL\}\/news\/\$\{article\.slug\}/);
+    assert.match(source, /\$\{BASE_URL\}\/\$\{article\.slug\}/);
     assert.doesNotMatch(source, /article\.category|article\.section/);
+    assert.doesNotMatch(source, /\$\{BASE_URL\}\/news\/\$\{/);
     assert.doesNotMatch(source, /\$\{BASE_URL\}\/tech\/\$\{/);
   });
 
@@ -310,6 +312,7 @@ describe("global head code", () => {
   it("renders only on public pages", () => {
     assert.equal(shouldInjectGlobalHead("/"), true);
     assert.equal(shouldInjectGlobalHead("/news/a-story"), true);
+    assert.equal(shouldInjectGlobalHead("/a-story"), true);
     assert.equal(shouldInjectGlobalHead("/studio"), false);
     assert.equal(shouldInjectGlobalHead("/studio/settings"), false);
     assert.equal(shouldInjectGlobalHead("/api/studio/write"), false);

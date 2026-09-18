@@ -354,8 +354,8 @@ async function commitVerdict(
   );
 
   revalidatePath("/");
-  revalidatePath(`/news/${slug}`);
-  revalidatePath("/news/[slug]", "page");
+  revalidatePath(`/${slug}`);
+  revalidatePath("/[slug]", "page");
   revalidatePath("/success-insights");
 
   return {
