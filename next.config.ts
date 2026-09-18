@@ -2,6 +2,62 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["pdfjs-dist"],
+  async redirects() {
+    return [
+      {
+        source: "/",
+        has: [{ type: "query", key: "category", value: "leadership" }],
+        destination: "/leadership",
+        permanent: false,
+      },
+      {
+        source: "/",
+        has: [{ type: "query", key: "category", value: "tech" }],
+        destination: "/tech",
+        permanent: false,
+      },
+      {
+        source: "/",
+        has: [{ type: "query", key: "category", value: "technology" }],
+        destination: "/tech",
+        permanent: false,
+      },
+      {
+        source: "/",
+        has: [{ type: "query", key: "category", value: "markets" }],
+        destination: "/markets",
+        permanent: false,
+      },
+      {
+        source: "/",
+        has: [{ type: "query", key: "category", value: "finance" }],
+        destination: "/finance",
+        permanent: false,
+      },
+      {
+        source: "/",
+        has: [{ type: "query", key: "category", value: "success-insights" }],
+        destination: "/success-insights",
+        permanent: false,
+      },
+      {
+        source: "/news/:slug",
+        destination: "/:slug",
+        permanent: true,
+      },
+      {
+        source: "/:category(tech|markets|leadership|finance|success-insights)/:slug",
+        destination: "/:slug",
+        permanent: true,
+      },
+      {
+        source: "/:category(technology|business)/:slug",
+        destination: "/:slug",
+        permanent: true,
+      },
+      { source: "/technology", destination: "/tech", permanent: true },
+    ];
+  },
   images: {
     remotePatterns: [
       {
@@ -81,26 +137,6 @@ const nextConfig: NextConfig = {
         pathname: "/**",
       },
     ],
-  },
-  async redirects() {
-    return [
-      {
-        source: "/news/:slug",
-        destination: "/:slug",
-        permanent: true,
-      },
-      {
-        source: "/:category(tech|markets|leadership|finance|success-insights)/:slug",
-        destination: "/:slug",
-        permanent: true,
-      },
-      {
-        source: "/:category(technology|business)/:slug",
-        destination: "/:slug",
-        permanent: true,
-      },
-      { source: "/technology", destination: "/tech", permanent: true },
-    ];
   },
 };
 

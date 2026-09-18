@@ -6,8 +6,9 @@ import LatestScroller from "@/components/LatestScroller";
 import MiddleScroller from "@/components/MiddleScroller";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { LATEST_SCROLLER_LIMIT } from "@/lib/cache";
-import { getCategoryDesk, getHomeLayout, getSuccessInsightsArticles } from "@/lib/articles";
+import { getCategoryDesk, getHomeLayout } from "@/lib/articles";
 import { publicPageMetadata } from "@/lib/seo";
+import { isSuccessInsightsArticle } from "@/lib/success-insights";
 import { NAV_CATEGORIES, articlePath, type ArticleWithRelations } from "@/lib/types";
 import { formatShortDate, formatTimeAgo } from "@/lib/utils";
 
@@ -34,9 +35,13 @@ function articlesForDesk(
   slug: string,
   name: string,
 ) {
-  const fromFetched = fetched.filter((article) => matchesDesk(article, slug, name));
+  const fromFetched = fetched.filter(
+    (article) => matchesDesk(article, slug, name) && !isSuccessInsightsArticle(article),
+  );
   if (fromFetched.length) return fromFetched.slice(0, DESK_SCROLLER_LIMIT);
-  const fromRecent = recent.filter((article) => matchesDesk(article, slug, name));
+  const fromRecent = recent.filter(
+    (article) => matchesDesk(article, slug, name) && !isSuccessInsightsArticle(article),
+  );
   if (fromRecent.length) return fromRecent.slice(0, DESK_SCROLLER_LIMIT);
   return [];
 }
@@ -63,11 +68,9 @@ export default async function Home() {
       mostRead,
       editorialArticles,
     },
-    successInsightsArticles,
     ...deskQueries
   ] = await Promise.all([
     getHomeLayout(),
-    getSuccessInsightsArticles(20),
     ...NAV_CATEGORIES.map((category) => getCategoryDesk(category.slug, DESK_SCROLLER_LIMIT)),
   ]);
 
@@ -83,10 +86,8 @@ export default async function Home() {
   );
   const bigTakeArticles = remainingEditorial.slice(0, 12);
   const latestArticles = remainingEditorial.slice(12, 12 + LATEST_SCROLLER_LIMIT);
-  const middleRail =
-    successInsightsArticles.length > 0
-      ? successInsightsArticles
-      : editorialArticles.filter((article) => !occupied.has(article.id)).slice(0, 20);
+  const middleRail = remainingEditorial.slice(0, 20);
+  const tickerArticles = editorialArticles.slice(0, 8);
   const deskSections = NAV_CATEGORIES.map((category, index) => ({
     title: category.name,
     articles: articlesForDesk(
@@ -100,7 +101,7 @@ export default async function Home() {
   if (!lead && !heroArticles.length) {
     return (
       <>
-        <Header tickerArticles={successInsightsArticles} mastheadAsH1 />
+        <Header tickerArticles={tickerArticles} mastheadAsH1 />
         <main className="mx-auto max-w-[1240px] px-4 py-16">
           <p className="text-sm text-neutral-600">No stories on the desk yet.</p>
         </main>
@@ -110,7 +111,7 @@ export default async function Home() {
 
   return (
     <>
-      <Header tickerArticles={successInsightsArticles} mastheadAsH1 />
+      <Header tickerArticles={tickerArticles} mastheadAsH1 />
       <main className="mx-auto max-w-[1240px] px-4 py-6">
         <section className="grid min-h-0 grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:items-stretch lg:gap-0">
           <div className="min-h-0 lg:col-span-6 lg:pr-6">

@@ -33,14 +33,10 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     description:
       "U.S. business news on markets, technology, finance, and leadership. An editorial desk in the tradition of a national business paper.",
-    ...(verification.google || verification.bing
-      ? {
-          verification: {
-            ...(verification.google ? { google: verification.google } : {}),
-            ...(verification.bing ? { other: { "msvalidate.01": verification.bing } } : {}),
-          },
-        }
-      : {}),
+    verification: {
+      google: "IrQMJyoqG0OnLHEKbgRVcRhTppWDcarmEZCMgi0r99E",
+      ...(verification.bing ? { other: { "msvalidate.01": verification.bing } } : {}),
+    },
   };
 }
 

@@ -4,7 +4,8 @@ import { BreakingTicker } from "@/components/BreakingTicker";
 import { MastheadDateline } from "@/components/MastheadDateline";
 import TradeFlockLogo from "@/components/TradeFlockLogo";
 import { NAV_CATEGORIES, type ArticleWithRelations } from "@/lib/types";
-import { getBreakingArticles, getSuccessInsightsArticles } from "@/lib/articles";
+import { getBreakingArticles } from "@/lib/articles";
+import { isSuccessInsightsArticle } from "@/lib/success-insights";
 import { cn } from "@/lib/utils";
 import { Search } from "lucide-react";
 
@@ -23,13 +24,15 @@ export default async function Header({
   tickerArticles,
   mastheadAsH1 = false,
 }: HeaderProps) {
-  const tickerSource =
-    tickerArticles && tickerArticles.length > 0
-      ? tickerArticles
-      : await getSuccessInsightsArticles(TICKER_LIMIT);
-  const tickerArticlesForStrip = (
-    tickerSource.length ? tickerSource : await getBreakingArticles()
-  ).slice(0, TICKER_LIMIT);
+  const allowSuccessInsights = activePage === "success-insights";
+  let rawTicker: ArticleWithRelations[] =
+    tickerArticles && tickerArticles.length > 0 ? tickerArticles : [];
+  if (!allowSuccessInsights) {
+    if (!rawTicker.length) rawTicker = await getBreakingArticles();
+    rawTicker = rawTicker.filter((article) => !isSuccessInsightsArticle(article));
+    if (!rawTicker.length) rawTicker = await getBreakingArticles();
+  }
+  const tickerArticlesForStrip = rawTicker.slice(0, TICKER_LIMIT);
 
   return (
     <header className="bg-white">
