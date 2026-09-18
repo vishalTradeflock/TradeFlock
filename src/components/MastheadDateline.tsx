@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { NewYorkClock } from "@/components/NewYorkClock";
 import { formatDateline, newYorkEdition } from "@/lib/utils";
 
 type MastheadLine = {
@@ -32,7 +33,9 @@ export function MastheadDateline() {
         <>
           {line.date}
           <span className="mx-2 text-neutral-300">|</span>
-          New York
+          <span className="inline-flex items-center gap-1.5">
+            NEW YORK • <NewYorkClock />
+          </span>
           <span className="mx-2 text-neutral-300">|</span>
           {line.edition}
         </>
