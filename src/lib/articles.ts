@@ -950,11 +950,6 @@ export const getBreakingArticles = cache(async () => {
   return withListCovers(source.slice(0, 3));
 });
 
-export const getRecommendedSuccessInsights = cache(async (currentSlug: string, limit = 3) => {
-  const rows = await getSuccessInsightsArticles(limit + 6);
-  return rows.filter((article) => article.slug !== currentSlug).slice(0, limit);
-});
-
 export function toArticleListCard(article: ArticleWithRelations): ArticleListCard {
   return {
     id: article.id,
@@ -969,19 +964,22 @@ export function toArticleListCard(article: ArticleWithRelations): ArticleListCar
   };
 }
 
-export const getRelatedArticles = cache(async (article: ArticleWithRelations, limit = 5) => {
+export const getRelatedArticles = cache(async (article: ArticleWithRelations, limit = 9) => {
   const sameDesk =
     (await queryList({ categoryId: article.category_id, excludeId: article.id, limit })) ??
     filterSeed({ categoryId: article.category_id, excludeId: article.id, limit });
+  const same = sameDesk.filter((row) => row.slug !== article.slug);
 
-  if (sameDesk.length >= limit) return withListCovers(sameDesk.slice(0, limit));
+  if (same.length >= 3) return withListCovers(same.slice(0, limit));
 
   const filler =
     (await queryList({ excludeId: article.id, limit })) ??
     filterSeed({ excludeId: article.id, limit });
   const merged = [
-    ...sameDesk,
-    ...filler.filter((item) => !sameDesk.some((desk) => desk.id === item.id)),
+    ...same,
+    ...filler.filter(
+      (item) => item.slug !== article.slug && !same.some((desk) => desk.id === item.id),
+    ),
   ].slice(0, limit);
   return withListCovers(merged);
 });

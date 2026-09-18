@@ -6,14 +6,13 @@ import Header from "@/components/Header";
 import { ArticleAuthorCard } from "@/components/ArticleAuthorCard";
 import { ArticleFaqAccordion } from "@/components/ArticleFaqAccordion";
 import { JsonLd } from "@/components/JsonLd";
-import { RecommendedSuccessInsights } from "@/components/RecommendedSuccessInsights";
+import { RelatedArticles } from "@/components/RelatedArticles";
 import {
   resolvePublishedArticleRequest,
 } from "@/lib/article-slug-request";
 import {
   getArticleBySlug,
   getArticleSlugs,
-  getRecommendedSuccessInsights,
   getRelatedArticles,
   normalizeArticleSlug,
   resolvePublishedSlugRedirect,
@@ -74,10 +73,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
     notFound();
   }
 
-  const [related, recommended] = await Promise.all([
-    getRelatedArticles(article),
-    getRecommendedSuccessInsights(article.slug, 3),
-  ]);
+  const currentCategory = article.category?.name?.trim() || "Tech";
+  const related = await getRelatedArticles(article, 9);
   const coverSrc = articleCoverSrc(article);
   const coverFallback = deskCoverFallback(article);
   const body = sanitizeArticleBody(article.body, {
@@ -165,7 +162,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               Related
             </h2>
             <ul className="divide-y divide-neutral-200">
-              {related.map((item) => (
+              {related.slice(0, 5).map((item) => (
                 <li key={item.id} className="py-4">
                   <Link href={articlePath(item.slug)} className="group flex gap-3">
                     <div className="relative h-16 w-24 shrink-0 overflow-hidden bg-neutral-100">
@@ -192,7 +189,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             </ul>
           </aside>
         </div>
-        <RecommendedSuccessInsights articles={recommended} />
+        <RelatedArticles categoryName={currentCategory} articles={related} />
       </main>
     </>
   );
