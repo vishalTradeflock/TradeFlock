@@ -1,39 +1,28 @@
 import type { MetadataRoute } from "next";
 import { SEED_ARTICLES } from "@/lib/data/seed";
 import { getMagazines } from "@/lib/magazines";
-import { listPublicAuthorSlugs, authorPath } from "@/lib/authors";
-import { getCanonicalUrl, magazineIssueUrl, newsArticleUrl } from "@/lib/seo";
 import { sitemapNewsPath } from "@/lib/sitemap-urls";
+import { PRODUCTION_ORIGIN } from "@/lib/site-url";
 import { createPublicClient } from "@/lib/supabase/public";
 import { isSupabaseConfigured } from "@/lib/utils";
 
 export const revalidate = 86400;
 
+const BASE_URL = PRODUCTION_ORIGIN;
 const PAGE_SIZE = 1000;
 /** Leave headroom under the 50,000 URL sitemap cap so this can split later. */
 const MAX_URLS = 45_000;
 
-const STATIC_PATHS = [
+const DAILY_PATHS = [
   "/",
   "/tech",
   "/markets",
   "/leadership",
   "/finance",
   "/success-insights",
-  "/magazine",
-  "/magazine/all",
-  "/about",
-  "/contact",
 ] as const;
 
-function staticPages(now: Date): MetadataRoute.Sitemap {
-  return STATIC_PATHS.map((path, index) => ({
-    url: getCanonicalUrl(path),
-    lastModified: now,
-    changeFrequency: index === 0 ? "daily" : "weekly",
-    priority: index === 0 ? 1 : 0.8,
-  }));
-}
+const WEEKLY_PATHS = ["/magazine", "/magazine/all"] as const;
 
 type SitemapRow = {
   slug: string;
@@ -41,16 +30,38 @@ type SitemapRow = {
   published_at?: string | null;
 };
 
-function lastModified(row: SitemapRow) {
-  const value = row.updated_at || row.published_at;
-  if (!value) return undefined;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : date;
+function absoluteUrl(path: string) {
+  if (!path || path === "/") return BASE_URL;
+  const pathname = path.startsWith("/") ? path : `/${path}`;
+  return `${BASE_URL}${pathname}`;
+}
+
+function toIso(value?: string | Date | null) {
+  if (!value) return new Date().toISOString();
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function staticPages(): MetadataRoute.Sitemap {
+  const nowIso = toIso(new Date());
+  return [
+    ...DAILY_PATHS.map((path) => ({
+      url: absoluteUrl(path),
+      lastModified: nowIso,
+      changeFrequency: "daily" as const,
+      priority: path === "/" ? 1.0 : 0.8,
+    })),
+    ...WEEKLY_PATHS.map((path) => ({
+      url: absoluteUrl(path),
+      lastModified: nowIso,
+      changeFrequency: "weekly" as const,
+      priority: 0.8,
+    })),
+  ];
 }
 
 async function paginatePublishedArticles(): Promise<SitemapRow[]> {
   const supabase = createPublicClient();
-  const now = new Date().toISOString();
   const rows: SitemapRow[] = [];
   let from = 0;
   let selectMode: "full" | "published" | "slug" = "full";
@@ -64,7 +75,8 @@ async function paginatePublishedArticles(): Promise<SitemapRow[]> {
         .from("articles")
         .select("slug, updated_at, published_at")
         .eq("status", "published")
-        .lte("published_at", now)
+        .not("slug", "is", null)
+        .order("published_at", { ascending: false })
         .range(from, rangeEnd);
       if (error) {
         selectMode = "published";
@@ -80,7 +92,8 @@ async function paginatePublishedArticles(): Promise<SitemapRow[]> {
         .from("articles")
         .select("slug, published_at")
         .eq("status", "published")
-        .lte("published_at", now)
+        .not("slug", "is", null)
+        .order("published_at", { ascending: false })
         .range(from, rangeEnd);
       if (error) {
         selectMode = "slug";
@@ -95,6 +108,7 @@ async function paginatePublishedArticles(): Promise<SitemapRow[]> {
         .from("articles")
         .select("slug")
         .eq("status", "published")
+        .not("slug", "is", null)
         .range(from, rangeEnd);
       if (error || !data) break;
       page = data.map((row) => ({ slug: row.slug }));
@@ -128,43 +142,31 @@ async function publishedArticles(): Promise<SitemapRow[]> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date();
-  const [articles, magazines, authorSlugs] = await Promise.all([
+  const [articles, magazines] = await Promise.all([
     publishedArticles(),
     getMagazines(),
-    listPublicAuthorSlugs(),
   ]);
 
-  const entries: MetadataRoute.Sitemap = [
-    ...staticPages(now),
-    ...articles.flatMap((article) => {
-      const path = sitemapNewsPath(article.slug);
-      if (!path) return [];
-      return [
-        {
-          url: newsArticleUrl(article.slug),
-          lastModified: lastModified(article) ?? now,
-          changeFrequency: "weekly" as const,
-          priority: 0.7,
-        },
-      ];
-    }),
-    ...magazines.map((magazine) => ({
-      url: magazineIssueUrl(magazine.slug),
-      lastModified: lastModified({
-        slug: magazine.slug,
-        published_at: magazine.published_at,
-      }) ?? now,
-      changeFrequency: "weekly" as const,
-      priority: 0.6,
-    })),
-    ...authorSlugs.map((slug) => ({
-      url: getCanonicalUrl(authorPath(slug)),
-      lastModified: now,
-      changeFrequency: "weekly" as const,
-      priority: 0.5,
-    })),
-  ];
+  const articleEntries: MetadataRoute.Sitemap = [];
+  for (const article of articles) {
+    const path = sitemapNewsPath(article.slug);
+    if (!path) continue;
+    articleEntries.push({
+      url: `${BASE_URL}/news/${article.slug}`,
+      lastModified: toIso(article.updated_at || article.published_at),
+      changeFrequency: "weekly",
+      priority: 0.7,
+    });
+  }
 
-  return entries.slice(0, MAX_URLS);
+  const magazineEntries: MetadataRoute.Sitemap = magazines
+    .filter((magazine) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(magazine.slug))
+    .map((magazine) => ({
+      url: `${BASE_URL}/magazine/${magazine.slug}`,
+      lastModified: toIso(magazine.published_at),
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    }));
+
+  return [...staticPages(), ...articleEntries, ...magazineEntries].slice(0, MAX_URLS);
 }

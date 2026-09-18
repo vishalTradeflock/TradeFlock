@@ -246,6 +246,24 @@ describe("sitemap article URLs", () => {
     assert.equal(path?.includes("/markets/"), false);
   });
 
+  it("drops placeholder and test slugs without matching words like stress-tests", () => {
+    assert.equal(sitemapNewsPath("placeholder-story"), null);
+    assert.equal(sitemapNewsPath("test-article"), null);
+    assert.equal(sitemapNewsPath("untitled-draft"), null);
+    assert.equal(
+      sitemapNewsPath("private-credit-stress-tests-regulators"),
+      "/news/private-credit-stress-tests-regulators",
+    );
+  });
+
+  it("builds sitemap article URLs on www.tradeflock.net/news/{slug}", () => {
+    const source = readFileSync(new URL("../../app/sitemap.ts", import.meta.url), "utf8");
+    assert.match(source, /const BASE_URL = PRODUCTION_ORIGIN/);
+    assert.match(source, /\$\{BASE_URL\}\/news\/\$\{article\.slug\}/);
+    assert.doesNotMatch(source, /article\.category|article\.section/);
+    assert.doesNotMatch(source, /\$\{BASE_URL\}\/tech\/\$\{/);
+  });
+
   it("uses first-party URLs for sitemap images", () => {
     const proxied = sitemapImageUrl("https://image.cnbcfm.com/api/v1/image/cover.jpg");
     assert.match(proxied ?? "", /^https:\/\/www\.tradeflock\.net\/media\/proxy\?src=/);
