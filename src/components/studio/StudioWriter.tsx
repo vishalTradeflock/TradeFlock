@@ -33,12 +33,12 @@ import { StudioDialog } from "@/components/studio/StudioDialog";
 import { StudioSeoDrawer } from "@/components/studio/StudioSeoDrawer";
 import { unsplashEditorSrc } from "@/lib/images";
 import { excerptFromHtml } from "@/lib/studio/copy";
-import { storyPreviewHref } from "@/components/studio/types";
-import { cn } from "@/lib/utils";
+import { storyPreviewHref, type StudioAuthor, type StudioCategory, type StudioFaqDraft } from "@/components/studio/types";
+import { getSiteHost } from "@/lib/site-url";
+import { signOutStudioClient } from "@/lib/studio/browser-auth";
 import type { StudioRole } from "@/lib/studio/roles";
 import { isModerator } from "@/lib/studio/roles";
-import { signOutStudioClient } from "@/lib/studio/browser-auth";
-import type { StudioCategory } from "@/components/studio/types";
+import { cn } from "@/lib/utils";
 
 type UnsplashPhoto = {
   id: string;
@@ -63,11 +63,13 @@ async function uploadFile(file: File) {
 export default function StudioWriter({
   role,
   categories,
+  authors,
   email,
   initialDraft,
 }: {
   role: StudioRole;
   categories: StudioCategory[];
+  authors: StudioAuthor[];
   email: string | null;
   initialDraft?: {
     id: string;
@@ -75,9 +77,12 @@ export default function StudioWriter({
     body: string;
     slug: string;
     categoryId: string;
+    authorId?: string;
     status: "draft" | "review" | "published";
     metaTitle?: string;
     metaDescription?: string;
+    coverImageAlt?: string;
+    faqs?: StudioFaqDraft[];
   } | null;
 }) {
   const router = useRouter();
@@ -117,6 +122,12 @@ export default function StudioWriter({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [metaTitle, setMetaTitle] = useState(initialDraft?.metaTitle ?? "");
   const [metaDescription, setMetaDescription] = useState(initialDraft?.metaDescription ?? "");
+  const [slug, setSlug] = useState(initialDraft?.slug ?? "");
+  const [authorId, setAuthorId] = useState(
+    initialDraft?.authorId ?? authors[0]?.id ?? "",
+  );
+  const [coverImageAlt, setCoverImageAlt] = useState(initialDraft?.coverImageAlt ?? "");
+  const [faqs, setFaqs] = useState<StudioFaqDraft[]>(initialDraft?.faqs ?? []);
   const [openingPreview, setOpeningPreview] = useState(() =>
     excerptFromHtml(initialDraft?.body ?? ""),
   );
@@ -284,6 +295,18 @@ export default function StudioWriter({
           setSaveError("Add a headline before submitting.");
           return;
         }
+        if (status === "review" || status === "published") {
+          const incomplete = faqs.some((faq) => {
+            const question = faq.question.trim();
+            const answer = faq.answer.trim();
+            return Boolean(question) !== Boolean(answer);
+          });
+          if (incomplete) {
+            setSaveState("error");
+            setSaveError("Each FAQ needs both a question and an answer.");
+            return;
+          }
+        }
         if (status === "published" && !moderator) {
           setSaveState("error");
           setSaveError("Only a moderator can publish.");
@@ -302,6 +325,10 @@ export default function StudioWriter({
             status,
             metaTitle,
             metaDescription,
+            slug,
+            authorId,
+            coverImageAlt,
+            faqs,
           });
           outcome = result;
           if (!result.ok) {
@@ -312,6 +339,9 @@ export default function StudioWriter({
           draftId.current = result.id;
           setStoryId(result.id);
           setSavedSlug(result.slug);
+          if (status || savedStatus !== "published" || !slug.trim()) {
+            setSlug(result.slug);
+          }
           setSavedStatus(result.status);
           setSaveState("saved");
           if (typeof window !== "undefined") {
@@ -334,7 +364,7 @@ export default function StudioWriter({
       await queued;
       return outcome;
     },
-    [categoryId, initialDraft?.body, metaDescription, metaTitle, moderator, title],
+    [authorId, categoryId, coverImageAlt, faqs, initialDraft?.body, metaDescription, metaTitle, moderator, savedStatus, slug, title],
   );
 
   const submitStatus = useCallback(
@@ -377,7 +407,7 @@ export default function StudioWriter({
       void persist();
     }, 2000);
     return () => window.clearTimeout(saveTimer.current);
-  }, [metaDescription, metaTitle, title, persist]);
+  }, [authorId, categoryId, coverImageAlt, faqs, metaDescription, metaTitle, persist, slug, title]);
 
   async function searchUnsplash(event?: React.FormEvent) {
     event?.preventDefault();
@@ -453,6 +483,12 @@ export default function StudioWriter({
                 Desk
               </Link>
             ) : null}
+            <Link
+              href="/studio/settings"
+              className="h-8 px-2 text-[11px] font-semibold uppercase tracking-widest leading-8 hover:text-[#c41e3a]"
+            >
+              Byline
+            </Link>
             <select
               value={categoryId}
               onChange={(event) => setCategoryId(event.target.value)}
@@ -464,6 +500,20 @@ export default function StudioWriter({
                 </option>
               ))}
             </select>
+            {authors.length ? (
+              <select
+                value={authorId}
+                onChange={(event) => setAuthorId(event.target.value)}
+                className="h-8 max-w-[180px] border border-neutral-200 bg-white px-2 text-[11px] font-semibold uppercase tracking-widest outline-none"
+                aria-label="Author"
+              >
+                {authors.map((author) => (
+                  <option key={author.id} value={author.id}>
+                    {author.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <button
               type="button"
               disabled={saving}
@@ -534,6 +584,22 @@ export default function StudioWriter({
           onChange={(event) => setTitle(event.target.value)}
           className="w-full resize-none border-0 bg-transparent font-serif text-4xl font-bold outline-none placeholder:text-neutral-300 sm:text-5xl"
         />
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-neutral-500">
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
+            URL
+          </span>
+          <span className="text-xs">https://{getSiteHost()}/</span>
+          <input
+            value={slug}
+            onChange={(event) => setSlug(event.target.value)}
+            placeholder="custom-story-slug"
+            className="min-w-[12rem] flex-1 border-b border-neutral-200 bg-transparent font-mono text-sm outline-none focus:border-[#c41e3a]"
+            aria-label="Article slug"
+          />
+        </p>
+        <p className="mt-1 text-xs text-neutral-400">
+          This is the public story URL. Changing the headline does not change it.
+        </p>
 
         <input
           ref={fileRef}
@@ -546,7 +612,7 @@ export default function StudioWriter({
             if (!file || !editorRef.current) return;
             try {
               const url = await uploadFile(file);
-              editorRef.current.chain().focus().setImage({ src: url, alt: file.name }).run();
+              editorRef.current.chain().focus().setImage({ src: url, alt: "" }).run();
             } catch (error) {
               setSaveError(error instanceof Error ? error.message : "Upload failed.");
             }
@@ -649,6 +715,20 @@ export default function StudioWriter({
                   }}
                 >
                   Link
+                </BubbleButton>
+                <BubbleButton
+                  label="Alt text"
+                  onSelect={(editor) => {
+                    const previous = (editor.getAttributes("image").alt as string | undefined) ?? "";
+                    const next = window.prompt(
+                      "Image alt text (leave blank if decorative)",
+                      previous,
+                    );
+                    if (next === null) return;
+                    editor.chain().focus().updateAttributes("image", { alt: next.slice(0, 250) }).run();
+                  }}
+                >
+                  Alt
                 </BubbleButton>
               </EditorBubble>
               <ImageResizer />
@@ -773,12 +853,25 @@ export default function StudioWriter({
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         title={title}
-        slug={savedSlug}
+        slug={slug}
         opening={openingPreview}
         metaTitle={metaTitle}
         metaDescription={metaDescription}
         onMetaTitleChange={setMetaTitle}
         onMetaDescriptionChange={setMetaDescription}
+        onSlugChange={setSlug}
+        published={savedStatus === "published"}
+        onCommitSlug={() => {
+          if (savedStatus === "published") void persist("published");
+          else void persist();
+        }}
+        authors={authors}
+        authorId={authorId}
+        onAuthorIdChange={setAuthorId}
+        coverImageAlt={coverImageAlt}
+        onCoverImageAltChange={setCoverImageAlt}
+        faqs={faqs}
+        onFaqsChange={setFaqs}
       />
     </div>
   );

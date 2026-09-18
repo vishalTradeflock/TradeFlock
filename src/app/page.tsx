@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Header from "@/components/Header";
 import HeroCarousel from "@/components/HeroCarousel";
@@ -6,8 +7,9 @@ import MiddleScroller from "@/components/MiddleScroller";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { LATEST_SCROLLER_LIMIT } from "@/lib/cache";
 import { getCategoryDesk, getHomeLayout } from "@/lib/articles";
+import { publicPageMetadata } from "@/lib/seo";
 import { isSuccessInsightsArticle } from "@/lib/success-insights";
-import { NAV_CATEGORIES, type ArticleWithRelations } from "@/lib/types";
+import { NAV_CATEGORIES, articlePath, type ArticleWithRelations } from "@/lib/types";
 import { formatShortDate, formatTimeAgo } from "@/lib/utils";
 
 const DEEP_DIVE_FALLBACK =
@@ -45,6 +47,19 @@ function articlesForDesk(
 }
 
 export const revalidate = 120;
+
+export const metadata: Metadata = {
+  ...publicPageMetadata({
+    title: "TradeFlock USA — Business & Markets",
+    description:
+      "U.S. business news on markets, technology, finance, and leadership. An editorial desk in the tradition of a national business paper.",
+    path: "/",
+    ogTitle: "TradeFlock USA — Business & Markets",
+  }),
+  title: {
+    absolute: "TradeFlock USA — Business & Markets",
+  },
+};
 
 export default async function Home() {
   const [
@@ -86,7 +101,7 @@ export default async function Home() {
   if (!lead && !heroArticles.length) {
     return (
       <>
-        <Header tickerArticles={tickerArticles} />
+        <Header tickerArticles={tickerArticles} mastheadAsH1 />
         <main className="mx-auto max-w-[1240px] px-4 py-16">
           <p className="text-sm text-neutral-600">No stories on the desk yet.</p>
         </main>
@@ -96,25 +111,25 @@ export default async function Home() {
 
   return (
     <>
-      <Header tickerArticles={tickerArticles} />
+      <Header tickerArticles={tickerArticles} mastheadAsH1 />
       <main className="mx-auto max-w-[1240px] px-4 py-6">
         <section className="grid min-h-0 grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:items-stretch lg:gap-0">
           <div className="min-h-0 lg:col-span-6 lg:pr-6">
             <HeroCarousel articles={heroArticles} />
 
             <hr className="my-6 border-border" />
-            <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Deep Dive
-            </h3>
+            </h2>
 
             {deepDiveTop.length ? (
               <div className="mb-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {deepDiveTop.map((article) => (
-                  <Link key={article.id} href={`/news/${article.slug}`} className="group block">
+                  <Link key={article.id} href={articlePath(article.slug)} className="group block">
                     <div className="relative mb-3 aspect-[16/10] w-full overflow-hidden rounded bg-muted">
                       <SafeArticleImage
                         src={article.cover_image_url}
-                        alt={article.cover_image_alt || article.title}
+                        alt={article.cover_image_alt}
                         fill
                         sizes="(min-width: 640px) 25vw, 100vw"
                         loading="lazy"
@@ -125,9 +140,9 @@ export default async function Home() {
                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">
                       {article.category.name}
                     </p>
-                    <h4 className="mt-1 line-clamp-2 font-serif text-base font-semibold leading-snug group-hover:underline">
+                    <h3 className="mt-1 line-clamp-2 font-serif text-base font-semibold leading-snug group-hover:underline">
                       {article.title}
-                    </h4>
+                    </h3>
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       {article.author.name}
                       <span className="mx-1.5">·</span>
@@ -141,13 +156,13 @@ export default async function Home() {
             {deepDiveSub.length ? (
               <div className="grid grid-cols-1 gap-x-5 gap-y-4 border-t border-border/60 pt-4 sm:grid-cols-2">
                 {deepDiveSub.map((article) => (
-                  <Link key={article.id} href={`/news/${article.slug}`} className="group block">
+                  <Link key={article.id} href={articlePath(article.slug)} className="group block">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-[#c41e3a]">
                       {article.category.name}
                     </p>
-                    <h4 className="mt-1 line-clamp-2 font-serif text-sm font-bold leading-snug text-neutral-950 group-hover:underline">
+                    <h3 className="mt-1 line-clamp-2 font-serif text-sm font-bold leading-snug text-neutral-950 group-hover:underline">
                       {article.title}
-                    </h4>
+                    </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {formatTimeAgo(article.published_at)}
                     </p>
@@ -206,15 +221,15 @@ function RankedRail({
 
   return (
     <div className={className}>
-      <h3 className="border-b border-neutral-200 pb-2 font-serif text-xl font-semibold tracking-tight">
+      <h2 className="border-b border-neutral-200 pb-2 font-serif text-xl font-semibold tracking-tight">
         {title}
-      </h3>
+      </h2>
       {scrollable ? (
         <div className="h-[615px] space-y-4 overflow-y-auto pr-2">
           <ol>
             {articles.map((article, index) => (
               <li key={article.id} className="py-3">
-                <Link href={`/news/${article.slug}`} className="group flex gap-3">
+                <Link href={articlePath(article.slug)} className="group flex gap-3">
                   <span className="font-serif text-2xl font-semibold leading-none text-[#c41e3a]">
                     {index + 1}
                   </span>
@@ -235,7 +250,7 @@ function RankedRail({
         <ol className="divide-y divide-neutral-200">
           {articles.map((article, index) => (
             <li key={article.id} className="py-3">
-              <Link href={`/news/${article.slug}`} className="group flex gap-3">
+              <Link href={articlePath(article.slug)} className="group flex gap-3">
                 <span className="font-serif text-2xl font-semibold leading-none text-[#c41e3a]">
                   {index + 1}
                 </span>

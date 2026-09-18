@@ -40,4 +40,39 @@ describe("sanitizeArticleBody", () => {
     assert.match(html, /<a href="\/x">Jane Doe<\/a>'s firm/);
     assert.doesNotMatch(html, /<\/a><\/p>/);
   });
+
+  it("demotes body h1 and converts markdown headings to h2–h6", () => {
+    const html = sanitizeArticleBody(
+      `<h1>Standfirst</h1><p>## Markets</p>\n### Policy\n<p>Body copy.</p>`,
+      { title: "A different headline" },
+    );
+    assert.match(html, /<h2[^>]*>Standfirst<\/h2>/);
+    assert.match(html, /<h3>Markets<\/h3>/);
+    assert.match(html, /<h4>Policy<\/h4>/);
+    assert.doesNotMatch(html, /<h1\b/i);
+  });
+
+  it("rewrites category-prefixed article hrefs to /{slug}", () => {
+    const html = sanitizeArticleBody(
+      `<p>See <a href="/tech/apple-on-device-ai-suppliers-recalibrate">the story</a>, <a href="https://www.tradeflockusa.com/finance/foo-bar">another</a>, and <a href="https://www.tradeflock.net/business/another-story">net</a>.</p>`,
+      { title: "A story" },
+    );
+    assert.match(html, /href="\/apple-on-device-ai-suppliers-recalibrate"/);
+    assert.match(html, /href="\/foo-bar"/);
+    assert.match(html, /href="\/another-story"/);
+    assert.doesNotMatch(html, /href="\/tech\//);
+    assert.doesNotMatch(html, /href="\/news\//);
+  });
+
+  it("strips the leftover Featured Magazine promo and All Magazines link", () => {
+    const html = sanitizeArticleBody(
+      `<p>The board voted after a lengthy review of the proposal and the market reaction that followed it through the week.</p><h3>Featured Magazine -</h3><a href="https://tradeflockusa.com/top-10-healthcare-executives-transforming-usa-2025/"><img src="https://www.tradeflockusa.com/cover.jpg" alt="cover" /></a><h3>All Magazines</h3><h3>Other Success Insight-</h3>`,
+      { title: "A story" },
+    );
+    assert.match(html, /The board voted after a lengthy review/);
+    assert.doesNotMatch(html, /Featured Magazine/);
+    assert.doesNotMatch(html, /All Magazines/);
+    assert.doesNotMatch(html, /Other Success Insight/);
+    assert.doesNotMatch(html, /cover\.jpg/);
+  });
 });

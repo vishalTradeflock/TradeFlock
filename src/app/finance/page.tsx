@@ -1,17 +1,13 @@
 import type { Metadata } from "next";
 import CategoryFeed from "@/components/CategoryFeed";
+import { publicPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
   title: "Finance",
   description:
     "Venture capital, private equity, corporate banking, and fiscal policy analysis.",
-  openGraph: {
-    title: "Finance | TradeFlock USA",
-    description:
-      "Venture capital, private equity, corporate banking, and fiscal policy analysis.",
-    type: "website",
-  },
-};
+  path: "/finance",
+});
 
 export const revalidate = 120;
 

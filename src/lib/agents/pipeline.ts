@@ -6,12 +6,13 @@ import {
   resolveWriterDesk,
   type WriterDesk,
 } from "@/lib/agents/prompts";
-import { FALLBACK_COVER_IMAGE, isHttpsCoverUrl } from "@/lib/images";
+import { FALLBACK_COVER_IMAGE, sanitizeCoverUrl } from "@/lib/images";
+import { allocateArticleSlug } from "@/lib/studio/slug";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import { completeLlmChat, isLlmQuotaError } from "@/lib/llm";
-import { fetchOgImageUrl } from "@/lib/agents/source-cover";
+import { resolvePublishCoverUrl } from "@/lib/agents/source-cover";
 import {
   parseLeadNotes,
   polishWireBody,
@@ -112,13 +113,11 @@ function parseEditorVerdict(raw: string): EditorVerdict {
   return parsed;
 }
 
-function slugify(title: string) {
-  const base = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 72);
-  return `${base || "desk-note"}-${Date.now().toString(36)}`;
+async function uniquePublishSlug(admin: ReturnType<typeof createAdminClient>, title: string) {
+  return allocateArticleSlug(null, title, async (slug) => {
+    const { data } = await admin.from("articles").select("id").eq("slug", slug).maybeSingle();
+    return Boolean(data?.id);
+  });
 }
 
 function toHtmlBody(content: string) {
@@ -273,7 +272,7 @@ function leadNotes(lead: NewsLead): LeadNotes {
   return {
     ...notes,
     sourceUrl: lead.sourceUrl ?? notes.sourceUrl,
-    coverUrl: (lead.imageUrl && isHttpsCoverUrl(lead.imageUrl) ? lead.imageUrl : null) ?? notes.coverUrl,
+    coverUrl: sanitizeCoverUrl(lead.imageUrl) ?? sanitizeCoverUrl(notes.coverUrl),
   };
 }
 
@@ -285,18 +284,6 @@ function prepareWireBody(lead: NewsLead, title: string, content: string, coverIm
   });
   const body = polishWireBody(sanitized, notes);
   return { body, notes, failures: wireHygieneFailures(body, notes, lead.rawSource) };
-}
-
-async function resolveLeadCover(lead: NewsLead): Promise<string> {
-  const notes = leadNotes(lead);
-  if (notes.coverUrl && isHttpsCoverUrl(notes.coverUrl)) return notes.coverUrl;
-  if (lead.imageUrl && isHttpsCoverUrl(lead.imageUrl)) return lead.imageUrl;
-  const pageUrl = notes.sourceUrl;
-  if (pageUrl) {
-    const og = await fetchOgImageUrl(pageUrl);
-    if (og && isHttpsCoverUrl(og)) return og;
-  }
-  return FALLBACK_COVER_IMAGE;
 }
 
 async function publishArticle(insert: ArticleInsert) {
@@ -330,15 +317,25 @@ async function commitVerdict(
   verdict: EditorVerdict,
 ): Promise<Extract<PipelineResult, { published: true }>> {
   const admin = createAdminClient();
+  const title = verdict.editedTitle.trim();
+  const excerpt = verdict.excerpt.trim().slice(0, 280);
+  const slug = await uniquePublishSlug(admin, title);
+  const notes = leadNotes(lead);
   const [categoryId, authorId, coverImageUrl] = await Promise.all([
     resolveCategoryId(admin, desk, lead.category),
     resolveAuthorId(admin, desk),
-    resolveLeadCover(lead),
+    resolvePublishCoverUrl({
+      imageUrl: lead.imageUrl,
+      notesCoverUrl: notes.coverUrl,
+      sourceUrl: notes.sourceUrl,
+      article: {
+        id: slug,
+        title,
+        slug,
+        category: { slug: SITE_CATEGORY[desk] },
+      },
+    }),
   ]);
-
-  const title = verdict.editedTitle.trim();
-  const excerpt = verdict.excerpt.trim().slice(0, 280);
-  const slug = slugify(title);
   const prepared = prepareWireBody(lead, title, verdict.editedContent, coverImageUrl);
   if (prepared.failures.length) {
     throw new Error(`Wire hygiene blocked publish: ${prepared.failures.join("; ")}`);
@@ -357,8 +354,8 @@ async function commitVerdict(
   );
 
   revalidatePath("/");
-  revalidatePath(`/news/${slug}`);
-  revalidatePath("/news/[slug]", "page");
+  revalidatePath(`/${slug}`);
+  revalidatePath("/[slug]", "page");
   revalidatePath("/success-insights");
 
   return {

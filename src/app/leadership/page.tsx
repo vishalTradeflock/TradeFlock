@@ -1,17 +1,13 @@
 import type { Metadata } from "next";
 import CategoryFeed from "@/components/CategoryFeed";
+import { publicPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
   title: "Leadership",
   description:
     "Executive strategy, organizational culture, governance, and lessons from founders.",
-  openGraph: {
-    title: "Leadership | TradeFlock USA",
-    description:
-      "Executive strategy, organizational culture, governance, and lessons from founders.",
-    type: "website",
-  },
-};
+  path: "/leadership",
+});
 
 export const revalidate = 120;
 

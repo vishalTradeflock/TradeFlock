@@ -5,16 +5,26 @@ import { FALLBACK_COVER_IMAGE } from "@/lib/images";
 import {
   coverFromHtml,
   excerptFromHtml,
-  slugifyTitle,
   uniqueAuthorSlug,
 } from "@/lib/studio/copy";
 import { headers } from "next/headers";
-import { canInviteStaff, canPublishArticle } from "@/lib/studio/access";
+import {
+  canAssignAnyAuthor,
+  canInviteStaff,
+  canManageSiteSettings,
+  canPublishArticle,
+  canWriteGlobalHeadCode,
+} from "@/lib/studio/access";
+import { prepareStudioFaqs, type StudioFaq } from "@/lib/studio/faqs";
+import { BIO_MAX, sanitizeAltText, sanitizeBio, sanitizeVerificationToken } from "@/lib/studio/head-meta";
 import { emptyToNull } from "@/lib/studio/seo";
+import { allocateArticleSlug, isValidPublicSlug, sanitizeSlug } from "@/lib/studio/slug";
+import { prepareGlobalHeadCode } from "@/lib/public-head";
 import { isModerator, type StudioRole } from "@/lib/studio/roles";
 import { getStudioSession } from "@/lib/studio/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/database.types";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 
 export type SaveDraftInput = {
@@ -25,6 +35,10 @@ export type SaveDraftInput = {
   status?: "draft" | "review" | "published";
   metaTitle?: string | null;
   metaDescription?: string | null;
+  slug?: string | null;
+  authorId?: string | null;
+  coverImageAlt?: string | null;
+  faqs?: StudioFaq[];
 };
 
 export type SaveDraftResult =
@@ -84,6 +98,70 @@ function missingSeoColumn(message: string | undefined) {
   return haystack.includes("meta_title") || haystack.includes("meta_description");
 }
 
+function uniqueSlugTakenMessage(message: string | undefined) {
+  const haystack = (message ?? "").toLowerCase();
+  return haystack.includes("duplicate") || haystack.includes("articles_slug") || haystack.includes("unique");
+}
+
+async function slugTakenByOther(
+  admin: ReturnType<typeof createAdminClient>,
+  slug: string,
+  excludeId?: string,
+) {
+  const { data } = await admin.from("articles").select("id").eq("slug", slug).maybeSingle();
+  if (!data?.id) return false;
+  return data.id !== excludeId;
+}
+
+async function nextAvailableSlug(
+  admin: ReturnType<typeof createAdminClient>,
+  base: string,
+  excludeId?: string,
+) {
+  return allocateArticleSlug(base, base, (slug) => slugTakenByOther(admin, slug, excludeId));
+}
+
+async function resolveAssignedAuthorId(
+  admin: ReturnType<typeof createAdminClient>,
+  session: { userId: string; email: string | null; profile: { display_name: string | null; role: StudioRole } },
+  requested: string | null | undefined,
+  existingAuthorId?: string,
+) {
+  const ownId = await ensureAuthorId(session);
+  if (!canAssignAnyAuthor(session.profile.role)) {
+    return { ok: true as const, authorId: ownId };
+  }
+  const target = requested?.trim() || existingAuthorId || ownId;
+  const { data } = await admin.from("authors").select("id").eq("id", target).maybeSingle();
+  if (!data?.id) return { ok: false as const, error: "Choose a valid author." };
+  return { ok: true as const, authorId: data.id };
+}
+
+async function recordPublishedSlugRedirect(
+  admin: ReturnType<typeof createAdminClient>,
+  articleId: string,
+  previousSlug: string,
+  nextSlug: string,
+) {
+  if (previousSlug === nextSlug) return;
+  await admin.from("article_slug_redirects").delete().eq("old_slug", nextSlug);
+  const written = await admin.from("article_slug_redirects").upsert(
+    { old_slug: previousSlug, article_id: articleId },
+    { onConflict: "old_slug" },
+  );
+  if (written.error) {
+    throw new Error(written.error.message || "Could not save the slug redirect.");
+  }
+}
+
+function revalidateStoryPaths(slug: string, previousSlug?: string | null, authorSlug?: string | null) {
+  revalidatePath("/", "layout");
+  revalidatePath(`/${slug}`);
+  if (previousSlug && previousSlug !== slug) revalidatePath(`/${previousSlug}`);
+  if (authorSlug) revalidatePath(`/author/${authorSlug}`);
+  revalidatePath("/sitemap.xml");
+}
+
 export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftResult> {
   try {
     const session = await getStudioSession();
@@ -97,19 +175,34 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     const body = sanitizeArticleBody(rawBody, { title });
     const excerpt = excerptFromHtml(body);
     const cover_image_url = coverFromHtml(body) || FALLBACK_COVER_IMAGE;
-    const cover_image_alt = title;
+    const cover_image_alt = sanitizeAltText(input.coverImageAlt);
+    const faqsResult = prepareStudioFaqs(input.faqs ?? []);
+    if (!faqsResult.ok) return { ok: false, error: faqsResult.error };
+    if (requested === "review" || requested === "published") {
+      const incomplete = (input.faqs ?? []).some((entry) => {
+        const question = String(entry?.question ?? "").trim();
+        const answer = String(entry?.answer ?? "").trim();
+        return Boolean(question) !== Boolean(answer);
+      });
+      if (incomplete) {
+        return { ok: false, error: "Each FAQ needs both a question and an answer." };
+      }
+    }
+    const faqs = faqsResult.faqs;
 
     const admin = createAdminClient();
-    const authorId = await ensureAuthorId(session);
 
     if (input.id) {
       const { data: existing, error: existingError } = await admin
         .from("articles")
-        .select("id, slug, status, author_id")
+        .select("id, slug, status, author_id, published_at")
         .eq("id", input.id)
         .maybeSingle();
 
       if (existingError || !existing) return { ok: false, error: "Draft not found." };
+      const assigned = await resolveAssignedAuthorId(admin, session, input.authorId, existing.author_id);
+      if (!assigned.ok) return { ok: false, error: assigned.error };
+      const authorId = assigned.authorId;
       if (
         !isModerator(session.profile.role) &&
         existing.author_id !== session.userId &&
@@ -123,30 +216,45 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         return { ok: false, error: "Only a moderator can publish." };
       }
 
-      const update: {
-        title: string;
-        body: string;
-        excerpt: string;
-        cover_image_url: string;
-        cover_image_alt: string;
-        category_id: string;
-        status: "draft" | "review" | "published";
-        published_at?: string;
-        meta_title?: string | null;
-        meta_description?: string | null;
-      } = {
+      const rawSlug = (input.slug ?? "").trim();
+      let nextSlug = existing.slug;
+      const commitSlug = requested != null || existing.status !== "published";
+      if (commitSlug) {
+        const keepPublishedDirty = existing.status === "published" && rawSlug === existing.slug;
+        if (!keepPublishedDirty && rawSlug) {
+          const requestedSlug = sanitizeSlug(rawSlug);
+          if (!isValidPublicSlug(requestedSlug)) {
+            return { ok: false, error: "Use a lowercase URL-safe slug with letters, numbers, and hyphens." };
+          }
+          if (await slugTakenByOther(admin, requestedSlug, existing.id)) {
+            return { ok: false, error: "That URL is already in use." };
+          }
+          nextSlug = requestedSlug;
+        }
+      }
+
+      const update: Database["public"]["Tables"]["articles"]["Update"] = {
         title,
         body,
         excerpt,
         cover_image_url,
         cover_image_alt,
+        featured_image: cover_image_url,
+        featured_image_alt: cover_image_alt || null,
         category_id: input.categoryId,
+        author_id: authorId,
         status: nextStatus,
+        slug: nextSlug,
+        faqs,
         ...seoPayload(input),
       };
 
-      if (nextStatus === "published") {
+      if (nextStatus === "published" && existing.status !== "published") {
         update.published_at = new Date().toISOString();
+      }
+
+      if (existing.status === "published" && nextSlug !== existing.slug) {
+        await recordPublishedSlugRedirect(admin, existing.id, existing.slug, nextSlug);
       }
 
       const written = await admin.from("articles").update(update).eq("id", existing.id);
@@ -158,21 +266,26 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
           cover_image_url: update.cover_image_url,
           cover_image_alt: update.cover_image_alt,
           category_id: update.category_id,
+          author_id: update.author_id,
           status: update.status,
-          ...(update.published_at ? { published_at: update.published_at } : {}),
+          slug: update.slug,
+          ...(typeof update.published_at === "string" ? { published_at: update.published_at } : {}),
         };
         const retry = await admin.from("articles").update(withoutSeo).eq("id", existing.id);
         if (retry.error) return { ok: false, error: retry.error.message };
       } else if (written.error) {
+        if (uniqueSlugTakenMessage(written.error.message)) {
+          return { ok: false, error: "That URL is already in use." };
+        }
         return { ok: false, error: written.error.message };
       }
 
+      const { data: authorRow } = await admin.from("authors").select("slug").eq("id", authorId).maybeSingle();
       if (nextStatus === "published") {
-        revalidatePath("/", "layout");
-        revalidatePath(`/news/${existing.slug}`);
+        revalidateStoryPaths(nextSlug, existing.slug, authorRow?.slug);
       }
 
-      return { ok: true, id: existing.id, slug: existing.slug, status: nextStatus };
+      return { ok: true, id: existing.id, slug: nextSlug, status: nextStatus };
     }
 
     const nextStatus = requested ?? "draft";
@@ -180,7 +293,21 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
       return { ok: false, error: "Only a moderator can publish." };
     }
 
-    const slug = slugifyTitle(title);
+    const assigned = await resolveAssignedAuthorId(admin, session, input.authorId);
+    if (!assigned.ok) return { ok: false, error: assigned.error };
+    const authorId = assigned.authorId;
+
+    const requestedSlug = sanitizeSlug(input.slug ?? "");
+    if ((input.slug ?? "").trim() && !isValidPublicSlug(requestedSlug)) {
+      return { ok: false, error: "Use a lowercase URL-safe slug with letters, numbers, and hyphens." };
+    }
+    if (requestedSlug && (await slugTakenByOther(admin, requestedSlug))) {
+      return { ok: false, error: "That URL is already in use." };
+    }
+    const slug = requestedSlug
+      ? requestedSlug
+      : await nextAvailableSlug(admin, title);
+
     const insert = {
       slug,
       title,
@@ -188,9 +315,12 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
       body,
       cover_image_url,
       cover_image_alt,
+      featured_image: cover_image_url,
+      featured_image_alt: cover_image_alt || null,
       category_id: input.categoryId,
       author_id: authorId,
       status: nextStatus,
+      faqs,
       published_at:
         nextStatus === "published"
           ? new Date().toISOString()
@@ -217,16 +347,182 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
       error = retry.error;
     }
 
-    if (error || !data) return { ok: false, error: error?.message ?? "Could not save draft." };
+    if (error || !data) {
+      if (uniqueSlugTakenMessage(error?.message)) {
+        return { ok: false, error: "That URL is already in use." };
+      }
+      return { ok: false, error: error?.message ?? "Could not save draft." };
+    }
 
+    const { data: authorRow } = await admin.from("authors").select("slug").eq("id", authorId).maybeSingle();
     if (nextStatus === "published") {
-      revalidatePath("/", "layout");
-      revalidatePath(`/news/${data.slug}`);
+      revalidateStoryPaths(data.slug, null, authorRow?.slug);
     }
 
     return { ok: true, id: data.id, slug: data.slug, status: data.status };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save draft.";
+    return { ok: false, error: message };
+  }
+}
+
+export type SaveAuthorInput = {
+  id?: string | null;
+  name: string;
+  bio?: string | null;
+  title?: string | null;
+  avatarUrl?: string | null;
+  slug?: string | null;
+};
+
+export type SaveAuthorResult =
+  | { ok: true; id: string; slug: string }
+  | { ok: false; error: string };
+
+export async function saveStudioAuthor(input: SaveAuthorInput): Promise<SaveAuthorResult> {
+  try {
+    const session = await getStudioSession();
+    if (!session) return { ok: false, error: "Sign in again to save this byline." };
+
+    const admin = createAdminClient();
+    const ownId = await ensureAuthorId(session);
+    const targetId = input.id?.trim() || ownId;
+    if (!isModerator(session.profile.role) && targetId !== ownId) {
+      return { ok: false, error: "You can only edit your own byline." };
+    }
+
+    const { data: existing } = await admin
+      .from("authors")
+      .select("id, slug")
+      .eq("id", targetId)
+      .maybeSingle();
+    if (!existing) return { ok: false, error: "Author not found." };
+
+    const name = input.name.trim();
+    if (!name) return { ok: false, error: "Enter the author’s name." };
+    const bio = sanitizeBio(input.bio);
+    if ((input.bio ?? "").trim().length > BIO_MAX) {
+      return { ok: false, error: `Keep the bio under ${BIO_MAX} characters.` };
+    }
+    const title = sanitizeBio(input.title).slice(0, 120) || null;
+    const avatar = input.avatarUrl?.trim() || null;
+    if (avatar && !/^https?:\/\//i.test(avatar) && !avatar.startsWith("/")) {
+      return { ok: false, error: "Use a valid image URL for the profile photo." };
+    }
+
+    const requestedSlug = sanitizeSlug(input.slug ?? "");
+    let slug = existing.slug;
+    if (requestedSlug && requestedSlug !== existing.slug) {
+      if (!isValidPublicSlug(requestedSlug)) {
+        return { ok: false, error: "Use a lowercase URL-safe author slug." };
+      }
+      const { data: taken } = await admin.from("authors").select("id").eq("slug", requestedSlug).maybeSingle();
+      if (taken && taken.id !== existing.id) {
+        return { ok: false, error: "That author URL is already in use." };
+      }
+      slug = requestedSlug;
+    }
+
+    const written = await admin
+      .from("authors")
+      .update({
+        name,
+        bio: bio || null,
+        title,
+        avatar_url: avatar,
+        slug,
+      })
+      .eq("id", existing.id);
+    if (written.error) return { ok: false, error: written.error.message };
+
+    revalidatePath(`/author/${slug}`);
+    if (existing.slug !== slug) revalidatePath(`/author/${existing.slug}`);
+    revalidatePath("/sitemap.xml");
+    return { ok: true, id: existing.id, slug };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not save this byline.";
+    return { ok: false, error: message };
+  }
+}
+
+export type SaveSiteVerificationInput = {
+  google?: string | null;
+  bing?: string | null;
+};
+
+export type SaveSiteVerificationResult = { ok: true } | { ok: false; error: string };
+
+export async function saveSiteVerification(
+  input: SaveSiteVerificationInput,
+): Promise<SaveSiteVerificationResult> {
+  try {
+    const session = await getStudioSession();
+    if (!session || !canManageSiteSettings(session.profile.role)) {
+      return { ok: false, error: "Only a masthead editor can change site verification." };
+    }
+
+    const googleRaw = input.google?.trim() ?? "";
+    const bingRaw = input.bing?.trim() ?? "";
+    const google = googleRaw ? sanitizeVerificationToken(googleRaw) : null;
+    const bing = bingRaw ? sanitizeVerificationToken(bingRaw) : null;
+    if (googleRaw && !google) {
+      return { ok: false, error: "Paste the Google verification token only — not a script or HTML page." };
+    }
+    if (bingRaw && !bing) {
+      return { ok: false, error: "Paste the Bing verification token only — not a script or HTML page." };
+    }
+
+    const admin = createAdminClient();
+    const written = await admin.from("site_settings").upsert(
+      {
+        id: "default",
+        google_site_verification: google,
+        bing_site_verification: bing,
+      },
+      { onConflict: "id" },
+    );
+    if (written.error) return { ok: false, error: written.error.message };
+
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not save site settings.";
+    return { ok: false, error: message };
+  }
+}
+
+export type SaveGlobalHeadCodeResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Persists site_settings.global_head_code.
+ * Site-wide executable HTML — masthead/admin only; no public write path.
+ */
+export async function saveGlobalHeadCode(input: {
+  code?: string | null;
+}): Promise<SaveGlobalHeadCodeResult> {
+  try {
+    const session = await getStudioSession();
+    if (!session || !canWriteGlobalHeadCode(session.profile.role)) {
+      return { ok: false, error: "Only a masthead editor can change global head code." };
+    }
+
+    const prepared = prepareGlobalHeadCode(input.code ?? "");
+    if (!prepared.ok) return prepared;
+
+    const admin = createAdminClient();
+    const written = await admin.from("site_settings").upsert(
+      {
+        id: "default",
+        global_head_code: prepared.value,
+      },
+      { onConflict: "id" },
+    );
+    if (written.error) return { ok: false, error: written.error.message };
+
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not save global head code.";
     return { ok: false, error: message };
   }
 }

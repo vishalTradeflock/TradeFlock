@@ -55,6 +55,13 @@ create table if not exists public.articles (
 alter table public.articles
   add column if not exists status text not null default 'published';
 
+alter table public.articles
+  add column if not exists canonical_url text,
+  add column if not exists featured_image text,
+  add column if not exists featured_image_alt text,
+  add column if not exists image_url text,
+  add column if not exists faqs jsonb not null default '[]'::jsonb;
+
 -- ---------------------------------------------------------------------------
 -- updated_at trigger
 -- ---------------------------------------------------------------------------
@@ -244,3 +251,75 @@ create unique index if not exists processed_leads_source_url_key
   where source_url is not null and source_url <> '';
 
 alter table public.processed_leads enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- site_settings
+-- Singleton row (id = 'default') for verification tokens and desk config.
+-- header_scripts and global_head_code are executable site-wide HTML/JS.
+-- Writes are service-role only (Studio masthead). Anon cannot SELECT those columns.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.site_settings (
+  id text primary key default 'default',
+  header_scripts text,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.site_settings (id)
+values ('default')
+on conflict (id) do nothing;
+
+drop trigger if exists site_settings_set_updated_at on public.site_settings;
+create trigger site_settings_set_updated_at
+before update on public.site_settings
+for each row
+execute procedure public.set_updated_at();
+
+alter table public.site_settings enable row level security;
+
+alter table public.site_settings
+  add column if not exists google_site_verification text,
+  add column if not exists bing_site_verification text,
+  add column if not exists global_head_code text;
+
+revoke all on table public.site_settings from anon, authenticated;
+
+drop policy if exists "Public read site settings" on public.site_settings;
+drop policy if exists "Public read site verification" on public.site_settings;
+create policy "Public read site verification"
+  on public.site_settings
+  for select
+  to anon, authenticated
+  using (true);
+
+grant select (id, google_site_verification, bing_site_verification, updated_at)
+  on table public.site_settings to anon, authenticated;
+
+grant select, insert, update, delete on table public.site_settings to service_role;
+
+-- ---------------------------------------------------------------------------
+-- article_slug_redirects
+-- One-hop permanent redirects for published slug changes (old_slug → article_id).
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.article_slug_redirects (
+  old_slug text primary key,
+  article_id uuid not null references public.articles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  constraint article_slug_redirects_format check (old_slug ~ '^[a-z0-9-]+$')
+);
+
+create index if not exists article_slug_redirects_article_id_idx
+  on public.article_slug_redirects (article_id);
+
+alter table public.article_slug_redirects enable row level security;
+
+drop policy if exists "Public read article slug redirects" on public.article_slug_redirects;
+create policy "Public read article slug redirects"
+  on public.article_slug_redirects
+  for select
+  to anon, authenticated
+  using (true);
+
+grant select on public.article_slug_redirects to anon, authenticated;
+grant select, insert, update, delete on public.article_slug_redirects to service_role;

@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import { MagazineHonoreeCard } from "@/components/MagazineHonoreeCard";
 import { MagazineIssueHero } from "@/components/MagazineIssueHero";
+import { JsonLd } from "@/components/JsonLd";
 import { getArticlesByMagazineId } from "@/lib/articles";
 import { directoryHonoreesForIssue } from "@/lib/magazine-honorees";
 import { getMagazineBySlug, getMagazines } from "@/lib/magazines";
+import { magazinePageMetadata, magazineStructuredData, magazineIssueUrl } from "@/lib/seo";
 
 export const revalidate = 60;
 export const dynamicParams = true;
@@ -33,26 +35,15 @@ export async function generateMetadata({
     `Digital edition of ${magazine.title} from the TradeFlock USA magazine desk.`;
   const image = magazine.cover_image_url
     ? { url: magazine.cover_image_url, alt: magazine.title }
-    : undefined;
+    : null;
 
-  return {
+  return magazinePageMetadata({
     title: magazine.title,
     description,
-    openGraph: {
-      title: magazine.title,
-      description,
-      type: "article",
-      url: `/magazine/${magazine.slug}`,
-      publishedTime: magazine.published_at,
-      ...(image ? { images: [image] } : {}),
-    },
-    twitter: {
-      card: image ? "summary_large_image" : "summary",
-      title: magazine.title,
-      description,
-      ...(image ? { images: [image.url] } : {}),
-    },
-  };
+    path: `/magazine/${magazine.slug}`,
+    publishedTime: magazine.published_at,
+    image,
+  });
 }
 
 export default async function MagazineOverviewPage({
@@ -64,10 +55,12 @@ export default async function MagazineOverviewPage({
 
   const articles = await getArticlesByMagazineId(magazine);
   const honorees = directoryHonoreesForIssue(slug, articles, magazine.title);
+  const canonical = magazineIssueUrl(magazine.slug);
 
   return (
     <>
       <Header activePage="magazine" />
+      <JsonLd data={magazineStructuredData(magazine, canonical)} />
       <main className="bg-[#faf9f7]">
         <MagazineIssueHero
           magazine={magazine}
@@ -79,16 +72,19 @@ export default async function MagazineOverviewPage({
         />
 
         {honorees.length ? (
-          <section className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-4 py-12 md:grid-cols-2 lg:grid-cols-3">
-            {honorees.map((honoree, index) => (
-              <MagazineHonoreeCard
-                key={honoree.slug || honoree.name}
-                honoree={honoree}
-                magazine={magazine}
-                index={index}
-                priority={index < 3}
-              />
-            ))}
+          <section className="mx-auto max-w-7xl px-4 py-12">
+            <h2 className="sr-only">Honorees</h2>
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+              {honorees.map((honoree, index) => (
+                <MagazineHonoreeCard
+                  key={honoree.slug || honoree.name}
+                  honoree={honoree}
+                  magazine={magazine}
+                  index={index}
+                  priority={index < 3}
+                />
+              ))}
+            </div>
           </section>
         ) : null}
       </main>

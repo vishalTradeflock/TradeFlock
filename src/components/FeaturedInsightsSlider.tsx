@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import type { ArticleListCard } from "@/lib/types";
+import { articlePath, type ArticleListCard } from "@/lib/types";
 import { cn, formatPublishedAt } from "@/lib/utils";
 
 const INTERVAL_MS = 5000;
@@ -53,7 +53,7 @@ export default function FeaturedInsightsSlider({
     >
       <div className="grid grid-cols-1 items-center gap-8 p-6 md:p-10 lg:grid-cols-12">
         <Link
-          href={`/news/${item.slug}`}
+          href={articlePath(item.slug)}
           className="group relative block aspect-[4/3] overflow-hidden rounded-xl shadow-lg lg:col-span-7"
         >
           <SafeArticleImage
@@ -74,7 +74,7 @@ export default function FeaturedInsightsSlider({
           </p>
           <h2 className="font-serif text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
             <Link
-              href={`/news/${item.slug}`}
+              href={articlePath(item.slug)}
               className="transition hover:text-[#c41e3a]"
             >
               {item.title}
@@ -91,7 +91,7 @@ export default function FeaturedInsightsSlider({
           </p>
           <div>
             <Link
-              href={`/news/${item.slug}`}
+              href={articlePath(item.slug)}
               className="inline-flex items-center rounded bg-[#c41e3a] px-4 py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90"
             >
               Read Full Story →

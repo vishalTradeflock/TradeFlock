@@ -61,7 +61,7 @@ export function magazineEmbedSrc(
   }
   const pdf = usableHttpUrl(magazine.pdf_url);
   if (pdf) {
-    return `/dflip/viewer.html?pdf=${encodeURIComponent(pdf)}&page=${page}#page/${page}`;
+    return `/dflip/viewer.html?pdf=${encodeURIComponent(pdf)}&slug=${encodeURIComponent(magazine.slug)}&page=${page}#page/${page}`;
   }
   return null;
 }

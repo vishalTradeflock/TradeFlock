@@ -3,12 +3,28 @@ export const FALLBACK_COVER_IMAGE =
 
 export const PLACEHOLDER_COVER = "/placeholder.jpg";
 
-const ALLOWED_HOSTS = new Set([
+/** Hosts listed in next.config.ts `images.remotePatterns` (exact match). */
+const OPTIMIZED_COVER_HOSTS = new Set([
   "images.unsplash.com",
   "plus.unsplash.com",
+  "www.tradeflock.net",
+  "tradeflock.net",
   "www.tradeflockusa.com",
   "tradeflockusa.com",
+  "tradeflock.com",
+  "www.tradeflock.com",
+  "www.tradeflock.us",
+  "tradeflock.us",
+  "image.cnbcfm.com",
+  "techcrunch.com",
+  "www.techcrunch.com",
+  "mmx.prnewswire.com",
+  "www.prnewswire.com",
+  "prnewswire.com",
 ]);
+
+/** Single-segment wildcards from remotePatterns (`*.supabase.co`, `*.techcrunch.com`). */
+const OPTIMIZED_COVER_HOST_SUFFIXES = [".supabase.co", ".techcrunch.com"] as const;
 
 export const EDITORIAL_COVERS = [
   // Tech / AI
@@ -49,6 +65,13 @@ type CoverSource = {
   cover_image_url?: string | null;
 };
 
+export type CoverArticleRef = {
+  id: string;
+  title: string;
+  slug?: string;
+  category?: { slug?: string | null };
+};
+
 function hashKey(value: string) {
   let hash = 0;
   for (let i = 0; i < value.length; i += 1) {
@@ -77,25 +100,97 @@ export function unsplashEditorSrc(url: string) {
   }
 }
 
-/** True for a real https cover URL (feed enclosure / og:image). Never invents a URL. */
-export function isHttpsCoverUrl(url: string | null | undefined): url is string {
-  const trimmed = url?.trim() ?? "";
-  if (!trimmed) return false;
+/** Decode `&amp;` / `&amp;amp;` (and numeric entities) so query strings stay valid. */
+export function decodeCoverHtmlEntities(value: string): string {
+  let decoded = value.trim();
+  for (let i = 0; i < 5; i += 1) {
+    const next = decoded
+      .replace(/&#(\d+);/g, (_, code: string) => {
+        const point = Number(code);
+        return Number.isFinite(point) && point > 0 ? String.fromCodePoint(point) : "";
+      })
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => {
+        const point = Number.parseInt(hex, 16);
+        return Number.isFinite(point) && point > 0 ? String.fromCodePoint(point) : "";
+      })
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&quot;/gi, '"')
+      .replace(/&apos;/gi, "'")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&amp;/gi, "&");
+    if (next === decoded) break;
+    decoded = next;
+  }
+  return decoded.trim();
+}
+
+/**
+ * Trim, decode HTML entities, and reject empty / non-https / document URLs.
+ * Never invents a host; returns null so callers can fall back to a desk Unsplash URL.
+ */
+export function sanitizeCoverUrl(url: string | null | undefined): string | null {
+  if (typeof url !== "string") return null;
+  const decoded = decodeCoverHtmlEntities(url);
+  if (!decoded) return null;
+  if (/[<>\s]/.test(decoded)) return null;
+  if (/&(?:amp|lt|gt|quot|apos|nbsp);/i.test(decoded)) return null;
   try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol !== "https:") return false;
-    if (!parsed.hostname.includes(".")) return false;
-    if (/\.(pdf|html?|xml|json|mp4|webm|mov)(\?|$)/i.test(parsed.pathname)) return false;
-    return true;
+    const parsed = new URL(decoded);
+    if (parsed.protocol !== "https:") return null;
+    if (!parsed.hostname.includes(".")) return null;
+    if (parsed.username || parsed.password) return null;
+    if (/\.(pdf|html?|xml|json|mp4|webm|mov)(\?|$)/i.test(parsed.pathname)) return null;
+    const href = parsed.toString();
+    if (!href || href === PLACEHOLDER_COVER) return null;
+    return href;
   } catch {
-    return false;
+    return null;
   }
 }
 
+/** True for a real https cover URL (feed enclosure / og:image). Never invents a URL. */
+export function isHttpsCoverUrl(url: string | null | undefined): url is string {
+  return sanitizeCoverUrl(url) !== null;
+}
+
 export function resolveCoverImage(url: string | null | undefined): string {
-  if (!url) return FALLBACK_COVER_IMAGE;
-  if (!isHttpsCoverUrl(url)) return FALLBACK_COVER_IMAGE;
-  return url;
+  return sanitizeCoverUrl(url) ?? FALLBACK_COVER_IMAGE;
+}
+
+/** RSS/enclosure first, then og:image, then a deterministic desk Unsplash hotlink. */
+export function selectPublishCover(input: {
+  rssImageUrl?: string | null;
+  notesCoverUrl?: string | null;
+  ogImageUrl?: string | null;
+  article: CoverArticleRef;
+}): string {
+  const fromFeed =
+    sanitizeCoverUrl(input.rssImageUrl) ?? sanitizeCoverUrl(input.notesCoverUrl);
+  if (fromFeed) return fromFeed;
+  const fromOg = sanitizeCoverUrl(input.ogImageUrl);
+  if (fromOg) return fromOg;
+  return deskCoverFallback(input.article);
+}
+
+/** True when next/image can optimize this host (matches next.config remotePatterns). */
+export function isOptimizedCoverHost(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase().replace(/\.$/, "");
+  if (!host) return false;
+  if (OPTIMIZED_COVER_HOSTS.has(host)) return true;
+  return OPTIMIZED_COVER_HOST_SUFFIXES.some(
+    (suffix) => host.endsWith(suffix) && host.length > suffix.length,
+  );
+}
+
+/** Native <img> for exotic feed hosts; next/image for allowlisted remotePatterns. */
+export function shouldBypassImageOptimizer(url: string): boolean {
+  if (url.startsWith("/")) return false;
+  try {
+    return !isOptimizedCoverHost(new URL(url).hostname);
+  } catch {
+    return true;
+  }
 }
 
 export function pickEditorialCover(article: CoverSource, offset = 0) {
@@ -125,22 +220,12 @@ export function deskCoverFallback(article: {
   return pool[index];
 }
 
-export function articleCoverSrc(article: {
-  id: string;
-  title: string;
-  slug?: string;
-  cover_image_url?: string | null;
-  category?: { slug?: string | null };
-}) {
-  const raw = article.cover_image_url?.trim() ?? "";
-  if (!raw || raw === FALLBACK_COVER_IMAGE || raw === PLACEHOLDER_COVER) {
+export function articleCoverSrc(article: CoverArticleRef & { cover_image_url?: string | null }) {
+  const sanitized = sanitizeCoverUrl(article.cover_image_url);
+  if (!sanitized || sanitized === FALLBACK_COVER_IMAGE) {
     return deskCoverFallback(article);
   }
-  const resolved = resolveCoverImage(raw);
-  if (resolved === FALLBACK_COVER_IMAGE || resolved === PLACEHOLDER_COVER) {
-    return deskCoverFallback(article);
-  }
-  return resolved;
+  return sanitized;
 }
 
 export function isStockCoverUrl(url: string | null | undefined) {
@@ -174,17 +259,16 @@ export function portraitImageUrl(...values: unknown[]) {
   return null;
 }
 
-function isWeakCover(url: string | null | undefined) {
-  return !url?.trim();
-}
-
 export function assignDistinctCovers<T extends CoverSource>(articles: T[]): T[] {
   const used = new Set<string>();
   let previous = "";
 
   return articles.map((article, index) => {
-    const raw = article.cover_image_url?.trim() ?? "";
-    let url = !raw || isWeakCover(raw) ? pickEditorialCover(article, index) : resolveCoverImage(raw);
+    const sanitized = sanitizeCoverUrl(article.cover_image_url);
+    let url =
+      !sanitized || sanitized === FALLBACK_COVER_IMAGE
+        ? pickEditorialCover(article, index)
+        : sanitized;
     let identity = coverIdentity(url);
 
     if (used.has(identity) || identity === previous) {

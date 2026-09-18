@@ -3,7 +3,7 @@
 import nextDynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import type { StudioCategory } from "@/components/studio/types";
+import type { StudioAuthor, StudioCategory, StudioFaqDraft } from "@/components/studio/types";
 import type { StudioRole } from "@/lib/studio/roles";
 
 const StudioWriter = nextDynamic(() => import("@/components/studio/StudioWriter"), {
@@ -21,15 +21,19 @@ type Bootstrap = {
   role: StudioRole;
   email: string | null;
   categories: StudioCategory[];
+  authors: StudioAuthor[];
   initialDraft: {
     id: string;
     title: string;
     body: string;
     slug: string;
     categoryId: string;
+    authorId: string;
     status: "draft" | "review" | "published";
     metaTitle: string;
     metaDescription: string;
+    coverImageAlt: string;
+    faqs: StudioFaqDraft[];
   } | null;
 };
 
@@ -88,6 +92,7 @@ function WriteCanvas() {
     <StudioWriter
       role={bootstrap.role}
       categories={bootstrap.categories}
+      authors={bootstrap.authors ?? []}
       email={bootstrap.email}
       initialDraft={bootstrap.initialDraft}
     />

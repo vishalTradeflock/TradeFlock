@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { ArticleListCard } from "@/lib/types";
+import { articlePath, type ArticleListCard } from "@/lib/types";
 import { cn, formatShortDate } from "@/lib/utils";
 
 const PAGE_SIZE = 8;
@@ -146,14 +146,14 @@ export default function GrowthStrategies({
           {visibleStories.map((article) => (
             <li key={article.id}>
               <Link
-                href={`/news/${article.slug}`}
+                href={articlePath(article.slug)}
                 className="group flex items-center gap-4 rounded-xl border border-neutral-200 bg-white p-3.5 transition duration-200 hover:border-neutral-400 hover:bg-neutral-50"
               >
                 <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg shadow-sm sm:h-20 sm:w-20">
                   <LeaderPortrait
                     src={article.cover_image_url}
                     name={article.authorName}
-                    alt={article.cover_image_alt || article.title}
+                    alt={article.cover_image_alt}
                   />
                 </div>
                 <div className="min-w-0 flex-1">

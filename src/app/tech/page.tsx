@@ -1,17 +1,13 @@
 import type { Metadata } from "next";
 import CategoryFeed from "@/components/CategoryFeed";
+import { publicPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
   title: "Technology",
   description:
     "Insights on AI, digital transformation, enterprise software, and emerging technology.",
-  openGraph: {
-    title: "Technology | TradeFlock USA",
-    description:
-      "Insights on AI, digital transformation, enterprise software, and emerging technology.",
-    type: "website",
-  },
-};
+  path: "/tech",
+});
 
 export const revalidate = 120;
 

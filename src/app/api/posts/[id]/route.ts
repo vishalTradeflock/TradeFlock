@@ -42,7 +42,7 @@ export async function DELETE(
 
   if (article.status === "published") {
     revalidatePath("/", "layout");
-    revalidatePath(`/news/${article.slug}`);
+    revalidatePath(`/${article.slug}`);
   }
 
   return NextResponse.json({ ok: true, id: article.id });

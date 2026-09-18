@@ -75,7 +75,7 @@ function extractSummary(block: string): string {
 
 function attrUrl(tag: string): string | null {
   const match = tag.match(/\b(?:url|href)=["']([^"']+)["']/i);
-  const url = match?.[1]?.trim();
+  const url = match?.[1] ? decodeXmlEntities(match[1]).trim() : "";
   return url && /^https?:\/\//i.test(url) ? url : null;
 }
 

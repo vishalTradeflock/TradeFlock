@@ -48,6 +48,13 @@ describe("parseLeadNotes", () => {
     assert.equal(notes.publishedAt, "2026-09-15T22:31:00.000Z");
     assert.equal(notes.coverUrl, "https://image.cnbcfm.com/benioff.jpg");
   });
+
+  it("sanitizes a double-encoded Cover URL from the lead notes", () => {
+    const notes = parseLeadNotes(
+      `${BENIOFF_NOTES}\nCover: https://image.cnbcfm.com/benioff.jpg?v=1&amp;amp;w=1600\n`,
+    );
+    assert.equal(notes.coverUrl, "https://image.cnbcfm.com/benioff.jpg?v=1&w=1600");
+  });
 });
 
 describe("ensureSourceLink", () => {

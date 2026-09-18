@@ -3,18 +3,15 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import MagazineDeskGrid from "@/components/MagazineDeskGrid";
 import { getMagazines } from "@/lib/magazines";
+import { publicPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
   title: "Magazine Archive",
   description:
     "The complete TradeFlock USA archive of executive editions, special reports, and digital flipbooks.",
-  openGraph: {
-    title: "Magazine Archive | TradeFlock USA",
-    description:
-      "Browse every TradeFlock USA executive edition, special report, and digital flipbook.",
-    type: "website",
-  },
-};
+  path: "/magazine/all",
+  ogTitle: "Magazine Archive | TradeFlock USA",
+});
 
 export const revalidate = 120;
 

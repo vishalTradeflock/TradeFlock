@@ -1,17 +1,13 @@
 import type { Metadata } from "next";
 import CategoryFeed from "@/components/CategoryFeed";
+import { publicPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
   title: "Markets",
   description:
     "Macro trends, market intelligence, global trade movements, and industry shifts.",
-  openGraph: {
-    title: "Markets | TradeFlock USA",
-    description:
-      "Macro trends, market intelligence, global trade movements, and industry shifts.",
-    type: "website",
-  },
-};
+  path: "/markets",
+});
 
 export const revalidate = 120;
 

@@ -1,8 +1,11 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import { JsonLd } from "@/components/JsonLd";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { getCategoryDesk } from "@/lib/articles";
 import { HOME_ARTICLE_LIMIT } from "@/lib/cache";
+import { categoryStructuredData } from "@/lib/seo";
+import { articlePath } from "@/lib/types";
 import { formatPublishedAt, formatShortDate } from "@/lib/utils";
 
 type CategoryFeedProps = {
@@ -25,6 +28,7 @@ export default async function CategoryFeed({
   return (
     <>
       <Header activeCategory={activeSlug} tickerArticles={articles.slice(0, 12)} />
+      <JsonLd data={categoryStructuredData(categoryTitle, categorySlug)} />
       <main className="mx-auto max-w-[1240px] px-4 py-8">
         <nav aria-label="Breadcrumb" className="text-xs text-neutral-500">
           <ol className="flex flex-wrap items-center gap-1.5">
@@ -56,12 +60,12 @@ export default async function CategoryFeed({
           <>
             <section className="mt-8 grid grid-cols-1 items-center gap-8 border-b border-neutral-200 pb-10 lg:grid-cols-12">
               <Link
-                href={`/news/${featured.slug}`}
+                href={articlePath(featured.slug)}
                 className="group relative block aspect-[16/9] overflow-hidden bg-neutral-100 lg:col-span-7"
               >
                 <SafeArticleImage
                   src={featured.cover_image_url}
-                  alt={featured.cover_image_alt || featured.title}
+                  alt={featured.cover_image_alt}
                   fill
                   priority
                   sizes="(min-width: 1024px) 55vw, 100vw"
@@ -74,7 +78,7 @@ export default async function CategoryFeed({
                 </p>
                 <h2 className="mt-2 font-serif text-3xl font-bold leading-tight tracking-tight">
                   <Link
-                    href={`/news/${featured.slug}`}
+                    href={articlePath(featured.slug)}
                     className="transition hover:text-[#c41e3a]"
                   >
                     {featured.title}
@@ -98,11 +102,11 @@ export default async function CategoryFeed({
               <section className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
                 {rest.map((article) => (
                   <article key={article.id}>
-                    <Link href={`/news/${article.slug}`} className="group block">
+                    <Link href={articlePath(article.slug)} className="group block">
                       <div className="relative aspect-[16/9] overflow-hidden bg-neutral-100">
                         <SafeArticleImage
                           src={article.cover_image_url}
-                          alt={article.cover_image_alt || article.title}
+                          alt={article.cover_image_alt}
                           fill
                           sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
                           loading="lazy"

@@ -1,7 +1,9 @@
 import { cache } from "react";
+import { exactRequestedArticleSlug } from "@/lib/article-slug-request";
 import { BIG_TAKE_LIMIT, HOME_ARTICLE_LIMIT } from "@/lib/cache";
 import { SEED_ARTICLES } from "@/lib/data/seed";
-import { assignDistinctCovers, portraitImageUrl, resolveCoverImage } from "@/lib/images";
+import { assignDistinctCovers, articleCoverSrc, portraitImageUrl } from "@/lib/images";
+import { parseArticleFaqs } from "@/lib/seo";
 import {
   isSuccessInsightsArticle,
   isSuccessInsightsCategory,
@@ -40,21 +42,42 @@ const ARTICLE_LIST_SELECT = [
   "is_featured",
   "is_breaking",
   "category:categories(id,name,slug)",
-  "author:authors(id,name,slug,title,avatar_url)",
+  "author:authors(id,name,slug,title,avatar_url,bio)",
 ].join(",");
 
 const ARTICLE_DETAIL_SELECT = `${ARTICLE_LIST_SELECT},body`;
 const ARTICLE_DETAIL_SEO_SELECT = `${ARTICLE_DETAIL_SELECT},meta_title,meta_description`;
+const ARTICLE_DETAIL_TECH_SELECT = `${ARTICLE_DETAIL_SEO_SELECT},canonical_url,faqs,featured_image,featured_image_alt,image_url,updated_at`;
 
-let articleSeoColumns = true;
+type ArticleDetailMode = "tech" | "seo" | "base";
+let articleDetailMode: ArticleDetailMode = "tech";
 
 function missingSeoColumn(message: string | undefined) {
   const haystack = (message ?? "").toLowerCase();
   return haystack.includes("meta_title") || haystack.includes("meta_description");
 }
 
+function missingTechSeoColumn(message: string | undefined) {
+  const haystack = (message ?? "").toLowerCase();
+  return /canonical_url|faqs|featured_image|image_url/.test(haystack);
+}
+
 function articleDetailSelect() {
-  return articleSeoColumns ? ARTICLE_DETAIL_SEO_SELECT : ARTICLE_DETAIL_SELECT;
+  if (articleDetailMode === "tech") return ARTICLE_DETAIL_TECH_SELECT;
+  if (articleDetailMode === "seo") return ARTICLE_DETAIL_SEO_SELECT;
+  return ARTICLE_DETAIL_SELECT;
+}
+
+function downgradeArticleDetailSelect(message: string | undefined) {
+  if (articleDetailMode === "tech" && missingTechSeoColumn(message)) {
+    articleDetailMode = "seo";
+    return true;
+  }
+  if (articleDetailMode !== "base" && missingSeoColumn(message)) {
+    articleDetailMode = "base";
+    return true;
+  }
+  return false;
 }
 
 type ArticleRow = Record<string, unknown> & {
@@ -65,6 +88,12 @@ type ArticleRow = Record<string, unknown> & {
   cover_image_url?: string | null;
   meta_title?: string | null;
   meta_description?: string | null;
+  canonical_url?: string | null;
+  featured_image?: string | null;
+  featured_image_alt?: string | null;
+  image_url?: string | null;
+  faqs?: unknown;
+  updated_at?: string | null;
 };
 
 type ListQuery = {
@@ -72,6 +101,7 @@ type ListQuery = {
   categoryName?: string;
   categoryId?: string;
   categoryIds?: string[];
+  authorId?: string;
   excludeId?: string;
   excludeCategoryIds?: string[];
   excludeSuccessInsights?: boolean;
@@ -109,12 +139,31 @@ function mapArticleRow(row: ArticleRow, includeBody: boolean): ArticleWithRelati
   return {
     ...article,
     body: includeBody ? String(row.body ?? "") : "",
-    cover_image_url: resolveCoverImage(article.cover_image_url),
+    cover_image_url: articleCoverSrc({
+      id: article.id,
+      title: article.title,
+      slug: article.slug,
+      cover_image_url: article.cover_image_url,
+      category,
+    }),
     meta_title: typeof row.meta_title === "string" && row.meta_title.trim() ? row.meta_title : null,
     meta_description:
       typeof row.meta_description === "string" && row.meta_description.trim()
         ? row.meta_description
         : null,
+    canonical_url:
+      typeof row.canonical_url === "string" && row.canonical_url.trim() ? row.canonical_url : null,
+    featured_image:
+      typeof row.featured_image === "string" && row.featured_image.trim()
+        ? row.featured_image
+        : null,
+    featured_image_alt:
+      typeof row.featured_image_alt === "string" && row.featured_image_alt.trim()
+        ? row.featured_image_alt
+        : null,
+    image_url: typeof row.image_url === "string" && row.image_url.trim() ? row.image_url : null,
+    updated_at: typeof row.updated_at === "string" && row.updated_at.trim() ? row.updated_at : null,
+    faqs: parseArticleFaqs(row.faqs),
     category,
     author,
   };
@@ -124,21 +173,16 @@ function withListCovers(articles: ArticleWithRelations[]) {
   return assignDistinctCovers(
     articles.map((article) => ({
       ...article,
-      cover_image_url: resolveCoverImage(article.cover_image_url),
+      cover_image_url: articleCoverSrc(article),
     })),
   );
 }
 
 export function normalizeArticleSlug(slug: string) {
-  let decoded = slug.trim();
-  try {
-    decoded = decodeURIComponent(decoded).trim();
-  } catch {
-    /* keep trimmed raw slug */
-  }
-  return decoded.replace(/^\/+|\/+$/g, "");
+  return exactRequestedArticleSlug(slug);
 }
 
+/** Used only after exact redirect lookup. Must not run before article_slug_redirects. */
 function slugFallbacks(cleanSlug: string) {
   const trimmed = cleanSlug.replace(/-+$/g, "").replace(/^-+/g, "");
   const variants = [cleanSlug, trimmed, cleanSlug.toLowerCase(), trimmed.toLowerCase()];
@@ -239,6 +283,9 @@ async function queryList(options: ListQuery): Promise<ArticleWithRelations[] | n
     if (options.categoryIds?.length) {
       request = request.in("category_id", options.categoryIds);
     }
+    if (options.authorId) {
+      request = request.eq("author_id", options.authorId);
+    }
     if (options.excludeId) {
       request = request.neq("id", options.excludeId);
     }
@@ -318,6 +365,45 @@ export const getArticles = cache(async (categorySlug?: string, limit = LIST_LIMI
   const filtered = excludeSuccessInsights ? withoutSuccessInsights(rows) : rows;
   return withListCovers(filtered.slice(0, limit));
 });
+
+export const getPublishedArticlesByAuthorId = cache(async (authorId: string, limit = 60) => {
+  if (!authorId) return [];
+  const rows =
+    (await queryList({ authorId, limit })) ??
+    filterSeed({ limit }).filter((article) => article.author.id === authorId);
+  return withListCovers(rows);
+});
+
+export async function resolvePublishedSlugRedirect(oldSlug: string) {
+  const clean = exactRequestedArticleSlug(oldSlug);
+  if (!clean || !isSupabaseConfigured()) return null;
+
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("article_slug_redirects")
+      .select("article_id")
+      .eq("old_slug", clean)
+      .maybeSingle();
+    if (error || !data?.article_id) return null;
+
+    const article = await supabase
+      .from("articles")
+      .select("slug, status, published_at")
+      .eq("id", data.article_id)
+      .maybeSingle();
+    if (article.error || !article.data) return null;
+    if (article.data.status !== "published") return null;
+    if (article.data.published_at && article.data.published_at > new Date().toISOString()) {
+      return null;
+    }
+    const next = article.data.slug?.trim();
+    if (!next || next === clean) return null;
+    return next;
+  } catch {
+    return null;
+  }
+}
 
 function missingArticleColumn(message: string | undefined, column: string) {
   return (message ?? "").toLowerCase().includes(column);
@@ -608,7 +694,7 @@ function mapMagazineArticles(rows: unknown[] | null | undefined): ArticleWithRel
       cover_image_url:
         portraitImageUrl(row.featured_image, row.cover_image, row.cover_image_url) ?? "",
       cover_image_alt:
-        typeof row.cover_image_alt === "string" ? row.cover_image_alt : mapped?.cover_image_alt || title,
+        typeof row.cover_image_alt === "string" ? row.cover_image_alt : mapped?.cover_image_alt || "",
       category_id: String(row.category_id ?? mapped?.category_id ?? fallbackCategory.id),
       author_id: String(row.author_id ?? mapped?.author_id ?? fallbackAuthor.id),
       is_featured: Boolean(row.is_featured ?? mapped?.is_featured),
@@ -714,8 +800,7 @@ async function fetchArticleBySlugFromSupabase(cleanSlug: string) {
       .lte("published_at", now)
       .maybeSingle();
 
-    if (articleSeoColumns && missingSeoColumn(exact.error?.message)) {
-      articleSeoColumns = false;
+    if (downgradeArticleDetailSelect(exact.error?.message)) {
       return fetchArticleBySlugFromSupabase(cleanSlug);
     }
 
@@ -774,7 +859,7 @@ export const getArticleBySlug = cache(async (slug: string) => {
   if (!seed) return null;
   return {
     ...seed,
-    cover_image_url: resolveCoverImage(seed.cover_image_url),
+    cover_image_url: articleCoverSrc(seed),
   };
 });
 
@@ -822,7 +907,7 @@ const ARCHIVE_SELECT = [
   "is_featured",
   "is_breaking",
   "categories!inner(id,name,slug)",
-  "author:authors(id,name,slug,title,avatar_url)",
+  "author:authors(id,name,slug,title,avatar_url,bio)",
 ].join(",");
 
 /** Full Success Insights archive — list fields only, bypasses the 100-row PostgREST cap. */
@@ -918,7 +1003,7 @@ export function toArticleListCard(article: ArticleWithRelations): ArticleListCar
   };
 }
 
-export const getRelatedArticles = cache(async (article: ArticleWithRelations, limit = 5) => {
+export const getRelatedArticles = cache(async (article: ArticleWithRelations, limit = 9) => {
   const excludeSuccessInsights = !isSuccessInsightsArticle(article);
   const fetchLimit = excludeSuccessInsights ? editorialQueryLimit(limit) : limit;
   const sameDeskRaw =
@@ -935,8 +1020,9 @@ export const getRelatedArticles = cache(async (article: ArticleWithRelations, li
       limit: fetchLimit,
     });
   const sameDesk = excludeSuccessInsights ? withoutSuccessInsights(sameDeskRaw) : sameDeskRaw;
+  const same = sameDesk.filter((row) => row.slug !== article.slug);
 
-  if (sameDesk.length >= limit) return withListCovers(sameDesk.slice(0, limit));
+  if (same.length >= 3) return withListCovers(same.slice(0, limit));
 
   const fillerRaw =
     (await queryList({
@@ -951,8 +1037,10 @@ export const getRelatedArticles = cache(async (article: ArticleWithRelations, li
     });
   const filler = excludeSuccessInsights ? withoutSuccessInsights(fillerRaw) : fillerRaw;
   const merged = [
-    ...sameDesk,
-    ...filler.filter((item) => !sameDesk.some((desk) => desk.id === item.id)),
+    ...same,
+    ...filler.filter(
+      (item) => item.slug !== article.slug && !same.some((desk) => desk.id === item.id),
+    ),
   ].slice(0, limit);
   return withListCovers(merged);
 });
