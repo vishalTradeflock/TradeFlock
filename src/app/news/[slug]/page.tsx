@@ -5,6 +5,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import Header from "@/components/Header";
 import { ArticleAuthorCard } from "@/components/ArticleAuthorCard";
 import { ArticleFaqAccordion } from "@/components/ArticleFaqAccordion";
+import { ArticleHeader } from "@/components/ArticleHeader";
 import { JsonLd } from "@/components/JsonLd";
 import { RelatedArticles } from "@/components/RelatedArticles";
 import {
@@ -26,7 +27,6 @@ import {
   storyShareImage,
 } from "@/lib/seo";
 import { articlePath, sectionPath } from "@/lib/types";
-import { formatPublishedAt } from "@/lib/utils";
 
 export const revalidate = 120;
 export const dynamicParams = true;
@@ -108,26 +108,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               <p className="mt-4 text-xl leading-8 text-neutral-700">{article.dek}</p>
             ) : null}
 
-            <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 border-y border-neutral-200 py-3 text-sm">
-              <div>
-                <span className="font-semibold text-neutral-950">
-                  {article.author?.slug ? (
-                    <Link href={`/author/${article.author.slug}`} className="hover:text-[#c41e3a]">
-                      {article.author?.name?.trim() || "TradeFlock Editorial Desk"}
-                    </Link>
-                  ) : (
-                    article.author?.name?.trim() || "TradeFlock Editorial Desk"
-                  )}
-                </span>
-                {article.author?.title ? (
-                  <span className="mt-0.5 block text-xs text-neutral-500">{article.author.title}</span>
-                ) : null}
-              </div>
-              <span className="hidden h-8 w-px bg-neutral-200 sm:block" />
-              <time dateTime={article.published_at} className="text-xs text-neutral-500">
-                {formatPublishedAt(article.published_at)}
-              </time>
-            </div>
+            <ArticleHeader
+              author={article.author}
+              publishedAt={article.published_at}
+              shareTitle={article.title}
+            />
 
             {coverSrc ? (
               <div className="relative my-8 aspect-[16/9] w-full overflow-hidden border border-neutral-200">
