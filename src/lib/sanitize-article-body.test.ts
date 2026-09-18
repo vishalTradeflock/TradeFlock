@@ -62,4 +62,16 @@ describe("sanitizeArticleBody", () => {
     assert.match(html, /href="\/news\/another-story"/);
     assert.doesNotMatch(html, /href="\/tech\//);
   });
+
+  it("strips the leftover Featured Magazine promo and All Magazines link", () => {
+    const html = sanitizeArticleBody(
+      `<p>The board voted after a lengthy review of the proposal and the market reaction that followed it through the week.</p><h3>Featured Magazine -</h3><a href="https://tradeflockusa.com/top-10-healthcare-executives-transforming-usa-2025/"><img src="https://www.tradeflockusa.com/cover.jpg" alt="cover" /></a><h3>All Magazines</h3><h3>Other Success Insight-</h3>`,
+      { title: "A story" },
+    );
+    assert.match(html, /The board voted after a lengthy review/);
+    assert.doesNotMatch(html, /Featured Magazine/);
+    assert.doesNotMatch(html, /All Magazines/);
+    assert.doesNotMatch(html, /Other Success Insight/);
+    assert.doesNotMatch(html, /cover\.jpg/);
+  });
 });

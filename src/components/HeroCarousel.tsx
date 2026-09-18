@@ -7,7 +7,7 @@ import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
 import { articlePath, type ArticleWithRelations } from "@/lib/types";
 import { formatPublishedAt } from "@/lib/utils";
 
-const INTERVAL_MS = 2000;
+const INTERVAL_MS = 5000;
 
 export default function HeroCarousel({
   articles,
@@ -16,11 +16,11 @@ export default function HeroCarousel({
 }) {
   const slides = articles.slice(0, 8);
   const [index, setIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const safeIndex = slides.length ? index % slides.length : 0;
 
   useEffect(() => {
-    if (slides.length < 2 || paused) return;
+    if (slides.length < 2 || isHovered) return;
 
     const reduceMotion =
       typeof window !== "undefined" &&
@@ -32,7 +32,7 @@ export default function HeroCarousel({
     }, INTERVAL_MS);
 
     return () => window.clearInterval(timer);
-  }, [paused, slides.length]);
+  }, [isHovered, slides.length]);
 
   const article = slides[safeIndex] ?? slides[0];
   if (!article) return null;
@@ -43,10 +43,10 @@ export default function HeroCarousel({
   return (
     <article
       className="group"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocusCapture={() => setPaused(true)}
-      onBlurCapture={() => setPaused(false)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onFocusCapture={() => setIsHovered(true)}
+      onBlurCapture={() => setIsHovered(false)}
     >
       <Link href={articlePath(article.slug)} className="block">
         <div className="relative aspect-[16/10] overflow-hidden rounded bg-neutral-100">

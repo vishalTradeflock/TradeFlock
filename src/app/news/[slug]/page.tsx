@@ -6,12 +6,14 @@ import Header from "@/components/Header";
 import { ArticleAuthorCard } from "@/components/ArticleAuthorCard";
 import { ArticleFaqAccordion } from "@/components/ArticleFaqAccordion";
 import { JsonLd } from "@/components/JsonLd";
+import { RecommendedSuccessInsights } from "@/components/RecommendedSuccessInsights";
 import {
   resolvePublishedArticleRequest,
 } from "@/lib/article-slug-request";
 import {
   getArticleBySlug,
   getArticleSlugs,
+  getRecommendedSuccessInsights,
   getRelatedArticles,
   normalizeArticleSlug,
   resolvePublishedSlugRedirect,
@@ -72,7 +74,10 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
     notFound();
   }
 
-  const related = await getRelatedArticles(article);
+  const [related, recommended] = await Promise.all([
+    getRelatedArticles(article),
+    getRecommendedSuccessInsights(article.slug, 3),
+  ]);
   const coverSrc = articleCoverSrc(article);
   const coverFallback = deskCoverFallback(article);
   const body = sanitizeArticleBody(article.body, {
@@ -127,18 +132,19 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               </time>
             </div>
 
-            <div className="relative mt-5 flex min-h-[200px] items-center justify-center overflow-hidden bg-neutral-100">
-              <SafeArticleImage
-                src={coverSrc}
-                alt={article.featured_image_alt?.trim() || article.cover_image_alt}
-                width={1600}
-                height={900}
-                priority
-                sizes="(min-width: 1024px) 66vw, 100vw"
-                fallbackSrc={coverFallback === coverSrc ? undefined : coverFallback}
-                className="mx-auto h-auto max-h-[500px] w-auto object-contain object-top"
-              />
-            </div>
+            {coverSrc ? (
+              <div className="relative my-8 aspect-[16/9] w-full overflow-hidden border border-neutral-200">
+                <SafeArticleImage
+                  src={coverSrc}
+                  alt={article.featured_image_alt?.trim() || article.cover_image_alt || article.title}
+                  fill
+                  priority
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 70vw, 850px"
+                  fallbackSrc={coverFallback === coverSrc ? undefined : coverFallback}
+                  className="object-cover transition-transform duration-500 hover:scale-[1.01]"
+                />
+              </div>
+            ) : null}
             {showCoverCaption ? (
               <p className="mt-2 text-[11px] text-neutral-500">
                 {article.featured_image_alt?.trim() || article.cover_image_alt}
@@ -146,7 +152,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             ) : null}
 
             <div
-              className="prose-article prose prose-neutral mt-8 max-w-none prose-p:mb-5 prose-p:leading-relaxed prose-h2:mt-10 prose-h2:mb-3 prose-h3:mt-8 prose-h3:mb-3 prose-a:inline prose-a:font-normal [&_a]:inline [&_a]:font-normal [&_a]:underline [&_a]:text-[#c41e3a] hover:[&_a]:text-[#9f1830]"
+              className="prose-article prose prose-neutral mt-8 max-w-none prose-p:mb-5 prose-p:leading-relaxed prose-h2:mt-10 prose-h2:mb-3 prose-h3:mt-8 prose-h3:mb-3 prose-img:my-6 prose-img:h-auto prose-img:w-full prose-img:rounded-lg prose-img:bg-transparent prose-img:p-0 prose-a:inline prose-a:font-normal [&_a]:inline [&_a]:font-normal [&_a]:underline [&_a]:text-[#c41e3a] hover:[&_a]:text-[#9f1830]"
               dangerouslySetInnerHTML={{ __html: body }}
             />
 
@@ -186,6 +192,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             </ul>
           </aside>
         </div>
+        <RecommendedSuccessInsights articles={recommended} />
       </main>
     </>
   );

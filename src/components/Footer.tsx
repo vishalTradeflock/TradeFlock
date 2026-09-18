@@ -1,18 +1,26 @@
 import Link from "next/link";
 import TradeFlockLogo from "@/components/TradeFlockLogo";
-import { NAV_CATEGORIES } from "@/lib/types";
 
-const SECTION_LINKS = [
-  { href: "/", label: "Home" },
-  ...NAV_CATEGORIES.map((category) => ({
-    href: `/${category.slug}`,
-    label: category.name,
-  })),
-  { href: "/success-insights", label: "Success Insights" },
-  { href: "/magazine", label: "Magazine" },
+type FooterLink = {
+  href: string;
+  label: string;
+  external?: boolean;
+};
+
+const INITIATIVE_LINKS: FooterLink[] = [
+  {
+    href: "https://tradeflock.com/40-under-40-nomination-guide/",
+    label: "40 Under 40",
+    external: true,
+  },
+  {
+    href: "https://nexus.tradeflock.com/login.php",
+    label: "Nexus",
+    external: true,
+  },
 ];
 
-const COMPANY_LINKS = [
+const COMPANY_LINKS: FooterLink[] = [
   { href: "/about", label: "About Us" },
   { href: "/contact", label: "Contact Us" },
 ];
@@ -42,7 +50,7 @@ export default function Footer() {
           </p>
         </div>
 
-        <FooterNav title="Sections" links={SECTION_LINKS} />
+        <FooterNav title="Initiatives" links={INITIATIVE_LINKS} />
         <FooterNav title="Company" links={COMPANY_LINKS} />
 
         <nav aria-label="Social">
@@ -54,9 +62,9 @@ export default function Footer() {
               <li key={link.href}>
                 <a
                   href={link.href}
-                  className="hover:text-[#c41e3a]"
+                  className="transition hover:text-[#c41e3a]"
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                 >
                   {link.label}
                 </a>
@@ -79,7 +87,7 @@ function FooterNav({
   links,
 }: {
   title: string;
-  links: readonly { href: string; label: string }[];
+  links: readonly FooterLink[];
 }) {
   return (
     <nav aria-label={title}>
@@ -89,9 +97,20 @@ function FooterNav({
       <ul className="mt-3 space-y-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-neutral-600">
         {links.map((link) => (
           <li key={link.href}>
-            <Link href={link.href} className="hover:text-[#c41e3a]">
-              {link.label}
-            </Link>
+            {link.external ? (
+              <a
+                href={link.href}
+                className="transition hover:text-[#c41e3a]"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {link.label}
+              </a>
+            ) : (
+              <Link href={link.href} className="transition hover:text-[#c41e3a]">
+                {link.label}
+              </Link>
+            )}
           </li>
         ))}
       </ul>

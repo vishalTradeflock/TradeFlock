@@ -22,6 +22,12 @@ function titlesMatch(htmlInner: string, title: string) {
 const LEADING_EMPTY =
   /^(?:\s+|<(?:p|div|span)[^>]*>\s*(?:<br\s*\/?>\s*)*<\/(?:p|div|span)>|<br\s*\/?>|&nbsp;)+/i;
 
+function stripLegacyMagazinePromo(html: string) {
+  const cut = html.search(/<h[1-6][^>]*>\s*(?:Featured Magazine|All Magazines)\b/i);
+  if (cut === -1) return html;
+  return html.slice(0, cut).trim();
+}
+
 function stripLeadingEmpty(html: string) {
   let out = html.trim();
   for (let i = 0; i < 8; i += 1) {
@@ -162,6 +168,7 @@ export function sanitizeArticleBody(
   }
 
   html = stripLeadingChrome(html, options.title);
+  html = stripLegacyMagazinePromo(html);
   html = html.replace(/\s*style\s*=\s*(["'])[\s\S]*?\1/gi, "");
   html = repairInlineAnchors(html);
   html = normalizeArticleHeadings(html);

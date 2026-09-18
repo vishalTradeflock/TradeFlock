@@ -950,6 +950,11 @@ export const getBreakingArticles = cache(async () => {
   return withListCovers(source.slice(0, 3));
 });
 
+export const getRecommendedSuccessInsights = cache(async (currentSlug: string, limit = 3) => {
+  const rows = await getSuccessInsightsArticles(limit + 6);
+  return rows.filter((article) => article.slug !== currentSlug).slice(0, limit);
+});
+
 export function toArticleListCard(article: ArticleWithRelations): ArticleListCard {
   return {
     id: article.id,

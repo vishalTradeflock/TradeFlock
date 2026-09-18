@@ -124,6 +124,15 @@ body {
   color: #9f1830;
 }
 
+.prose-article img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 1.5rem 0;
+  padding: 0;
+  background: transparent;
+}
+
 @keyframes magazine-shimmer {
   0% {
     transform: translateX(-100%);
