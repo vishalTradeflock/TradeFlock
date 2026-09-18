@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import Script from "next/script";
 import { Playfair_Display, Source_Sans_3 } from "next/font/google";
 import { GlobalHeadCode } from "@/components/GlobalHeadCode";
 import { GlobalHeadScripts } from "@/components/GlobalHeadScripts";
@@ -55,6 +56,17 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     >
       <head>{injectPublicHead ? <GlobalHeadCode html={globalHeadCode} /> : null}</head>
       <body className="flex min-h-full flex-col bg-white font-sans text-neutral-900">
+        <Script
+          strategy="afterInteractive"
+          src="https://www.googletagmanager.com/gtag/js?id=G-DQXYWQ2FME"
+        />
+        <Script
+          id="google-analytics"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'G-DQXYWQ2FME', { page_path: window.location.pathname });`,
+          }}
+        />
         <JsonLd data={siteStructuredData()} />
         {injectPublicHead ? <GlobalHeadScripts scripts={headerScripts} /> : null}
         {children}
