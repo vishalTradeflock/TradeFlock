@@ -1,6 +1,8 @@
 const ALLOWED_HOSTS = new Set([
   "www.tradeflockusa.com",
   "tradeflockusa.com",
+  "www.tradeflock.net",
+  "tradeflock.net",
   "mozilla.github.io",
 ]);
 

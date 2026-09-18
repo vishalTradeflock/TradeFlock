@@ -43,11 +43,22 @@
 <script>
   const urlParams = new URLSearchParams(window.location.search);
   const pdfSource = urlParams.get("pdf");
+  const slug = (urlParams.get("slug") || "").replace(/[^a-z0-9-]/gi, "");
+  const downloadUrl = slug ? "/api/magazine/" + encodeURIComponent(slug) + "/download" : "";
 
   function showMissing(message) {
     const el = document.getElementById("df_container");
     el.className = "df-missing";
     el.textContent = message;
+  }
+
+  function wireDownloadLink() {
+    if (!downloadUrl) return;
+    const link = document.querySelector("#df_container a.df-ui-download");
+    if (link) {
+      link.setAttribute("href", downloadUrl);
+      link.setAttribute("download", "");
+    }
   }
 
   if (!pdfSource) {
@@ -81,15 +92,30 @@
           webgl: true,
           height: "100%",
           backgroundColor: "#1a1a1a",
+          duration: 450,
+          pageSize: 2,
+          controlsPosition: "bottom",
           enableDownload: true,
+          downloadUrl: downloadUrl,
           soundEnable: true,
           soundFile: "sound/turn2.mp3",
           scrollWheel: true,
           autoEnableOutline: false,
           autoEnableThumbnail: false,
+          autoEnablePDFRange: true,
+          enableRange: true,
+          disableRange: false,
+          disableStream: false,
+          disableAutoFetch: true,
+          textLayer: false,
+          showSearchControl: false,
           direction: direction,
           openPage: openPage,
+          onCreateUI: function () {
+            wireDownloadLink();
+          },
           onReady: function (flipBook) {
+            wireDownloadLink();
             if (openPage > 1 && flipBook && typeof flipBook.gotoPage === "function") {
               flipBook.gotoPage(openPage);
             }
