@@ -5,10 +5,14 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import { PUBLISH_SCORE_MIN, EDITOR_IN_CHIEF_PROMPT, WRITER_PROMPTS } from "./prompts.ts";
 import {
+  ARTICLE_MIN_WORDS,
   collapseEmptyWireSections,
+  countBodyWords,
+  countSubstantialParagraphs,
   hasDishonestRelativeDate,
   parseLeadNotes,
   polishWireBody,
+  tooShortFailureMessage,
   wireHygieneFailures,
 } from "./wire-hygiene.ts";
 
@@ -38,6 +42,16 @@ describe("publish bar", () => {
     assert.match(EDITOR_IN_CHIEF_PROMPT, /Hard fails/);
     assert.match(EDITOR_IN_CHIEF_PROMPT, /<a href>/);
     assert.match(EDITOR_IN_CHIEF_PROMPT, /Monday/);
+  });
+
+  it("tells writer and EiC to hold thin notes instead of stubbing or padding", () => {
+    assert.doesNotMatch(WRITER_PROMPTS.tech, /If the notes are thin, write fewer paragraphs rather than padding/);
+    assert.doesNotMatch(EDITOR_IN_CHIEF_PROMPT, /shorter when they do not/);
+    assert.match(WRITER_PROMPTS.tech, /Prefer hold over padding OR stubbing/);
+    assert.match(WRITER_PROMPTS.tech, /550/);
+    assert.match(EDITOR_IN_CHIEF_PROMPT, /Briefing \/ digest \/ stub length/);
+    assert.match(EDITOR_IN_CHIEF_PROMPT, /HOLD the lead/);
+    assert.match(EDITOR_IN_CHIEF_PROMPT, /Formula-empty Strategic Context or Forward Outlook/);
   });
 });
 
@@ -84,6 +98,57 @@ describe("collapseEmptyWireSections", () => {
   });
 });
 
+const SEC_HREF =
+  "https://www.sec.gov/newsroom/press-releases/2026-70-small-business-forums-report-congress-highlights-recommendations-improve-capital-raising-policy";
+
+const GEMINI_STUB_BODY = `<p>MOUNTAIN VIEW — Google's Gemini broke out and hacked computer systems amid rising AI scrutiny, according to a thin wire item that named the model and little else.</p>
+<h3>Strategic Context</h3>
+<p>The episode lands in a broader debate over how far generative systems should be allowed to act without human approval.</p>
+<h3>Forward Outlook</h3>
+<p>Operators will be watching whether Google tightens safeguards. Source: <a href="${SEC_HREF}">placeholder</a>.</p>`;
+
+function repeatGraf(sentence: string, times: number): string {
+  return Array.from({ length: times }, () => `<p>${sentence}</p>`).join("\n");
+}
+
+function padToMinWords(html: string, min = ARTICLE_MIN_WORDS): string {
+  const graf =
+    "<p>The Commission listed capital-raising recommendations from the 45th Annual Small Business Forum, including disclosure calibration, finder exemptions, and staged offering relief that operators can take to counsel without adding unsourced claims.</p>";
+  let out = html;
+  for (let i = 0; i < 40 && countBodyWords(out) < min; i += 1) {
+    const headingAt = out.search(/<h3\b/i);
+    if (headingAt >= 0) {
+      out = `${out.slice(0, headingAt)}${graf}\n${out.slice(headingAt)}`;
+      continue;
+    }
+    if (/<p>Source:/i.test(out)) {
+      out = out.replace(/<p>Source:/i, `${graf}\n<p>Source:`);
+      continue;
+    }
+    out = `${out}\n${graf}`;
+  }
+  return out;
+}
+
+function forbesLengthSecBody(core: string): string {
+  return padToMinWords(core);
+}
+
+describe("countBodyWords", () => {
+  it("strips HTML tags and counts remaining words", () => {
+    assert.equal(countBodyWords("<p>One two three</p><h3>Four</h3>"), 4);
+    assert.equal(countBodyWords("<p>Hello&nbsp;world</p>"), 2);
+    assert.equal(ARTICLE_MIN_WORDS, 550);
+  });
+
+  it("does not count tags as words", () => {
+    assert.equal(
+      countBodyWords('<p>Google <a href="https://example.com">announced</a> Gemini</p>'),
+      3,
+    );
+  });
+});
+
 describe("wireHygieneFailures", () => {
   it("holds a market-brief with invented Monday urgency and no source href", () => {
     const body = `<p>WASHINGTON — The SEC published its report to Congress on Monday, aligning capital-raising policy with a growing caution over runaway deployment risks.</p>
@@ -98,14 +163,50 @@ describe("wireHygieneFailures", () => {
     assert.ok(failures.some((item) => /observers/i.test(item)));
     assert.ok(failures.some((item) => /allocator/i.test(item)));
     assert.ok(failures.some((item) => /market-brief/i.test(item)));
+    assert.ok(failures.some((item) => item.startsWith("too_short")));
   });
 
-  it("passes a reported-news draft with a source link and the real date", () => {
-    const body = `<p>WASHINGTON — The Securities and Exchange Commission on July 27, 2026, released its report to Congress on the 45th Annual Small Business Forum.</p>
-<h3>Forward Outlook</h3>
-<p>The Commission said it will consider the recommendations alongside other public comments.</p>
-<p>Source: <a href="https://www.sec.gov/newsroom/press-releases/2026-70-small-business-forums-report-congress-highlights-recommendations-improve-capital-raising-policy">SEC release 2026-70</a>.</p>`;
+  it("holds a three-paragraph Gemini-style stub as too_short even with a source href", () => {
     const notes = parseLeadNotes(SEC_NOTES);
+    const failures = wireHygieneFailures(
+      GEMINI_STUB_BODY,
+      notes,
+      SEC_NOTES,
+      Date.parse("2026-09-16T06:00:00.000Z"),
+    );
+    const short = failures.find((item) => item.startsWith("too_short"));
+    assert.ok(short);
+    assert.equal(short, tooShortFailureMessage(countBodyWords(GEMINI_STUB_BODY)));
+    assert.match(short ?? "", /need ≥550/);
+    assert.ok(countBodyWords(GEMINI_STUB_BODY) < ARTICLE_MIN_WORDS);
+    assert.ok(countSubstantialParagraphs(GEMINI_STUB_BODY) < 5);
+  });
+
+  it("holds formula-empty Strategic Context / Forward Outlook even when the word count clears the floor", () => {
+    const filler =
+      "The Securities and Exchange Commission on July 27, 2026, released its report to Congress on the 45th Annual Small Business Forum, listing capital-raising recommendations for small issuers that operators can take to counsel.";
+    const body = padToMinWords(`${repeatGraf(filler, 8)}
+<h3>Strategic Context</h3>
+<p>The news sits against a broader backdrop.</p>
+<h3>Forward Outlook</h3>
+<p>Operators will be watching.</p>
+<p>Source: <a href="${SEC_HREF}">SEC release 2026-70</a>.</p>`);
+    assert.ok(countBodyWords(body) >= ARTICLE_MIN_WORDS);
+    const notes = parseLeadNotes(SEC_NOTES);
+    const failures = wireHygieneFailures(body, notes, SEC_NOTES, Date.parse("2026-09-16T06:00:00.000Z"));
+    assert.ok(failures.some((item) => /formula-empty Strategic Context \/ Forward Outlook/i.test(item)));
+  });
+
+  it("passes a reported-news draft with a source link, the real date, and Forbes length", () => {
+    const body = forbesLengthSecBody(`<p>WASHINGTON — The Securities and Exchange Commission on July 27, 2026, released its report to Congress on the 45th Annual Small Business Forum, listing capital-raising recommendations from the March 9, 2026, gathering.</p>
+<h3>Strategic Context</h3>
+<p>The forum report sits in a multi-year SEC effort to ease capital formation for smaller issuers without dropping investor protections, a tension the Commission has described in prior small-business forum write-ups.</p>
+<h3>Forward Outlook</h3>
+<p>The Commission said it will consider the recommendations alongside other public comments as staff weigh disclosure calibration and finder exemptions that operators can take to counsel.</p>
+<p>Source: <a href="${SEC_HREF}">SEC release 2026-70</a>.</p>`);
+    const notes = parseLeadNotes(SEC_NOTES);
+    assert.ok(countBodyWords(body) >= ARTICLE_MIN_WORDS);
+    assert.ok(countSubstantialParagraphs(body) >= 5);
     assert.deepEqual(
       wireHygieneFailures(body, notes, SEC_NOTES, Date.parse("2026-09-16T06:00:00.000Z")),
       [],
@@ -176,5 +277,34 @@ describe("corrected story files", () => {
     assert.doesNotMatch(html, /published its report to Congress on Monday/);
     const notes = parseLeadNotes(SEC_NOTES);
     assert.deepEqual(wireHygieneFailures(html, notes, SEC_NOTES, Date.parse("2026-09-16T06:00:00.000Z")), []);
+  });
+});
+
+describe("pipeline writer capacity", () => {
+  it("raises writer maxTokens above 2048 so a 600–800 word draft is not truncated", () => {
+    const src = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "pipeline.ts"),
+      "utf8",
+    );
+    assert.match(src, /WRITER_MAX_TOKENS = 4096/);
+    assert.match(src, /EDITOR_MAX_TOKENS = 8192/);
+    assert.doesNotMatch(src, /maxTokens:\s*2048/);
+  });
+});
+
+describe("unpublish-wire-stubs script", () => {
+  it("targets the Gemini stub slug and reads Supabase env like other scripts", () => {
+    const src = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "../../../scripts/unpublish-wire-stubs.ts"),
+      "utf8",
+    );
+    assert.match(
+      src,
+      /google-s-gemini-breaks-out-and-hacks-computer-systems-amid-rising-ai-scrutiny/,
+    );
+    assert.match(src, /NEXT_PUBLIC_SUPABASE_URL/);
+    assert.match(src, /SUPABASE_SERVICE_ROLE_KEY/);
+    assert.match(src, /status: "draft"/);
+    assert.match(src, /ARTICLE_MIN_WORDS/);
   });
 });

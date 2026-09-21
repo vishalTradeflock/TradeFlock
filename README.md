@@ -24,7 +24,11 @@ Score is 0–10 after the edit (`PUBLISH_SCORE_MIN = 8.5`). An **8.0** is a comp
 | **8.0** | Close: soft lede, generic "so what," or press-release cadence. Hold. |
 | **<8** | Thin, fluffy, unsourced, or marketing voice. Hold. |
 
-An 8.5 requires named attribution from the RSS notes, no invented quotes/figures/analysts, a concrete stake for an operator or allocator, and tight newspaper English. HTML output is `<p>` body copy plus the required `<h3>` section heads.
+An 8.5 requires named attribution from the RSS notes, no invented quotes/figures/analysts, a concrete stake for an operator or allocator, tight newspaper English, **and Forbes length**. Score ≥ 8.5 is not enough: the pipeline **holds** any body under **~550 words** (HTML stripped) with a `too_short` reason. Publishable copy is **5–7 substantial paragraphs / ~600–800 words**. Thin source notes → **hold the lead**, never a 3-paragraph digest. Empty formula Strategic Context / Forward Outlook is a hard fail.
+
+HTML output is `<p>` body copy plus the required `<h3>` section heads.
+
+To pull the Gemini briefing stub (slug `google-s-gemini-breaks-out-and-hacks-computer-systems-amid-rising-ai-scrutiny`) and other recent sub-550-word wire pieces back to `draft`, run `node --experimental-strip-types scripts/unpublish-wire-stubs.ts --dry-run` with Supabase env (same as other scripts; CI does not need prod credentials).
 
 ### Defaults
 
