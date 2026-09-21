@@ -3,6 +3,7 @@ import { firstPartyMediaUrl } from "@/lib/media-proxy";
 import { PRODUCTION_ORIGIN, getBaseUrl } from "@/lib/site-url";
 import { faqAnswerPlainText } from "@/lib/studio/faqs";
 import { publicStoryPath, resolveSeoDescription, resolveSeoTitle } from "@/lib/studio/seo";
+import { targetedNoindexMetadata } from "@/lib/targeted-noindex";
 import { articlePath, sectionPath, type ArticleWithRelations, type Magazine } from "@/lib/types";
 
 export const SITE_NAME = "TradeFlock USA";
@@ -261,6 +262,7 @@ export function publicPageMetadata({
       description,
       images: ogImages.map((image) => image.url),
     },
+    ...targetedNoindexMetadata(path),
   };
 }
 
@@ -293,6 +295,7 @@ export function articlePageMetadata(article: ArticleWithRelations): Metadata {
       description,
       images: [image.url],
     },
+    ...targetedNoindexMetadata(articlePath(article.slug)),
   };
 }
 
@@ -330,6 +333,7 @@ export function magazinePageMetadata({
       description,
       images: [ogImage.url],
     },
+    ...targetedNoindexMetadata(path),
   };
 }
 
