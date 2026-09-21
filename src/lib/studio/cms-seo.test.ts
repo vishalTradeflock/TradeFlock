@@ -198,12 +198,9 @@ describe("published slug redirect lookup order", () => {
     assert.equal(result.location, `/${doubleHyphenNew}`);
   });
 
-  it("public pages are indexable and studio stays noindex", () => {
+  it("studio stays noindex and robots.txt still allows crawling", () => {
     const layout = readFileSync(new URL("../../app/layout.tsx", import.meta.url), "utf8");
     assert.doesNotMatch(layout, /SITE_ROBOTS/);
-    assert.doesNotMatch(layout, /index:\s*false/);
-    assert.doesNotMatch(layout, /noindex/);
-    assert.doesNotMatch(layout, /robots:/);
     const studio = readFileSync(new URL("../../app/studio/layout.tsx", import.meta.url), "utf8");
     assert.match(studio, /robots:\s*\{\s*index:\s*false,\s*follow:\s*false\s*\}/);
     const robots = readFileSync(new URL("../../app/robots.ts", import.meta.url), "utf8");
@@ -211,6 +208,7 @@ describe("published slug redirect lookup order", () => {
     assert.match(robots, /disallow:\s*\["\/studio\/",\s*"\/api\/"\]/);
     assert.match(robots, /sitemap\.xml/);
     assert.match(robots, /tradeflock\.net\/sitemap\.xml|`\$\{origin\}\/sitemap\.xml`/);
+    assert.doesNotMatch(robots, /disallow:\s*"\/"/);
   });
 
   it("article page checks exact redirects before getArticleBySlug", () => {
@@ -338,8 +336,6 @@ describe("global head code", () => {
   it("is wired into the root layout with indexable public robots", () => {
     const layout = readFileSync(new URL("../../app/layout.tsx", import.meta.url), "utf8");
     assert.doesNotMatch(layout, /SITE_ROBOTS/);
-    assert.doesNotMatch(layout, /TEMPORARY: site-wide noindex/);
-    assert.doesNotMatch(layout, /robots:/);
     assert.match(layout, /GlobalHeadCode/);
     assert.match(layout, /shouldInjectGlobalHead/);
     const seo = readFileSync(new URL("../seo.ts", import.meta.url), "utf8");

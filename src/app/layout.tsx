@@ -10,6 +10,11 @@ import { shouldInjectGlobalHead } from "@/lib/public-head";
 import { getGlobalHeadCode, getHeaderScripts, getSiteVerification } from "@/lib/site-settings";
 import { siteStructuredData } from "@/lib/seo";
 import { getBaseUrl } from "@/lib/site-url";
+import {
+  SITEWIDE_NOINDEX_META_CONTENT,
+  TEMPORARY_SITEWIDE_NOINDEX,
+  sitewideNoindexMetadata,
+} from "@/lib/sitewide-noindex";
 import "./globals.css";
 
 const playfair = Playfair_Display({
@@ -38,6 +43,7 @@ export async function generateMetadata(): Promise<Metadata> {
       google: "IrQMJyoqG0OnLHEKbgRVcRhTppWDcarmEZCMgi0r99E",
       ...(verification.bing ? { other: { "msvalidate.01": verification.bing } } : {}),
     },
+    ...sitewideNoindexMetadata(),
   };
 }
 
@@ -54,7 +60,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${playfair.variable} ${sourceSans.variable} h-full antialiased`}
     >
-      <head>{injectPublicHead ? <GlobalHeadCode html={globalHeadCode} /> : null}</head>
+      <head>
+        {TEMPORARY_SITEWIDE_NOINDEX ? (
+          <meta name="robots" content={SITEWIDE_NOINDEX_META_CONTENT} />
+        ) : null}
+        {injectPublicHead ? <GlobalHeadCode html={globalHeadCode} /> : null}
+      </head>
       <body className="flex min-h-full flex-col bg-white font-sans text-neutral-900">
         <Script
           strategy="afterInteractive"

@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
+import { sitewideNoindexHeaders } from "./src/lib/sitewide-noindex";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["pdfjs-dist"],
+  async headers() {
+    return sitewideNoindexHeaders();
+  },
   async redirects() {
     return [
       {
