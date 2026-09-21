@@ -6,12 +6,23 @@ export type LeadNotes = {
   headline: string | null;
 };
 
+/** Hard publish floor: strip HTML, then count words. Stubs and briefing-length copy are held. */
+export const ARTICLE_MIN_WORDS = 550;
+
+/** Publishable copy is a reported article, not 2–3 skinny grafs. */
+export const ARTICLE_MIN_PARAGRAPHS = 5;
+
+const SUBSTANTIAL_PARAGRAPH_MIN_WORDS = 30;
+const FORMULA_SECTION_MIN_WORDS = 20;
+
 const SECTION_TITLES = [
   "Strategic Context",
   "Industry & Analyst Perspectives",
   "Financial & Macro Implications",
   "Forward Outlook",
 ] as const;
+
+const FORMULA_SECTIONS = ["Strategic Context", "Forward Outlook"] as const;
 
 const EMPTY_ANALYST_RE =
   /did not cite|no analysts?|unnamed analysts?|industry observers|legislative observers|market participants and legislative observers await/i;
@@ -30,6 +41,43 @@ const LEAD_RELATIVE_DATE_RE =
 
 const RELATIVE_NOUN_RE =
   /\b(?:today|yesterday|this week|(?:on\s+)?(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday))(?:'s)?\s+(?:release|report|filing|announcement)\b/i;
+
+export function stripTagsForWordCount(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&[a-z]+;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function countBodyWords(html: string): number {
+  const text = stripTagsForWordCount(html);
+  if (!text) return 0;
+  return text.split(" ").filter(Boolean).length;
+}
+
+export function countSubstantialParagraphs(html: string): number {
+  const blocks = html.match(/<p\b[^>]*>[\s\S]*?<\/p>/gi) ?? [];
+  return blocks.filter((block) => {
+    const text = stripTagsForWordCount(block);
+    if (!text || /^source:/i.test(text)) return false;
+    return text.split(" ").filter(Boolean).length >= SUBSTANTIAL_PARAGRAPH_MIN_WORDS;
+  }).length;
+}
+
+export function tooShortFailureMessage(wordCount: number): string {
+  return `too_short — below Forbes length bar (~${wordCount} words, need ≥${ARTICLE_MIN_WORDS})`;
+}
+
+export function isTooShortFailure(failure: string): boolean {
+  return failure.startsWith("too_short");
+}
 
 function decodeAmpEntities(value: string) {
   let decoded = value.trim();
@@ -205,6 +253,28 @@ function usedWithoutNotes(html: string, rawSource: string, pattern: RegExp): boo
   return !rawSource.toLowerCase().includes(match[0].toLowerCase());
 }
 
+function sectionBodyWordCount(section: { heading: string | null; html: string }): number {
+  const body = section.html
+    .replace(/<h3\b[^>]*>[\s\S]*?<\/h3>/i, "")
+    .replace(/<p>\s*Source:[\s\S]*?<\/p>/gi, "");
+  return countBodyWords(body);
+}
+
+function formulaEmptySectionTitles(html: string): string[] {
+  const sections = splitSections(html);
+  const empty: string[] = [];
+  for (const title of FORMULA_SECTIONS) {
+    const section = sections.find(
+      (item) => item.heading && new RegExp(`^${titlePattern(title)}$`, "i").test(item.heading),
+    );
+    if (!section) continue;
+    if (sectionBodyWordCount(section) < FORMULA_SECTION_MIN_WORDS) {
+      empty.push(title);
+    }
+  }
+  return empty;
+}
+
 export function wireHygieneFailures(
   html: string,
   notes: LeadNotes,
@@ -212,6 +282,21 @@ export function wireHygieneFailures(
   now = Date.now(),
 ): string[] {
   const failures: string[] = [];
+  const wordCount = countBodyWords(html);
+  const paragraphs = countSubstantialParagraphs(html);
+  if (wordCount < ARTICLE_MIN_WORDS) {
+    failures.push(tooShortFailureMessage(wordCount));
+  } else if (paragraphs < ARTICLE_MIN_PARAGRAPHS) {
+    failures.push(
+      `too_short — briefing/digest structure (${paragraphs} substantial paragraphs, need ≥${ARTICLE_MIN_PARAGRAPHS})`,
+    );
+  }
+  const formulaEmpty = formulaEmptySectionTitles(html);
+  if (formulaEmpty.length) {
+    failures.push(
+      `formula-empty ${formulaEmpty.join(" / ")} (heading with no facts)`,
+    );
+  }
   if (!notes.sourceUrl) {
     failures.push("source notes are missing a primary URL");
   } else if (!sourceHrefInBody(html, notes.sourceUrl)) {
@@ -241,7 +326,7 @@ export function writerLeadInstructions(lead: {
   const notes = parseLeadNotes(lead.rawSource);
   const url = lead.sourceUrl ?? notes.sourceUrl ?? "";
   const published = notes.publishedAt ?? "unknown";
-  return `Write a 600-to-800-word TradeFlock USA reported-news article (not a market brief) with real <h3> section heads. Omit empty sections.
+  return `Write a 600-to-800-word TradeFlock USA reported-news article (not a market brief, not a digest) with real <h3> section heads. Under ~550 words, or only 2–3 skinny sections, is a hard fail and will be held. If these notes cannot support that length with attributed facts, do not stub or pad — the desk will HOLD the lead.
 
 Topic: ${lead.topic}
 Assigned category: ${lead.category}

@@ -18,6 +18,7 @@ import {
   polishWireBody,
   wireHygieneFailures,
   writerLeadInstructions,
+  isTooShortFailure,
   type LeadNotes,
 } from "@/lib/agents/wire-hygiene";
 
@@ -59,8 +60,12 @@ export type ProcessLeadOptions = {
   requireApproved?: boolean;
 };
 
-/** Floor for ?force=1. Hygiene (source link, dating, invented observers, market-brief voice) still blocks publish. */
+/** Floor for ?force=1. Hygiene (source link, dating, invented observers, market-brief voice, length) still blocks publish. */
 export const FORCE_PUBLISH_SCORE_MIN = 6;
+
+/** Writer output must fit a 600–800 word HTML article; 2048 truncates. EiC JSON stays at 8192. */
+const WRITER_MAX_TOKENS = 4096;
+const EDITOR_MAX_TOKENS = 8192;
 
 const SITE_CATEGORY: Record<WriterDesk, string> = {
   tech: "tech",
@@ -134,7 +139,7 @@ async function draftFromWriter(desk: WriterDesk, lead: NewsLead) {
   return completeLlmChat({
     system: WRITER_PROMPTS[desk],
     temperature: 0.45,
-    maxTokens: 2048,
+    maxTokens: WRITER_MAX_TOKENS,
     user: writerLeadInstructions(lead),
   });
 }
@@ -146,7 +151,7 @@ async function editWithEditor(desk: WriterDesk, lead: NewsLead, draft: string) {
     system: EDITOR_IN_CHIEF_PROMPT,
     temperature: 0.2,
     json: true,
-    maxTokens: 8192,
+    maxTokens: EDITOR_MAX_TOKENS,
     user: `Desk: ${desk}
 Topic: ${lead.topic}
 Category: ${lead.category}
@@ -367,6 +372,17 @@ async function commitVerdict(
   };
 }
 
+function holdReason(failures: string[]): string {
+  const short = failures.find(isTooShortFailure);
+  if (short) {
+    const detail = short.replace(/^too_short — /, "");
+    const others = failures.filter((item) => item !== short);
+    if (others.length === 0) return `Held — ${detail}.`;
+    return `Held — ${detail}. Also: ${others.join("; ")}.`;
+  }
+  return `Held — wire hygiene (${failures.join("; ")}).`;
+}
+
 function holdForHygiene(
   desk: WriterDesk,
   verdict: EditorVerdict,
@@ -378,7 +394,7 @@ function holdForHygiene(
     score: Math.min(verdict.score, 7),
     desk,
     title: verdict.editedTitle,
-    reason: `Held — wire hygiene (${failures.join("; ")}).`,
+    reason: holdReason(failures),
     verdict: {
       ...verdict,
       approved: false,
