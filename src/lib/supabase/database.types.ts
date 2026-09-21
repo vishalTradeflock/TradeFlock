@@ -325,6 +325,21 @@ export type Database = {
           },
         ];
       };
+      newsletter_subscribers: {
+        Row: {
+          email: string;
+          created_at: string;
+        };
+        Insert: {
+          email: string;
+          created_at?: string;
+        };
+        Update: {
+          email?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
           id: string;

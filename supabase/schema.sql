@@ -323,3 +323,18 @@ create policy "Public read article slug redirects"
 
 grant select on public.article_slug_redirects to anon, authenticated;
 grant select, insert, update, delete on public.article_slug_redirects to service_role;
+
+-- ---------------------------------------------------------------------------
+-- newsletter_subscribers
+-- Emails from the article subscribe modal. Service-role writes only.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.newsletter_subscribers (
+  email text primary key,
+  created_at timestamptz not null default now()
+);
+
+alter table public.newsletter_subscribers enable row level security;
+
+revoke all on table public.newsletter_subscribers from anon, authenticated;
+grant select, insert, update, delete on table public.newsletter_subscribers to service_role;

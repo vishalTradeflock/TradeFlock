@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import { ArticleAuthorCard } from "@/components/ArticleAuthorCard";
 import { ArticleFaqAccordion } from "@/components/ArticleFaqAccordion";
 import { ArticleHeader } from "@/components/ArticleHeader";
+import ArticleNewsletterModal from "@/components/ArticleNewsletterModal";
 import { JsonLd } from "@/components/JsonLd";
 import { RelatedArticles } from "@/components/RelatedArticles";
 import {
@@ -182,6 +183,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         </div>
         <RelatedArticles categoryName={currentCategory} articles={related} />
       </main>
+      <ArticleNewsletterModal key={article.slug} articleSlug={article.slug} />
     </>
   );
 }
