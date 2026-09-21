@@ -10,12 +10,17 @@ type FooterLink = {
 const INITIATIVE_LINKS: FooterLink[] = [
   {
     href: "https://tradeflock.com/40-under-40-nomination-guide/",
-    label: "40 Under 40",
+    label: "40 UNDER 40",
+    external: true,
+  },
+  {
+    href: "https://tradeflock.com/nexus-an-executive-thought-leadership-community/",
+    label: "TRADEFLOCK NEXUS",
     external: true,
   },
   {
     href: "https://nexus.tradeflock.com/login.php",
-    label: "Nexus",
+    label: "NEXUS LOGIN",
     external: true,
   },
 ];
