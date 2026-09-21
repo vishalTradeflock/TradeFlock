@@ -73,7 +73,7 @@ describe("shouldShowNewsletterPrompt", () => {
     );
   });
 
-  it("waits five seconds before opening", () => {
-    assert.equal(NEWSLETTER_DELAY_MS, 5_000);
+  it("waits ten seconds before opening", () => {
+    assert.equal(NEWSLETTER_DELAY_MS, 10_000);
   });
 });

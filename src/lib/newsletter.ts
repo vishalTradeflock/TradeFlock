@@ -1,6 +1,6 @@
 export const NEWSLETTER_SUBSCRIBED_KEY = "tf_newsletter_subscribed";
 export const NEWSLETTER_DISMISSED_KEY = "tf_newsletter_dismissed";
-export const NEWSLETTER_DELAY_MS = 5_000;
+export const NEWSLETTER_DELAY_MS = 10_000;
 export const NEWSLETTER_DISMISS_DAYS = 7;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
