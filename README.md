@@ -2,17 +2,15 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Newsroom pipeline
 
-Weekday GitHub Actions hits `GET /api/cron/publish` with `Authorization: Bearer $CRON_SECRET`. The route pulls fresh items from a curated RSS list, drafts via the desk writers, and publishes only if the editor-in-chief scores the piece **≥ 8.5**.
+GitHub Actions hits `GET /api/cron/publish` with `Authorization: Bearer $CRON_SECRET`. The route pulls fresh items from a curated RSS list, drafts via the desk writers, and publishes only if the editor-in-chief scores the piece **≥ 8.5**.
 
-### Schedule (U.S. Eastern newsroom window)
+### Schedule (24/7)
 
-- **When:** Monday–Friday, every **15 minutes**, about **7:00am–6:45pm America/New_York**.
-- **UTC cron:** `*/15 11-22 * * 1-5` (GitHub Actions cron is UTC).
-- **EDT (UTC-4, including September):** 11:00–22:45 UTC = 7:00am–6:45pm ET.
-- **EST (UTC-5):** the same UTC clock is 6:00am–5:45pm ET.
-- **Off:** overnight and weekends. Use `workflow_dispatch` for a one-off run. No Vercel cron.
+- **When:** every day, every **15 minutes**, around the clock (all hours, all days of the week).
+- **UTC cron:** `*/15 * * * *` (GitHub Actions cron is UTC).
+- **Manual:** `workflow_dispatch` for a one-off run. No Vercel cron.
 
-Auth is unchanged: the route still requires `Authorization: Bearer $CRON_SECRET`.
+Auth is unchanged: the route still requires `Authorization: Bearer $CRON_SECRET`. 24/7 volume burns more Gemini quota than the old weekday 7am–7pm ET window; Gemini billing (Tier 1+) is still recommended.
 
 ### Editorial bar (Forbes / Entrepreneur)
 
@@ -40,7 +38,7 @@ An 8.5 requires named attribution from the RSS notes, no invented quotes/figures
 - `GEMINI_FALLBACK_MODEL` — used when the primary model returns 429 (default `gemini-3.5-flash-lite`, ~500 RPD on free tier). Set to empty to disable fallback. Enable Gemini billing (Tier 1+) if you want sustained `gemini-3.6-flash` volume.
 - `USE_TEST_LEAD=1` — local/preview fallback that skips RSS and uses the old fixture lead. Ignored when `VERCEL_ENV=production`.
 
-If Gemini quota is exhausted on every configured model, the cron returns **200** with `reason: "llm_quota_exhausted"` so the weekday Action stays green. Auth is unchanged: missing/invalid `CRON_SECRET` is still **401**.
+If Gemini quota is exhausted on every configured model, the cron returns **200** with `reason: "llm_quota_exhausted"` so the Action stays green. Auth is unchanged: missing/invalid `CRON_SECRET` is still **401**.
 
 Default feeds live in `src/lib/agents/feeds.ts` (TechCrunch, CNBC tech/finance/economy/retail, Federal Reserve, SEC, NPR Business, PR Newswire M&A). A dead feed is logged and skipped; the cron keeps going. Per-feed timeout is **12s** (was 8s). **PR Newswire M&A** is marked `optional` with an **18s** budget so a timeout cannot fail the run.
 
