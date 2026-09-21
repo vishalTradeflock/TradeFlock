@@ -84,6 +84,14 @@ export function withoutSuccessInsights<T extends {
   return articles.filter((article) => !isSuccessInsightsArticle(article));
 }
 
+export function onlySuccessInsights<T extends {
+  category?: { slug?: string | null; name?: string | null } | null;
+  title?: string | null;
+  slug?: string | null;
+}>(articles: T[]) {
+  return articles.filter((article) => isSuccessInsightsArticle(article));
+}
+
 export function partitionHomeArticles<T extends {
   category: { slug: string; name: string };
   title?: string | null;

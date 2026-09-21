@@ -1,9 +1,10 @@
 import Link from "next/link";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { articlePath, type ArticleWithRelations } from "@/lib/types";
+import { SUCCESS_INSIGHTS_NAME } from "@/lib/success-insights";
 import { formatShortDate } from "@/lib/utils";
 
-const LOOP_MAX = 20;
+const LOOP_MAX = 15;
 
 function loopSource(articles: ArticleWithRelations[]) {
   const seen = new Set<string>();
@@ -72,7 +73,7 @@ function RailCard({ article }: { article: ArticleWithRelations }) {
       </div>
       <div className="min-w-0">
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">
-          {article.category.name}
+          {SUCCESS_INSIGHTS_NAME}
         </p>
         <h3 className="mt-0.5 line-clamp-2 font-serif text-[15px] font-semibold leading-snug tracking-tight text-neutral-950">
           {article.title}

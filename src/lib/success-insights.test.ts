@@ -5,6 +5,7 @@ import {
   isShortProfileBlurb,
   isSuccessInsightsArticle,
   looksLikeSuccessInsightsListicle,
+  onlySuccessInsights,
   partitionHomeArticles,
   shouldRecategorizeToSuccessInsights,
   shouldUnpublishSiBlurb,
@@ -131,6 +132,10 @@ describe("withoutSuccessInsights / partitionHomeArticles", () => {
     );
     assert.deepEqual(
       successInsightsArticles.map((row) => row.id),
+      ["2", "3"],
+    );
+    assert.deepEqual(
+      onlySuccessInsights([news, blurb, interview]).map((row) => row.id),
       ["2", "3"],
     );
   });
