@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import SafeArticleImage from "@/components/SafeArticleImage";
+import { RELATED_CARD } from "@/lib/image-optimization";
 import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
 import type { ArticleWithRelations } from "@/lib/types";
 import { articlePath } from "@/lib/types";
@@ -98,11 +99,11 @@ export function RelatedArticles({
                 <SafeArticleImage
                   src={imageUrl}
                   alt={article.cover_image_alt}
-                  fill
-                  sizes="340px"
+                  width={RELATED_CARD.width}
+                  height={RELATED_CARD.height}
                   loading="lazy"
                   fallbackSrc={fallbackSrc === imageUrl ? undefined : fallbackSrc}
-                  className="rounded-lg object-cover"
+                  className="h-full w-full rounded-lg object-cover"
                 />
               </div>
               <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-[#c41e3a]">

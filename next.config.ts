@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { IMAGE_DEVICE_SIZES, IMAGE_SIZES } from "./src/lib/image-optimization";
 import { targetedNoindexHeaders } from "./src/lib/targeted-noindex";
 
 const nextConfig: NextConfig = {
@@ -63,6 +64,8 @@ const nextConfig: NextConfig = {
     ];
   },
   images: {
+    deviceSizes: [...IMAGE_DEVICE_SIZES],
+    imageSizes: [...IMAGE_SIZES],
     remotePatterns: [
       {
         protocol: "https",

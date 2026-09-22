@@ -1,5 +1,6 @@
 import Link from "next/link";
 import SafeArticleImage from "@/components/SafeArticleImage";
+import { THUMB_64 } from "@/lib/image-optimization";
 import { articlePath, type ArticleWithRelations } from "@/lib/types";
 import { SUCCESS_INSIGHTS_NAME } from "@/lib/success-insights";
 import { formatShortDate } from "@/lib/utils";
@@ -65,9 +66,9 @@ function RailCard({ article }: { article: ArticleWithRelations }) {
         <SafeArticleImage
           src={article.cover_image_url}
           alt={article.cover_image_alt}
-          fill
-          sizes="64px"
-          className="object-cover"
+          width={THUMB_64.width}
+          height={THUMB_64.height}
+          className="h-full w-full object-cover"
           loading="lazy"
         />
       </div>

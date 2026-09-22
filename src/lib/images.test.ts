@@ -121,6 +121,10 @@ describe("isOptimizedCoverHost", () => {
     assert.equal(isOptimizedCoverHost("techcrunch.com"), true);
     assert.equal(isOptimizedCoverHost("www.techcrunch.com"), true);
     assert.equal(isOptimizedCoverHost("mmx.prnewswire.com"), true);
+    assert.equal(
+      shouldBypassImageOptimizer("https://mmx.prnewswire.com/media/123/sopra.jpg"),
+      false,
+    );
     assert.equal(isOptimizedCoverHost("abcd1234.supabase.co"), true);
     assert.equal(shouldBypassImageOptimizer(CNBC_COVER), false);
     assert.equal(shouldBypassImageOptimizer("https://exotic.example.net/photo.jpg"), true);

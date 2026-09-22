@@ -20,6 +20,7 @@ import {
   resolvePublishedSlugRedirect,
 } from "@/lib/articles";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
+import { THUMB_96x64 } from "@/lib/image-optimization";
 import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
 import {
   articlePageMetadata,
@@ -161,10 +162,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                       <SafeArticleImage
                         src={articleCoverSrc(item)}
                         alt={item.cover_image_alt}
-                        fill
-                        sizes="96px"
+                        width={THUMB_96x64.width}
+                        height={THUMB_96x64.height}
                         loading="lazy"
                         fallbackSrc={deskCoverFallback(item)}
+                        className="h-full w-full"
                       />
                     </div>
                     <div>
