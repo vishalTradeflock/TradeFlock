@@ -101,19 +101,21 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
     <>
       <Header activeCategory={article.category.slug} />
       <JsonLd data={articleStructuredData(article, canonical, image)} />
-      <main className="mx-auto max-w-[1240px] px-4 py-6">
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-0">
-          <article className="lg:col-span-8 lg:pr-10">
+      <main className="mx-auto w-full max-w-7xl overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
+          <article className="min-w-0 w-full lg:col-span-8">
             <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">
               <Link href={sectionPath(article.category.slug)} className="hover:underline">
                 {article.category.name}
               </Link>
             </span>
-            <h1 className="mt-2 font-serif text-3xl font-semibold leading-tight tracking-tight text-neutral-950 sm:text-5xl">
+            <h1 className="mt-2 font-serif text-2xl font-semibold leading-[1.15] tracking-tight text-neutral-950 sm:text-4xl lg:text-5xl">
               {article.title}
             </h1>
             {article.dek ? (
-              <p className="mt-4 text-xl leading-8 text-neutral-700">{article.dek}</p>
+              <p className="mt-3 text-base leading-relaxed text-neutral-700 sm:text-lg">
+                {article.dek}
+              </p>
             ) : null}
 
             <ArticleHeader
@@ -123,7 +125,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             />
 
             {coverSrc ? (
-              <div className="relative my-8 aspect-[16/9] w-full overflow-hidden border border-neutral-200">
+              <div className="relative my-6 aspect-[16/9] w-full overflow-hidden border border-neutral-200">
                 <SafeArticleImage
                   src={coverSrc}
                   alt={article.featured_image_alt?.trim() || article.cover_image_alt || article.title}
@@ -142,7 +144,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             ) : null}
 
             <div
-              className="prose-article prose prose-neutral mt-8 max-w-none prose-p:mb-5 prose-p:leading-relaxed prose-h2:mt-10 prose-h2:mb-3 prose-h3:mt-8 prose-h3:mb-3 prose-img:my-6 prose-img:h-auto prose-img:w-full prose-img:rounded-lg prose-img:bg-transparent prose-img:p-0 prose-a:inline prose-a:font-normal [&_a]:inline [&_a]:font-normal [&_a]:underline [&_a]:text-[#c41e3a] hover:[&_a]:text-[#9f1830]"
+              className="prose-article prose prose-neutral mt-8 max-w-none break-words text-base leading-relaxed prose-p:mb-5 prose-p:leading-relaxed prose-h2:mt-10 prose-h2:mb-3 prose-h3:mt-8 prose-h3:mb-3 prose-img:my-6 prose-img:h-auto prose-img:w-full prose-img:max-w-full prose-img:bg-transparent prose-img:p-0 prose-pre:max-w-full prose-pre:overflow-x-auto prose-a:inline prose-a:font-normal [&_a]:inline [&_a]:font-normal [&_a]:underline [&_a]:text-[#c41e3a] hover:[&_a]:text-[#9f1830] [&_iframe]:max-w-full [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto"
               dangerouslySetInnerHTML={{ __html: body }}
             />
 
@@ -150,7 +152,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             <ArticleFaqAccordion faqs={article.faqs ?? []} />
           </article>
 
-          <aside className="lg:col-span-4 lg:border-l lg:border-neutral-200 lg:pl-8">
+          <aside className="mt-10 w-full min-w-0 lg:col-span-4 lg:mt-0 lg:border-l lg:border-neutral-200 lg:pl-8">
             <h2 className="border-b border-neutral-200 pb-2 font-serif text-xl font-semibold tracking-tight">
               Related
             </h2>
@@ -169,7 +171,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                         className="h-full w-full"
                       />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">
                         {item.category.name}
                       </p>

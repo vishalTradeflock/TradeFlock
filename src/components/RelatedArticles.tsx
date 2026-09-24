@@ -93,7 +93,7 @@ export function RelatedArticles({
             <Link
               key={article.id}
               href={articlePath(article.slug)}
-              className="group w-[280px] max-w-[340px] min-w-[280px] flex-shrink-0 snap-start sm:w-[340px] sm:min-w-[340px]"
+              className="group w-[min(17.5rem,calc(100vw-2rem))] shrink-0 snap-start sm:w-[min(21.25rem,calc(100vw-3rem))]"
             >
               <div className="relative aspect-[16/9] overflow-hidden rounded-lg border border-neutral-200/50">
                 <SafeArticleImage
