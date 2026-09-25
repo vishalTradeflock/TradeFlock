@@ -811,7 +811,7 @@ export type CoverRow = {
   personName?: string | null;
 };
 
-export type CoverChangeReason = "legacy_stock" | "duplicate" | "name_query";
+export type CoverChangeReason = "legacy_stock" | "duplicate" | "name_query" | "source_photo";
 
 export type CoverReassignment<T extends CoverRow = CoverRow> = {
   row: T;

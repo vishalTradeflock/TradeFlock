@@ -29,8 +29,11 @@
  *   UNSPLASH_ACCESS_KEY         required for --apply; optional in dry run (then the
  *                               report lists search queries instead of picked photos)
  *
- * Unsplash demo keys allow 50 requests/hour. The script stops cleanly on the
- * rate limit; rerun it later — already-fixed stories drop out of the plan.
+ * Each row tries the source article's photo first (og:image, then a large
+ * image). That lookup does not use the Unsplash quota. Unsplash demo keys
+ * allow 50 requests/hour. On a rate limit the script keeps taking source
+ * photos until the story limit or the ~270s budget, then stops cleanly.
+ * Rerun it later — already-fixed stories drop out of the plan.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -144,6 +147,7 @@ async function main() {
   console.log(`  duplicate cover groups:      ${report.duplicateGroups}`);
   console.log(`  legacy stock-photo rows:     ${report.legacyStockRows}`);
   console.log(`  person-name covers to redo:  ${report.nameQueryRedos}`);
+  console.log(`  covers taken from source:    ${report.sourcePhotos}`);
   console.log(`  stories needing a new cover: ${report.toChange}`);
   console.log(`  processed this run:          ${report.processed}`);
   console.log(`  written:                     ${report.applied}`);

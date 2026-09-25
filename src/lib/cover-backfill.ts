@@ -14,12 +14,22 @@ import {
   type CoverSearchContext,
 } from "./cover-dedupe.ts";
 import { pickUniqueCover, UnsplashRateLimitError } from "./cover-picker.ts";
+import {
+  chooseSourceImage,
+  extractSourceArticleUrl,
+  fetchSourceImageCandidates,
+  shouldTrySourcePhoto,
+  sourceCoverAlt,
+  SOURCE_BACKFILL_BUDGET_MS,
+} from "./source-photo.ts";
 
 const PAGE_SIZE = 1000;
 
 export type BackfillRow = CoverRow & {
   status?: string | null;
   featured_image?: string | null;
+  body?: string | null;
+  canonical_url?: string | null;
 };
 
 type Page = PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>;
@@ -49,7 +59,7 @@ export async function loadBackfillRows(client: BackfillClient): Promise<Backfill
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await articles(client)
       .select(
-        "id, title, slug, status, cover_image_url, featured_image, published_at, created_at, excerpt, company, category:categories(slug)",
+        "id, title, slug, status, cover_image_url, featured_image, published_at, created_at, excerpt, company, body, canonical_url, category:categories(slug)",
       )
       .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
@@ -74,8 +84,11 @@ export type BackfillChange = {
   keeperTitle: string | null;
   oldCover: string | null;
   oldKey: string;
-  newCover: string | null; // null = not picked (dry run without Unsplash key)
-  newSource: "unsplash" | "neutral-card" | null;
+  newCover: string | null; // null = not picked (dry run without Unsplash key, or skipped)
+  newSource: "unsplash" | "neutral-card" | "source_photo" | null;
+  /** Topic alt for a source photo. Personal names are already stripped from queries. */
+  alt?: string;
+  sourceUrl?: string;
   query?: string;
   queries: string[];
   applied: boolean;
@@ -91,6 +104,8 @@ export type BackfillReport = {
   legacyStockRows: number;
   /** Profiles whose cover is still a photo assigned by a person-name search. */
   nameQueryRedos: number;
+  /** Rows whose new cover came from the source article rather than Unsplash. */
+  sourcePhotos: number;
   toChange: number;
   processed: number;
   applied: number;
@@ -114,6 +129,11 @@ export async function runCoverBackfill(
     redoSlugs?: readonly string[];
     /** Published rows only are deduped; every row still counts as "used". */
     rows?: BackfillRow[];
+    /** Stop starting new rows after this many milliseconds. Default 270s. */
+    budgetMs?: number;
+    now?: () => number;
+    /** Page fetch for source photos. Tests inject this; production uses global fetch. */
+    fetchPage?: typeof fetch;
     log?: (line: string) => void;
   },
 ): Promise<BackfillReport> {
@@ -162,6 +182,7 @@ export async function runCoverBackfill(
     duplicateGroups: [...groups.values()].filter((group) => group.length > 1).length,
     legacyStockRows: plan.filter((item) => item.reason === "legacy_stock").length,
     nameQueryRedos: redos.length,
+    sourcePhotos: 0,
     toChange: plan.length,
     processed: 0,
     applied: 0,
@@ -175,7 +196,20 @@ export async function runCoverBackfill(
     throw new Error("UNSPLASH_ACCESS_KEY is required with --apply (otherwise every row would get the neutral card).");
   }
 
-  for (const item of plan.slice(0, limit)) {
+  const started = (options.now ?? Date.now)();
+  const budgetMs = options.budgetMs ?? SOURCE_BACKFILL_BUDGET_MS;
+  const clock = options.now ?? Date.now;
+  let unsplashBlocked = false;
+  let taken = 0;
+
+  for (const item of plan) {
+    if (clock() - started >= budgetMs) {
+      report.stoppedReason ??=
+        "Time budget reached — rerun later; finished rows are skipped automatically.";
+      break;
+    }
+    if (taken >= limit) break;
+
     const row = item.row as BackfillRow;
     const context: CoverSearchContext = {
       slug: row.slug,
@@ -200,7 +234,37 @@ export async function runCoverBackfill(
       applied: false,
     };
 
-    if (accessKey) {
+    const page = sourcePageFor(row);
+    if (page) {
+      change.sourceUrl = page;
+      try {
+        const candidates = await fetchSourceImageCandidates(page, options.fetchPage);
+        const chosen = chooseSourceImage(candidates, used);
+        if (chosen?.ok) {
+          used.add(chosen.key);
+          change.newCover = chosen.url;
+          change.newSource = "source_photo";
+          change.reason = "source_photo";
+          change.alt = sourceCoverAlt(queries);
+          change.query = page;
+          report.sourcePhotos += 1;
+        }
+      } catch {
+        /* Source page failed; Unsplash is the fallback when it is still available. */
+      }
+    }
+
+    if (change.newCover === null) {
+      if (unsplashBlocked) {
+        // Source photo missed. Leave this row for a later Unsplash run and keep
+        // scanning: source-photo hits do not consume the Unsplash quota or this slot.
+        continue;
+      }
+      if (!accessKey) {
+        taken += 1;
+        finishChange(report, change, item, queries, options.apply, log);
+        continue;
+      }
       try {
         const picked = await pickUniqueCover({
           title: row.title,
@@ -219,8 +283,12 @@ export async function runCoverBackfill(
         change.query = picked?.query;
       } catch (err) {
         if (err instanceof UnsplashRateLimitError) {
-          report.stoppedReason = "Unsplash rate limit reached — rerun later; finished rows are skipped automatically.";
-          break;
+          unsplashBlocked = true;
+          report.stoppedReason =
+            "Unsplash rate limit reached — rerun later; finished rows are skipped automatically.";
+          taken += 1;
+          finishChange(report, change, item, queries, options.apply, log);
+          continue;
         }
         change.error = err instanceof Error ? err.message : String(err);
       }
@@ -228,7 +296,11 @@ export async function runCoverBackfill(
 
     if (options.apply && change.newCover !== null && !change.error) {
       const values: Record<string, unknown> = { cover_image_url: change.newCover };
-      if (coverPhotoKey(row.featured_image) === item.key) values.featured_image = change.newCover || null;
+      if (change.newSource === "source_photo" && change.alt) values.cover_image_alt = change.alt;
+      if (coverPhotoKey(row.featured_image) === item.key) {
+        values.featured_image = change.newCover || null;
+        if (change.newSource === "source_photo" && change.alt) values.featured_image_alt = change.alt;
+      }
       // Optimistic guard: only if the row still has the cover we planned against.
       const { data, error } = await articles(client)
         .update(values)
@@ -243,15 +315,39 @@ export async function runCoverBackfill(
       }
     }
 
-    report.processed += 1;
-    report.changes.push(change);
-    log(
-      `${change.applied ? "UPDATED" : options.apply ? "SKIPPED" : "WOULD CHANGE"} ${row.slug ?? row.id} ` +
-        `[${item.reason}${item.keeper ? `, keeper: ${item.keeper.title}` : ""}] ` +
-        `${item.key} -> ${change.newCover === null ? `(queries: ${queries.slice(0, 3).join(" | ")})` : change.newCover || "neutral card"}` +
-        (change.error ? ` ERROR ${change.error}` : ""),
-    );
+    taken += 1;
+    finishChange(report, change, item, queries, options.apply, log);
   }
 
   return report;
+}
+
+function sourcePageFor(row: BackfillRow) {
+  const input = {
+    title: row.title,
+    slug: row.slug,
+    categorySlug: row.category?.slug,
+    canonicalUrl: row.canonical_url,
+    body: row.body,
+  };
+  if (!shouldTrySourcePhoto(input)) return null;
+  return extractSourceArticleUrl(input);
+}
+
+function finishChange(
+  report: BackfillReport,
+  change: BackfillChange,
+  item: CoverReassignment,
+  queries: string[],
+  apply: boolean,
+  log: (line: string) => void,
+) {
+  report.processed += 1;
+  report.changes.push(change);
+  log(
+    `${change.applied ? "UPDATED" : apply ? "SKIPPED" : "WOULD CHANGE"} ${change.slug ?? change.id} ` +
+      `[${change.reason}${item.keeper ? `, keeper: ${item.keeper.title}` : ""}] ` +
+      `${change.oldKey} -> ${change.newCover === null ? `(queries: ${queries.slice(0, 3).join(" | ")})` : change.newCover || "neutral card"}` +
+      (change.error ? ` ERROR ${change.error}` : ""),
+  );
 }
