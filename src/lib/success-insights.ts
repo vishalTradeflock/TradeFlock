@@ -102,15 +102,15 @@ export function partitionHomeArticles<T extends {
 }
 
 /**
- * Breaking ticker: Success Insights stories only, deduped by id/slug, capped at `limit`.
- * Ticker only — rails and desks keep using `withoutSuccessInsights`.
+ * Success Insights stories only, deduped by id/slug, capped at `limit`.
+ * Home middle scroller. News rails and the Breaking ticker stay on editorial news.
  */
-export function successInsightsTickerArticles<T extends {
+export function successInsightsOnly<T extends {
   id: string;
   slug: string;
   category?: { slug?: string | null; name?: string | null } | null;
   title?: string | null;
-}>(articles: T[], limit = 12) {
+}>(articles: T[], limit = 20) {
   const seen = new Set<string>();
   const out: T[] = [];
   for (const article of articles) {
@@ -122,6 +122,19 @@ export function successInsightsTickerArticles<T extends {
     out.push(article);
   }
   return out;
+}
+
+/**
+ * Breaking ticker selection: latest news only, capped at `limit`.
+ * Drops Success Insights (desk or listicle) on every page. An empty result
+ * means the caller should fall back to `getBreakingArticles`.
+ */
+export function newsTickerArticles<T extends {
+  category?: { slug?: string | null; name?: string | null } | null;
+  title?: string | null;
+  slug?: string | null;
+}>(articles: T[], limit = 8) {
+  return articles.filter((article) => !isSuccessInsightsArticle(article)).slice(0, limit);
 }
 
 export function stripHtmlToText(html: string) {
