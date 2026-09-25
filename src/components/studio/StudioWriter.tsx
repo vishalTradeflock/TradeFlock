@@ -332,6 +332,12 @@ export default function StudioWriter({
           });
           outcome = result;
           if (!result.ok) {
+            if (result.id) {
+              draftId.current = result.id;
+              setStoryId(result.id);
+              if (result.slug) setSavedSlug(result.slug);
+              if (result.status) setSavedStatus(result.status);
+            }
             setSaveState("error");
             setSaveError(result.error);
             return;

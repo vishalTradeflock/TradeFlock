@@ -25,6 +25,7 @@ import { getStudioSession } from "@/lib/studio/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
+import { studioPublishFailures } from "@/lib/agents/studio-gate";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 
 export type SaveDraftInput = {
@@ -43,7 +44,32 @@ export type SaveDraftInput = {
 
 export type SaveDraftResult =
   | { ok: true; id: string; slug: string; status: "draft" | "review" | "published" }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      id?: string;
+      slug?: string;
+      status?: "draft" | "review" | "published";
+    };
+
+function houseStyleHoldMessage(failures: string[]) {
+  return `Not published. Fix the house style before it can go live: ${failures.join("; ")}`;
+}
+
+async function blockedPublishMessage(
+  admin: ReturnType<typeof createAdminClient>,
+  input: { title: string; body: string; slug: string; categoryId: string; excludeSlug?: string },
+) {
+  const { data: category } = await admin.from("categories").select("slug").eq("id", input.categoryId).maybeSingle();
+  const failures = await studioPublishFailures({
+    title: input.title,
+    slug: input.slug,
+    html: input.body,
+    categorySlug: category?.slug ?? "",
+    excludeSlug: input.excludeSlug,
+  });
+  return failures.length ? houseStyleHoldMessage(failures) : null;
+}
 
 async function ensureAuthorId(session: {
   userId: string;
@@ -211,7 +237,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         return { ok: false, error: "You cannot edit this draft." };
       }
 
-      const nextStatus = requested ?? existing.status;
+      let nextStatus = requested ?? existing.status;
       if (!canPublish(session.profile.role, nextStatus)) {
         return { ok: false, error: "Only a moderator can publish." };
       }
@@ -231,6 +257,18 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
           }
           nextSlug = requestedSlug;
         }
+      }
+
+      let publishBlocked: string | null = null;
+      if (nextStatus === "published" && existing.status !== "published") {
+        publishBlocked = await blockedPublishMessage(admin, {
+          title,
+          body,
+          slug: nextSlug,
+          categoryId: input.categoryId,
+          excludeSlug: existing.slug,
+        });
+        if (publishBlocked) nextStatus = existing.status;
       }
 
       const update: Database["public"]["Tables"]["articles"]["Update"] = {
@@ -285,10 +323,20 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         revalidateStoryPaths(nextSlug, existing.slug, authorRow?.slug);
       }
 
+      if (publishBlocked) {
+        return {
+          ok: false,
+          error: publishBlocked,
+          id: existing.id,
+          slug: nextSlug,
+          status: nextStatus,
+        };
+      }
+
       return { ok: true, id: existing.id, slug: nextSlug, status: nextStatus };
     }
 
-    const nextStatus = requested ?? "draft";
+    let nextStatus = requested ?? "draft";
     if (!canPublish(session.profile.role, nextStatus)) {
       return { ok: false, error: "Only a moderator can publish." };
     }
@@ -307,6 +355,17 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     const slug = requestedSlug
       ? requestedSlug
       : await nextAvailableSlug(admin, title);
+
+    let publishBlocked: string | null = null;
+    if (nextStatus === "published") {
+      publishBlocked = await blockedPublishMessage(admin, {
+        title,
+        body,
+        slug,
+        categoryId: input.categoryId,
+      });
+      if (publishBlocked) nextStatus = "draft";
+    }
 
     const insert = {
       slug,
@@ -357,6 +416,16 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     const { data: authorRow } = await admin.from("authors").select("slug").eq("id", authorId).maybeSingle();
     if (nextStatus === "published") {
       revalidateStoryPaths(data.slug, null, authorRow?.slug);
+    }
+
+    if (publishBlocked) {
+      return {
+        ok: false,
+        error: publishBlocked,
+        id: data.id,
+        slug: data.slug,
+        status: data.status,
+      };
     }
 
     return { ok: true, id: data.id, slug: data.slug, status: data.status };

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { PUBLISH_SCORE_MIN, EDITOR_IN_CHIEF_PROMPT, WRITER_PROMPTS } from "./prompts.ts";
+import { PUBLISH_SCORE_MIN, EDITOR_IN_CHIEF_PROMPT, REPAIR_PROMPT, WRITER_PROMPTS } from "./prompts.ts";
 import {
   ARTICLE_MIN_WORDS,
   collapseEmptyWireSections,
@@ -39,9 +39,16 @@ describe("publish bar", () => {
   it("tells the writer and editor to require a source href and ban market briefs", () => {
     assert.match(WRITER_PROMPTS.tech, /In-body source link/);
     assert.match(WRITER_PROMPTS.tech, /market brief/);
+    assert.match(WRITER_PROMPTS.tech, /Title Case/);
+    assert.match(WRITER_PROMPTS.tech, /60 characters/);
+    assert.match(WRITER_PROMPTS.tech, /em dash/);
+    assert.match(WRITER_PROMPTS.tech, /story-specific/i);
     assert.match(EDITOR_IN_CHIEF_PROMPT, /Hard fails/);
     assert.match(EDITOR_IN_CHIEF_PROMPT, /<a href>/);
     assert.match(EDITOR_IN_CHIEF_PROMPT, /Monday/);
+    assert.match(EDITOR_IN_CHIEF_PROMPT, /editedSlug/);
+    assert.match(REPAIR_PROMPT, /editedSlug/);
+    assert.match(REPAIR_PROMPT, /internal links/i);
   });
 
   it("tells writer and EiC to hold thin notes instead of stubbing or padding", () => {
@@ -51,7 +58,10 @@ describe("publish bar", () => {
     assert.match(WRITER_PROMPTS.tech, /550/);
     assert.match(EDITOR_IN_CHIEF_PROMPT, /Briefing \/ digest \/ stub length/);
     assert.match(EDITOR_IN_CHIEF_PROMPT, /HOLD the lead/);
-    assert.match(EDITOR_IN_CHIEF_PROMPT, /Formula-empty Strategic Context or Forward Outlook/);
+    assert.match(EDITOR_IN_CHIEF_PROMPT, /Never use the template headings/);
+    assert.match(EDITOR_IN_CHIEF_PROMPT, /Strategic Context/);
+    assert.match(EDITOR_IN_CHIEF_PROMPT, /Forward Outlook/);
+    assert.doesNotMatch(EDITOR_IN_CHIEF_PROMPT, /Formula-empty Strategic Context or Forward Outlook/);
   });
 });
 

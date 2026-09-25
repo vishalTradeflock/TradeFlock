@@ -12,21 +12,26 @@ GitHub Actions hits `GET /api/cron/publish` with `Authorization: Bearer $CRON_SE
 
 Auth is unchanged: the route still requires `Authorization: Bearer $CRON_SECRET`. 24/7 volume burns more Gemini quota than the old weekday 7am–7pm ET window; Gemini billing (Tier 1+) is still recommended.
 
-### Editorial bar (Forbes / Entrepreneur)
+### Editorial bar (house style)
 
-Prompts live in `src/lib/agents/prompts.ts`. The coded pipeline writes volume; this is not a chat bot.
+Prompts live in `src/lib/agents/prompts.ts`. Deterministic checks live in `src/lib/agents/house-style.ts` and `src/lib/agents/fact-check.ts`. The coded pipeline writes volume; this is not a chat bot.
 
-Score is 0–10 after the edit (`PUBLISH_SCORE_MIN = 8.5`). An **8.0** is a competent wire expansion and is **held**.
+The published score is 0–10, recomputed from the editor checklist (`PUBLISH_SCORE_MIN = 8.5`). A story that passes every check scores **10**. Any failed check caps the score at **7** and the story is not published.
 
-| Score | Meaning |
+| Check | Rule |
 | --- | --- |
-| **8.5+** | Specific, attributed, operator-useful; news-first; no invented facts. Publishable. |
-| **8.0** | Close: soft lede, generic "so what," or press-release cadence. Hold. |
-| **<8** | Thin, fluffy, unsourced, or marketing voice. Hold. |
+| Title | Title Case, at most 60 characters |
+| Slug | 2–8 keyword words, unique, never the truncated headline |
+| Subheads | Story-specific `<h3>`s. Never Strategic Context, Forward Outlook, or the other shared templates |
+| Voice | No em dashes, no AI-brief tics |
+| Source | Publication named and linked in the body |
+| Facts | Figures, names, dates, weekdays, and dateline checked against the source notes |
+| Links | At least 2 internal TradeFlock links when related stories exist |
+| Length | At least ~550 words and 5 substantial paragraphs |
 
-An 8.5 requires named attribution from the RSS notes, no invented quotes/figures/analysts, a concrete stake for an operator or allocator, tight newspaper English, **and Forbes length**. Score ≥ 8.5 is not enough: the pipeline **holds** any body under **~550 words** (HTML stripped) with a `too_short` reason. Publishable copy is **5–7 substantial paragraphs / ~600–800 words**. Thin source notes → **hold the lead**, never a 3-paragraph digest. Empty formula Strategic Context / Forward Outlook is a hard fail.
+The writer and editor see candidate internal links from recent related articles. If the draft fails, one repair pass runs. If it still fails, the piece is saved as a **draft** (not published). Studio publish uses the same style checks. Already published stories are left as they are. Magazine honoree profiles are not wire copy and are not run through this gate.
 
-HTML output is `<p>` body copy plus the required `<h3>` section heads.
+HTML output is `<p>` body copy plus story-specific `<h3>` section heads. Thin source notes → **hold the lead**, never a 3-paragraph digest.
 
 To pull the Gemini briefing stub (slug `google-s-gemini-breaks-out-and-hacks-computer-systems-amid-rising-ai-scrutiny`) and other recent sub-550-word wire pieces back to `draft`, run `node --experimental-strip-types scripts/unpublish-wire-stubs.ts --dry-run` with Supabase env (same as other scripts; CI does not need prod credentials).
 
@@ -38,7 +43,7 @@ To pull the Gemini briefing stub (slug `google-s-gemini-breaks-out-and-hacks-com
 - `NEWS_FEEDS_JSON` — JSON array that replaces the default feed list, e.g. `[{"name":"TechCrunch","url":"https://techcrunch.com/feed/","desk":"tech"}]`. Desk must be `tech`, `markets`, `ma`, `strategy`, `macro`, or `retail`. Optional feeds may set `"optional": true` and `"timeoutMs": 18000`.
 - `NEWS_LEAD_BATCH_SIZE` — how many leads to process per run (default **`2`**, max **`3`**). Cron `maxDuration` is **300s** so a default batch of two long-form drafts (writer + editor) can finish.
 - `NEWS_LEAD_DEDUPE_DAYS` — skip titles/URLs seen in this window (default `7`). Near-duplicate titles (rewritten chip-export fixtures, same story different headline) are also skipped.
-- `GEMINI_MODEL` — primary writer/editor model (default `gemini-3.6-flash`). Free-tier Flash is **20 requests/day**; a 15-minute batch of 2 long-form stories needs 4 calls per tick.
+- `GEMINI_MODEL` — primary writer/editor model (default `gemini-3.6-flash`). Free-tier Flash is **20 requests/day**; a 15-minute batch of 2 long-form stories needs 4 calls per tick, or 6 when both leads need the repair pass.
 - `GEMINI_FALLBACK_MODEL` — used when the primary model returns 429 (default `gemini-3.5-flash-lite`, ~500 RPD on free tier). Set to empty to disable fallback. Enable Gemini billing (Tier 1+) if you want sustained `gemini-3.6-flash` volume.
 - `USE_TEST_LEAD=1` — local/preview fallback that skips RSS and uses the old fixture lead. Ignored when `VERCEL_ENV=production`.
 
