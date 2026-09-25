@@ -4,8 +4,8 @@ import { BreakingTicker } from "@/components/BreakingTicker";
 import { MastheadDateline } from "@/components/MastheadDateline";
 import TradeFlockLogo from "@/components/TradeFlockLogo";
 import { NAV_CATEGORIES, type ArticleWithRelations } from "@/lib/types";
-import { getSuccessInsightsArticles } from "@/lib/articles";
-import { successInsightsTickerArticles } from "@/lib/success-insights";
+import { getBreakingArticles } from "@/lib/articles";
+import { newsTickerArticles } from "@/lib/success-insights";
 import { cn } from "@/lib/utils";
 import { Search } from "lucide-react";
 
@@ -16,7 +16,7 @@ type HeaderProps = {
   mastheadAsH1?: boolean;
 };
 
-const TICKER_LIMIT = 12;
+const TICKER_LIMIT = 8;
 
 export default async function Header({
   activeCategory,
@@ -24,13 +24,10 @@ export default async function Header({
   tickerArticles,
   mastheadAsH1 = false,
 }: HeaderProps) {
-  // Breaking ticker is Success Insights only, on every page.
-  let rawTicker = successInsightsTickerArticles(tickerArticles ?? [], TICKER_LIMIT);
+  // Breaking ticker is latest news on every page. Success Insights never appears here.
+  let rawTicker = newsTickerArticles(tickerArticles ?? [], TICKER_LIMIT);
   if (!rawTicker.length) {
-    rawTicker = successInsightsTickerArticles(
-      await getSuccessInsightsArticles(TICKER_LIMIT),
-      TICKER_LIMIT,
-    );
+    rawTicker = newsTickerArticles(await getBreakingArticles(), TICKER_LIMIT);
   }
   const tickerArticlesForStrip = rawTicker.slice(0, TICKER_LIMIT);
 

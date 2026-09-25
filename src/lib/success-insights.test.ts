@@ -9,7 +9,8 @@ import {
   shouldRecategorizeToSuccessInsights,
   shouldUnpublishSiBlurb,
   stripHtmlToText,
-  successInsightsTickerArticles,
+  newsTickerArticles,
+  successInsightsOnly,
   withoutSuccessInsights,
 } from "./success-insights.ts";
 
@@ -191,7 +192,7 @@ describe("shouldUnpublishSiBlurb / shouldRecategorizeToSuccessInsights", () => {
   });
 });
 
-describe("successInsightsTickerArticles", () => {
+describe("successInsightsOnly", () => {
   const si = (n: number) => ({
     id: `si-${n}`,
     slug: `si-story-${n}`,
@@ -206,22 +207,72 @@ describe("successInsightsTickerArticles", () => {
   });
 
   it("keeps only Success Insights stories, in order", () => {
-    const picked = successInsightsTickerArticles([news(1), si(1), news(2), si(2)], 12);
+    const picked = successInsightsOnly([news(1), si(1), news(2), si(2)], 20);
     assert.deepEqual(
       picked.map((row) => row.id),
       ["si-1", "si-2"],
     );
   });
 
-  it("dedupes and caps at the limit", () => {
-    const picked = successInsightsTickerArticles([si(1), si(1), si(2), si(3), si(4)], 3);
+  it("dedupes and caps at the middle-rail limit", () => {
+    const picked = successInsightsOnly(
+      [si(1), si(1), ...Array.from({ length: 24 }, (_, index) => si(index + 2))],
+      20,
+    );
+    assert.equal(picked.length, 20);
+    assert.equal(picked[0]?.id, "si-1");
+    assert.equal(picked[19]?.id, "si-20");
+  });
+
+  it("returns nothing for an editorial-only list", () => {
+    assert.deepEqual(successInsightsOnly([news(1), news(2)], 20), []);
+  });
+});
+
+describe("newsTickerArticles", () => {
+  const si = (n: number) => ({
+    id: `si-${n}`,
+    slug: `si-story-${n}`,
+    title: `SI story ${n}`,
+    category: siCategory,
+  });
+  const news = (n: number) => ({
+    id: `ed-${n}`,
+    slug: `markets-story-${n}`,
+    title: `Markets story ${n}`,
+    category: markets,
+  });
+
+  it("excludes Success Insights, including a leadership-desk listicle", () => {
+    const picked = newsTickerArticles(
+      [
+        news(1),
+        si(1),
+        {
+          id: "listicle",
+          slug: "norliana-aida-ramli-visionary-ceos-to-watch-in-2026",
+          title: "Norliana Aida Ramli: Visionary CEOs to Watch in 2026",
+          category: leadership,
+        },
+        news(2),
+      ],
+      8,
+    );
     assert.deepEqual(
       picked.map((row) => row.id),
-      ["si-1", "si-2", "si-3"],
+      ["ed-1", "ed-2"],
     );
   });
 
-  it("returns nothing for an editorial-only list so Header fetches SI", () => {
-    assert.deepEqual(successInsightsTickerArticles([news(1), news(2)], 12), []);
+  it("caps at the ticker limit and keeps news order", () => {
+    const picked = newsTickerArticles([news(1), si(1), news(2), news(3)], 2);
+    assert.deepEqual(
+      picked.map((row) => row.id),
+      ["ed-1", "ed-2"],
+    );
+  });
+
+  it("returns nothing when every story is Success Insights so the ticker can fall back to news", () => {
+    assert.deepEqual(newsTickerArticles([si(1), si(2)], 8), []);
   });
 });
