@@ -101,6 +101,29 @@ export function partitionHomeArticles<T extends {
   return { editorialArticles, successInsightsArticles };
 }
 
+/**
+ * Breaking ticker: Success Insights stories only, deduped by id/slug, capped at `limit`.
+ * Ticker only — rails and desks keep using `withoutSuccessInsights`.
+ */
+export function successInsightsTickerArticles<T extends {
+  id: string;
+  slug: string;
+  category?: { slug?: string | null; name?: string | null } | null;
+  title?: string | null;
+}>(articles: T[], limit = 12) {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const article of articles) {
+    if (out.length >= limit) break;
+    if (!isSuccessInsightsArticle(article)) continue;
+    if (seen.has(article.id) || seen.has(`slug:${article.slug}`)) continue;
+    seen.add(article.id);
+    seen.add(`slug:${article.slug}`);
+    out.push(article);
+  }
+  return out;
+}
+
 export function stripHtmlToText(html: string) {
   return html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")

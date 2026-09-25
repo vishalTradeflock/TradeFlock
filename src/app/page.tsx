@@ -6,9 +6,9 @@ import LatestScroller from "@/components/LatestScroller";
 import MiddleScroller from "@/components/MiddleScroller";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { LATEST_SCROLLER_LIMIT } from "@/lib/cache";
-import { getCategoryDesk, getHomeLayout } from "@/lib/articles";
+import { getCategoryDesk, getHomeLayout, getSuccessInsightsArticles } from "@/lib/articles";
 import { publicPageMetadata } from "@/lib/seo";
-import { isSuccessInsightsArticle } from "@/lib/success-insights";
+import { isSuccessInsightsArticle, successInsightsTickerArticles } from "@/lib/success-insights";
 import { NAV_CATEGORIES, articlePath, type ArticleWithRelations } from "@/lib/types";
 import { formatShortDate, formatTimeAgo } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ const DEEP_DIVE_FALLBACK =
   "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&q=80";
 
 const DESK_SCROLLER_LIMIT = 12;
+const TICKER_LIMIT = 12;
 
 function matchesDesk(article: ArticleWithRelations, slug: string, name: string) {
   const deskSlug = slug.trim().toLowerCase();
@@ -68,9 +69,11 @@ export default async function Home() {
       mostRead,
       editorialArticles,
     },
+    tickerSuccessInsights,
     ...deskQueries
   ] = await Promise.all([
     getHomeLayout(),
+    getSuccessInsightsArticles(TICKER_LIMIT),
     ...NAV_CATEGORIES.map((category) => getCategoryDesk(category.slug, DESK_SCROLLER_LIMIT)),
   ]);
 
@@ -87,7 +90,7 @@ export default async function Home() {
   const bigTakeArticles = remainingEditorial.slice(0, 12);
   const latestArticles = remainingEditorial.slice(12, 12 + LATEST_SCROLLER_LIMIT);
   const middleRail = remainingEditorial.slice(0, 20);
-  const tickerArticles = editorialArticles.slice(0, 8);
+  const tickerArticles = successInsightsTickerArticles(tickerSuccessInsights, TICKER_LIMIT);
   const deskSections = NAV_CATEGORIES.map((category, index) => ({
     title: category.name,
     articles: articlesForDesk(
