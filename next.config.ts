@@ -59,6 +59,9 @@ const nextConfig: NextConfig = {
     ];
   },
   images: {
+    // Vercel image optimization returns 402 once the plan quota is exhausted,
+    // which blanked covers site-wide. Serve every image from its own source.
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: "https",
