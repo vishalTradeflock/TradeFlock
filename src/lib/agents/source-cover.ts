@@ -1,10 +1,10 @@
 import {
   decodeCoverHtmlEntities,
   isHttpsCoverUrl,
+  publishCoverCandidates,
   sanitizeCoverUrl,
-  selectPublishCover,
-  type CoverArticleRef,
 } from "@/lib/images";
+import { pickUniqueCover, type PickedCover } from "@/lib/cover-picker";
 
 const OG_TIMEOUT_MS = 4_000;
 const SKIP_OG_HOSTS = /(^|\.)sec\.gov$/i;
@@ -72,28 +72,51 @@ export async function fetchOgImageUrl(pageUrl: string): Promise<string | null> {
 }
 
 /**
- * Cover for a newly published wire story:
- * RSS/enclosure → og:image from the source page → deterministic desk Unsplash.
- * Does not call the Unsplash API.
+ * Cover for a newly published wire story, unique across all stories:
+ * RSS/enclosure → og:image from the source page → Unsplash search with
+ * story-specific terms (company / person / topic), skipping any photo another
+ * story already uses. Returns "" when nothing unused was found; the site then
+ * renders the neutral branded card instead of a shared stock photo.
  */
-export async function resolvePublishCoverUrl(input: {
+export async function resolveUniquePublishCover(input: {
   imageUrl?: string | null;
   notesCoverUrl?: string | null;
   sourceUrl?: string | null;
-  article: CoverArticleRef;
-}): Promise<string> {
-  const fromFeed =
-    sanitizeCoverUrl(input.imageUrl) ?? sanitizeCoverUrl(input.notesCoverUrl);
-  if (fromFeed) {
-    return selectPublishCover({
-      rssImageUrl: fromFeed,
-      article: input.article,
-    });
-  }
+  title: string;
+  categorySlug?: string | null;
+  used: Set<string>;
+}): Promise<{ url: string; picked: PickedCover | null }> {
+  const accessKey = process.env.UNSPLASH_ACCESS_KEY ?? null;
+  const fromFeed = publishCoverCandidates({
+    rssImageUrl: input.imageUrl,
+    notesCoverUrl: input.notesCoverUrl,
+  });
+  const first = await pickUniqueCover({
+    title: input.title,
+    categorySlug: input.categorySlug,
+    preferred: fromFeed,
+    used: input.used,
+    // Feed image first; only fetch og:image if the feed image is missing or already used.
+    accessKey: null,
+  });
+  if (first) return { url: first.url, picked: first };
 
   const og = input.sourceUrl ? await fetchOgImageUrl(input.sourceUrl) : null;
-  return selectPublishCover({
-    ogImageUrl: og,
-    article: input.article,
-  });
+  let picked: PickedCover | null = null;
+  try {
+    picked = await pickUniqueCover({
+      title: input.title,
+      categorySlug: input.categorySlug,
+      preferred: publishCoverCandidates({ ogImageUrl: og }),
+      used: input.used,
+      accessKey,
+    });
+  } catch (err) {
+    // Unsplash down / rate-limited must not block publishing.
+    console.warn(`[cover] Unsplash unavailable: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (!picked) {
+    console.warn(`[cover] no unused cover for "${input.title}" — publishing with the neutral card`);
+  }
+  return { url: picked?.url ?? "", picked };
 }

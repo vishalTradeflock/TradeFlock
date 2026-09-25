@@ -68,6 +68,7 @@ function RailCard({ article }: { article: ArticleWithRelations }) {
           sizes="64px"
           className="object-cover"
           loading="lazy"
+          label={article.category.name}
         />
       </div>
       <div className="min-w-0">

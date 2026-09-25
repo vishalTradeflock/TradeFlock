@@ -1,0 +1,44 @@
+name: Cover Backfill (one image per story)
+
+# Manual only. Calls the Vercel route, which already has the Supabase
+# service-role and Unsplash env; this workflow only needs the existing
+# CRON_SECRET repo secret. Dry run unless "apply" is ticked.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Write changes (unticked = dry run)"
+        type: boolean
+        default: false
+      limit:
+        description: "Stories per call (max 100)"
+        default: "25"
+      rounds:
+        description: "Calls to make (apply mode stops early when nothing is left)"
+        default: "1"
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Run cover backfill
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APPLY: ${{ inputs.apply && '1' || '0' }}
+          LIMIT: ${{ inputs.limit }}
+          ROUNDS: ${{ inputs.rounds }}
+        run: |
+          for round in $(seq 1 "$ROUNDS"); do
+            response=$(curl -s -w "\n%{http_code}" -m 310 \
+              "https://tradeflock-usa-nine.vercel.app/api/cron/dedupe-covers?apply=${APPLY}&limit=${LIMIT}" \
+              -H "Authorization: Bearer ${CRON_SECRET}")
+            body=$(echo "$response" | sed '$d')
+            status=$(echo "$response" | tail -n 1)
+            echo "Round $round — HTTP $status"
+            echo "$body"
+            if [ "$status" -ne 200 ]; then exit 1; fi
+            remaining=$(echo "$body" | jq -r '.remaining // 0')
+            stopped=$(echo "$body" | jq -r '.stoppedReason // empty')
+            if [ "$APPLY" != "1" ] || [ "$remaining" = "0" ] || [ -n "$stopped" ]; then break; fi
+          done

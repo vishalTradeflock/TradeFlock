@@ -1,52 +1,59 @@
 "use client";
 
 import Image, { type ImageProps } from "next/image";
-import { Newspaper } from "lucide-react";
 import { useState, type SyntheticEvent } from "react";
-import {
-  FALLBACK_COVER_IMAGE,
-  resolveCoverImage,
-  shouldBypassImageOptimizer,
-} from "@/lib/images";
+import { resolveCoverImage, shouldBypassImageOptimizer } from "@/lib/images";
 import { cn } from "@/lib/utils";
 
 type SafeArticleImageProps = Omit<ImageProps, "src" | "alt"> & {
   src: string | null | undefined;
   alt: string;
-  fallbackSrc?: string;
+  /** Desk / category shown on the neutral card when the story has no usable cover. */
+  label?: string | null;
 };
 
-function isUsableSrc(url: string) {
-  if (!url.trim()) return false;
-  if (url.startsWith("/")) return true;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" && Boolean(parsed.hostname);
-  } catch {
-    return false;
-  }
-}
-
-function CoverPlaceholder() {
+/**
+ * Neutral branded card for a story without a usable cover. Deliberately not a
+ * photo: a shared stand-in photo would put the same image on many stories.
+ */
+export function CoverPlaceholder({ label }: { label?: string | null }) {
+  const text = label?.trim();
   return (
     <div
-      className="absolute inset-0 flex items-center justify-center bg-neutral-100"
+      className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 overflow-hidden bg-gradient-to-br from-neutral-900 via-neutral-800 to-[#3a0d16] px-3 text-center"
       aria-hidden
     >
-      <Newspaper className="h-5 w-5 text-neutral-400" strokeWidth={1.5} />
+      <span className="h-0.5 w-8 bg-[#c41e3a]" />
+      <span className="font-serif text-[11px] font-semibold tracking-wide text-white/90 sm:text-sm">
+        TradeFlock
+      </span>
+      {text ? (
+        <span className="line-clamp-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/60 sm:text-[10px]">
+          {text}
+        </span>
+      ) : null}
     </div>
   );
 }
 
-function pickInitialSrc(resolved: string, fallbackSrc?: string) {
-  if (isUsableSrc(resolved)) return resolved;
-  if (fallbackSrc && isUsableSrc(fallbackSrc)) return fallbackSrc;
-  return FALLBACK_COVER_IMAGE;
+type Stage = "optimized" | "native" | "failed";
+
+function initialStage(src: string | null, unoptimized?: boolean): Stage {
+  if (!src) return "failed";
+  if (unoptimized || shouldBypassImageOptimizer(src)) return "native";
+  return "optimized";
 }
 
+/**
+ * Renders a story's own cover. If the image optimizer fails (e.g. Vercel
+ * returns 402 when the optimization quota is exhausted) it retries the same
+ * URL as a plain <img>; if that fails too it shows the neutral card. It never
+ * swaps in a different stock photo, so two stories can't end up sharing one.
+ */
 export default function SafeArticleImage({
   src,
   alt,
+  label,
   className,
   priority,
   loading,
@@ -54,50 +61,46 @@ export default function SafeArticleImage({
   onError,
   fill,
   sizes,
-  fallbackSrc,
   ...props
 }: SafeArticleImageProps) {
   const resolved = resolveCoverImage(src);
-  const sourceKey = `${resolved}\0${fallbackSrc ?? ""}`;
-  const [currentSrc, setCurrentSrc] = useState(() => pickInitialSrc(resolved, fallbackSrc));
-  const [failed, setFailed] = useState(false);
+  const sourceKey = `${resolved ?? ""}\0${unoptimized ? 1 : 0}`;
+  const [stage, setStage] = useState<Stage>(() => initialStage(resolved, unoptimized));
   const [seenKey, setSeenKey] = useState(sourceKey);
 
   if (seenKey !== sourceKey) {
     setSeenKey(sourceKey);
-    setCurrentSrc(pickInitialSrc(resolved, fallbackSrc));
-    setFailed(false);
+    setStage(initialStage(resolved, unoptimized));
   }
 
-  const useNativeImg = unoptimized ?? shouldBypassImageOptimizer(currentSrc);
+  const advance = () => setStage((current) => (current === "optimized" ? "native" : "failed"));
 
   const handleError = (event: SyntheticEvent<HTMLImageElement, Event>) => {
-    const target = event.currentTarget;
-    target.onerror = null;
     onError?.(event);
-
-    if (fallbackSrc && isUsableSrc(fallbackSrc) && currentSrc !== fallbackSrc) {
-      setCurrentSrc(fallbackSrc);
-      return;
-    }
-    if (currentSrc !== FALLBACK_COVER_IMAGE) {
-      setCurrentSrc(FALLBACK_COVER_IMAGE);
-      return;
-    }
-    setFailed(true);
+    advance();
   };
 
-  if (failed || !isUsableSrc(currentSrc)) {
-    return <CoverPlaceholder />;
+  // An image that already failed before hydration never fires onError in React.
+  const catchEarlyFailure = (element: HTMLImageElement | null) => {
+    if (element && element.complete && element.naturalWidth === 0 && element.currentSrc) {
+      advance();
+    }
+  };
+
+  if (!resolved || stage === "failed") {
+    return <CoverPlaceholder label={label} />;
   }
 
-  if (useNativeImg) {
+  if (stage === "native") {
     return (
       // Native img so 404s always fire onError (Next/Image can swallow optimizer failures).
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={currentSrc}
+        key="native"
+        ref={catchEarlyFailure}
+        src={resolved}
         alt={alt}
+        loading={priority ? "eager" : loading ?? "lazy"}
         className={cn(
           fill ? "absolute inset-0 h-full w-full object-cover" : "object-cover",
           className,
@@ -110,7 +113,9 @@ export default function SafeArticleImage({
   return (
     <Image
       {...props}
-      src={currentSrc}
+      key="optimized"
+      ref={catchEarlyFailure}
+      src={resolved}
       alt={alt}
       fill={fill}
       sizes={sizes}
@@ -118,7 +123,6 @@ export default function SafeArticleImage({
       onError={handleError}
       priority={priority}
       loading={priority ? undefined : loading ?? "lazy"}
-      unoptimized={unoptimized}
     />
   );
 }

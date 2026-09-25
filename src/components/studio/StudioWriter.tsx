@@ -32,6 +32,7 @@ import { saveStudioDraft, type SaveDraftResult } from "@/app/studio/actions";
 import { StudioDialog } from "@/components/studio/StudioDialog";
 import { StudioSeoDrawer } from "@/components/studio/StudioSeoDrawer";
 import { unsplashEditorSrc } from "@/lib/images";
+import { buildCoverSearchQueries } from "@/lib/cover-dedupe";
 import { excerptFromHtml } from "@/lib/studio/copy";
 import { storyPreviewHref, type StudioAuthor, type StudioCategory, type StudioFaqDraft } from "@/components/studio/types";
 import { getSiteHost } from "@/lib/site-url";
@@ -115,7 +116,7 @@ export default function StudioWriter({
   const [savedSlug, setSavedSlug] = useState(initialDraft?.slug ?? "");
   const [storyId, setStoryId] = useState(initialDraft?.id ?? "");
   const [unsplashOpen, setUnsplashOpen] = useState(false);
-  const [unsplashQuery, setUnsplashQuery] = useState("boardroom");
+  const [unsplashQuery, setUnsplashQuery] = useState("");
   const [unsplashPhotos, setUnsplashPhotos] = useState<UnsplashPhoto[]>([]);
   const [unsplashError, setUnsplashError] = useState("");
   const [unsplashLoading, setUnsplashLoading] = useState(false);
@@ -415,13 +416,14 @@ export default function StudioWriter({
     return () => window.clearTimeout(saveTimer.current);
   }, [authorId, categoryId, coverImageAlt, faqs, metaDescription, metaTitle, persist, slug, title]);
 
-  async function searchUnsplash(event?: React.FormEvent) {
+  async function searchUnsplash(event?: React.FormEvent, override?: string) {
     event?.preventDefault();
     setUnsplashLoading(true);
     setUnsplashError("");
-    const response = await fetch(
-      `/api/studio/unsplash?q=${encodeURIComponent(unsplashQuery || "business")}`,
-    );
+    // Photos already used on another story are filtered out server-side.
+    const query = (override ?? unsplashQuery).trim() || "business";
+    const exclude = storyId ? `&exclude=${encodeURIComponent(storyId)}` : "";
+    const response = await fetch(`/api/studio/unsplash?q=${encodeURIComponent(query)}${exclude}`);
     const payload = (await response.json()) as {
       photos?: UnsplashPhoto[];
       error?: string;
@@ -436,7 +438,13 @@ export default function StudioWriter({
 
   useEffect(() => {
     if (unsplashOpen && unsplashPhotos.length === 0) {
-      void searchUnsplash();
+      // Story-specific default (company / person / topic) instead of one shared generic term.
+      const suggested =
+        unsplashQuery.trim() ||
+        buildCoverSearchQueries(title, categories.find((c) => c.id === categoryId)?.slug)[0] ||
+        "business";
+      setUnsplashQuery(suggested);
+      void searchUnsplash(undefined, suggested);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unsplashOpen]);

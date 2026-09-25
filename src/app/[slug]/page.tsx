@@ -19,7 +19,7 @@ import {
   resolvePublishedSlugRedirect,
 } from "@/lib/articles";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
-import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
+import { articleCoverSrc } from "@/lib/images";
 import {
   articlePageMetadata,
   articleStructuredData,
@@ -82,7 +82,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   const currentCategory = article.category?.name?.trim() || "Tech";
   const related = await getRelatedArticles(article, 9);
   const coverSrc = articleCoverSrc(article);
-  const coverFallback = deskCoverFallback(article);
   const body = sanitizeArticleBody(article.body, {
     title: article.title,
     coverImageUrl: article.cover_image_url,
@@ -128,7 +127,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                   fill
                   priority
                   sizes="(max-width: 768px) 100vw, (max-width: 1200px) 70vw, 850px"
-                  fallbackSrc={coverFallback === coverSrc ? undefined : coverFallback}
+                  label={article.category.name}
                   className="object-cover transition-transform duration-500 hover:scale-[1.01]"
                 />
               </div>
@@ -163,7 +162,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                         fill
                         sizes="96px"
                         loading="lazy"
-                        fallbackSrc={deskCoverFallback(item)}
+                        label={item.category.name}
                       />
                     </div>
                     <div>

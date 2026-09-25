@@ -70,6 +70,7 @@ export default function LeadershipSpotlight({
                 fill
                 sizes="(min-width: 640px) 33vw, 100vw"
                 loading="lazy"
+                label={article.categoryName}
               />
             </div>
             <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">

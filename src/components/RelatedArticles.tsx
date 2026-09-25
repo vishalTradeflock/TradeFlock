@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
+import { articleCoverSrc } from "@/lib/images";
 import type { ArticleWithRelations } from "@/lib/types";
 import { articlePath } from "@/lib/types";
 import { formatShortDate } from "@/lib/utils";
@@ -87,7 +87,6 @@ export function RelatedArticles({
       >
         {articles.map((article) => {
           const imageUrl = articleCoverSrc(article);
-          const fallbackSrc = deskCoverFallback(article);
           return (
             <Link
               key={article.id}
@@ -101,7 +100,7 @@ export function RelatedArticles({
                   fill
                   sizes="340px"
                   loading="lazy"
-                  fallbackSrc={fallbackSrc === imageUrl ? undefined : fallbackSrc}
+                  label={article.category.name}
                   className="rounded-lg object-cover"
                 />
               </div>
