@@ -6,10 +6,12 @@ import { articlePath, type ArticleWithRelations } from "@/lib/types";
 
 /** Constant reading pace: one copy of the strip crosses in width / this many px per second. */
 const PX_PER_SECOND = 48;
+/** Never loop faster than this, so long Success Insights titles stay readable. */
+const MIN_DURATION_SECONDS = 75;
 
 export function BreakingTicker({ articles }: { articles: ArticleWithRelations[] }) {
   const trackRef = useRef<HTMLDivElement>(null);
-  const [duration, setDuration] = useState(55);
+  const [duration, setDuration] = useState(MIN_DURATION_SECONDS);
   const loop = articles.length ? [...articles, ...articles] : [];
 
   useEffect(() => {
@@ -19,7 +21,7 @@ export function BreakingTicker({ articles }: { articles: ArticleWithRelations[] 
     const measure = () => {
       const loopWidth = node.scrollWidth / 2;
       if (loopWidth <= 0) return;
-      setDuration(loopWidth / PX_PER_SECOND);
+      setDuration(Math.max(MIN_DURATION_SECONDS, loopWidth / PX_PER_SECOND));
     };
 
     measure();

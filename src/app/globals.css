@@ -31,7 +31,7 @@ body {
 .ticker-track {
   display: flex;
   width: max-content;
-  animation: ticker 55s linear infinite;
+  animation: ticker 75s linear infinite;
 }
 
 .ticker-track:hover,

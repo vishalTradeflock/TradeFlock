@@ -9,6 +9,7 @@ import {
   shouldRecategorizeToSuccessInsights,
   shouldUnpublishSiBlurb,
   stripHtmlToText,
+  successInsightsTickerArticles,
   withoutSuccessInsights,
 } from "./success-insights.ts";
 
@@ -187,5 +188,40 @@ describe("shouldUnpublishSiBlurb / shouldRecategorizeToSuccessInsights", () => {
     };
     assert.equal(shouldUnpublishSiBlurb(news), false);
     assert.equal(shouldRecategorizeToSuccessInsights(news), false);
+  });
+});
+
+describe("successInsightsTickerArticles", () => {
+  const si = (n: number) => ({
+    id: `si-${n}`,
+    slug: `si-story-${n}`,
+    title: `SI story ${n}`,
+    category: siCategory,
+  });
+  const news = (n: number) => ({
+    id: `ed-${n}`,
+    slug: `markets-story-${n}`,
+    title: `Markets story ${n}`,
+    category: markets,
+  });
+
+  it("keeps only Success Insights stories, in order", () => {
+    const picked = successInsightsTickerArticles([news(1), si(1), news(2), si(2)], 12);
+    assert.deepEqual(
+      picked.map((row) => row.id),
+      ["si-1", "si-2"],
+    );
+  });
+
+  it("dedupes and caps at the limit", () => {
+    const picked = successInsightsTickerArticles([si(1), si(1), si(2), si(3), si(4)], 3);
+    assert.deepEqual(
+      picked.map((row) => row.id),
+      ["si-1", "si-2", "si-3"],
+    );
+  });
+
+  it("returns nothing for an editorial-only list so Header fetches SI", () => {
+    assert.deepEqual(successInsightsTickerArticles([news(1), news(2)], 12), []);
   });
 });
