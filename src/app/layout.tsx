@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Playfair_Display, Source_Sans_3 } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 import { GlobalHeadCode } from "@/components/GlobalHeadCode";
 import { GlobalHeadScripts } from "@/components/GlobalHeadScripts";
 import { JsonLd } from "@/components/JsonLd";
@@ -61,6 +62,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         {children}
         <SiteFooter />
         <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
