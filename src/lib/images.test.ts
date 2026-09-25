@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
   FALLBACK_COVER_IMAGE,
   articleCoverSrc,
-  deskCoverFallback,
+  assignDistinctCovers,
   isHttpsCoverUrl,
   isOptimizedCoverHost,
   resolveCoverImage,
@@ -49,7 +49,7 @@ describe("sanitizeCoverUrl", () => {
     assert.equal(sanitizeCoverUrl("http://example.com/a.jpg"), null);
     assert.equal(sanitizeCoverUrl("https://www.sec.gov/files/report.pdf"), null);
     assert.equal(sanitizeCoverUrl("javascript:alert(1)"), null);
-    assert.equal(resolveCoverImage("https://www.sec.gov/files/report.pdf"), FALLBACK_COVER_IMAGE);
+    assert.equal(resolveCoverImage("https://www.sec.gov/files/report.pdf"), null);
   });
 });
 
@@ -77,16 +77,21 @@ describe("selectPublishCover", () => {
     assert.equal(chosen, "https://www.prnewswire.com/media/cover.png?foo=1&bar=2");
   });
 
-  it("never leaves the cover empty when a desk Unsplash fallback exists", () => {
+  it("never invents a shared stock photo when the source has no image", () => {
     const chosen = selectPublishCover({
       rssImageUrl: null,
       ogImageUrl: "not-a-url",
       article: DESK_ARTICLE,
     });
-    const desk = deskCoverFallback(DESK_ARTICLE);
-    assert.equal(chosen, desk);
-    assert.match(chosen, /^https:\/\/images\.unsplash\.com\//);
-    assert.notEqual(chosen, "");
+    assert.equal(chosen, null);
+  });
+
+  it("skips the legacy skyscraper even if a feed hands it over", () => {
+    const chosen = selectPublishCover({
+      rssImageUrl: FALLBACK_COVER_IMAGE,
+      ogImageUrl: "https://www.prnewswire.com/media/cover.png",
+    });
+    assert.equal(chosen, "https://www.prnewswire.com/media/cover.png");
   });
 });
 
@@ -102,15 +107,43 @@ describe("articleCoverSrc", () => {
     );
   });
 
-  it("uses the desk Unsplash pool when the stored cover is empty or the generic fallback", () => {
-    const empty = articleCoverSrc({ ...DESK_ARTICLE, cover_image_url: "" });
-    const generic = articleCoverSrc({
-      ...DESK_ARTICLE,
-      cover_image_url: FALLBACK_COVER_IMAGE,
-    });
-    assert.equal(empty, deskCoverFallback(DESK_ARTICLE));
-    assert.equal(generic, deskCoverFallback(DESK_ARTICLE));
-    assert.notEqual(empty, FALLBACK_COVER_IMAGE);
+  it("renders the neutral card (\"\") for empty, the old fallback, or any legacy stock photo", () => {
+    assert.equal(articleCoverSrc({ ...DESK_ARTICLE, cover_image_url: "" }), "");
+    assert.equal(articleCoverSrc({ ...DESK_ARTICLE, cover_image_url: FALLBACK_COVER_IMAGE }), "");
+    // Same skyscraper photo with different crop params (what the wire pipeline stored).
+    assert.equal(
+      articleCoverSrc({
+        ...DESK_ARTICLE,
+        cover_image_url:
+          "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80",
+      }),
+      "",
+    );
+    // A former desk-pool photo.
+    assert.equal(
+      articleCoverSrc({
+        ...DESK_ARTICLE,
+        cover_image_url:
+          "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80",
+      }),
+      "",
+    );
+  });
+});
+
+describe("assignDistinctCovers", () => {
+  it("keeps the first story's cover and blanks later repeats instead of swapping in stock", () => {
+    const shared = "https://mmx.prnewswire.com/media/MS1118010/Rosen-Law-Firm-Logo.jpg";
+    const out = assignDistinctCovers([
+      { id: "a", title: "A", cover_image_url: `${shared}?id=1&p=original` },
+      { id: "b", title: "B", cover_image_url: `${shared}?id=2&p=original` },
+      { id: "c", title: "C", cover_image_url: "https://image.cnbcfm.com/api/v1/image/c.jpg" },
+      { id: "d", title: "D", cover_image_url: null },
+    ]);
+    assert.deepEqual(
+      out.map((row) => row.cover_image_url),
+      [`${shared}?id=1&p=original`, "", "https://image.cnbcfm.com/api/v1/image/c.jpg", ""],
+    );
   });
 });
 

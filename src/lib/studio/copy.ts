@@ -1,4 +1,3 @@
-import { FALLBACK_COVER_IMAGE } from "@/lib/images";
 import { slugFromTitle } from "@/lib/studio/slug";
 
 export function slugifyTitle(title: string) {
@@ -15,9 +14,10 @@ export function excerptFromHtml(html: string) {
   return `${text.slice(0, 217).trim()}…`;
 }
 
-export function coverFromHtml(html: string) {
+/** First <img src> in the body, or null (never a stock stand-in). */
+export function coverFromHtml(html: string): string | null {
   const match = html.match(/<img[^>]+src=["']([^"']+)["']/i);
-  return match?.[1]?.trim() || FALLBACK_COVER_IMAGE;
+  return match?.[1]?.trim() || null;
 }
 
 export function authorSlugFromEmail(email: string) {

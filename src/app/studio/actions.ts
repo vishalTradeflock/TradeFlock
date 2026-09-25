@@ -1,9 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { FALLBACK_COVER_IMAGE } from "@/lib/images";
 import {
-  coverFromHtml,
   excerptFromHtml,
   uniqueAuthorSlug,
 } from "@/lib/studio/copy";
@@ -27,6 +25,11 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
 import { studioPublishFailures } from "@/lib/agents/studio-gate";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
+import { studioCoverFor } from "@/lib/studio/cover";
+import { isCoverUniqueViolation } from "@/lib/cover-picker";
+
+const COVER_TAKEN_MESSAGE =
+  "That cover image was just used on another story. Save again to pick a different one.";
 
 export type SaveDraftInput = {
   id?: string | null;
@@ -200,7 +203,6 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     const rawBody = input.body.trim();
     const body = sanitizeArticleBody(rawBody, { title });
     const excerpt = excerptFromHtml(body);
-    const cover_image_url = coverFromHtml(body) || FALLBACK_COVER_IMAGE;
     const cover_image_alt = sanitizeAltText(input.coverImageAlt);
     const faqsResult = prepareStudioFaqs(input.faqs ?? []);
     if (!faqsResult.ok) return { ok: false, error: faqsResult.error };
@@ -221,7 +223,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     if (input.id) {
       const { data: existing, error: existingError } = await admin
         .from("articles")
-        .select("id, slug, status, author_id, published_at")
+        .select("id, slug, status, author_id, published_at, cover_image_url")
         .eq("id", input.id)
         .maybeSingle();
 
@@ -271,13 +273,22 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         if (publishBlocked) nextStatus = existing.status;
       }
 
+      const cover_image_url = await studioCoverFor(admin, {
+        articleId: existing.id,
+        title,
+        body,
+        categoryId: input.categoryId,
+        currentCover: existing.cover_image_url,
+        publishing: nextStatus === "published",
+      });
+
       const update: Database["public"]["Tables"]["articles"]["Update"] = {
         title,
         body,
         excerpt,
         cover_image_url,
         cover_image_alt,
-        featured_image: cover_image_url,
+        featured_image: cover_image_url || null,
         featured_image_alt: cover_image_alt || null,
         category_id: input.categoryId,
         author_id: authorId,
@@ -312,6 +323,9 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         const retry = await admin.from("articles").update(withoutSeo).eq("id", existing.id);
         if (retry.error) return { ok: false, error: retry.error.message };
       } else if (written.error) {
+        if (isCoverUniqueViolation(written.error)) {
+          return { ok: false, error: COVER_TAKEN_MESSAGE };
+        }
         if (uniqueSlugTakenMessage(written.error.message)) {
           return { ok: false, error: "That URL is already in use." };
         }
@@ -367,6 +381,13 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
       if (publishBlocked) nextStatus = "draft";
     }
 
+    const cover_image_url = await studioCoverFor(admin, {
+      title,
+      body,
+      categoryId: input.categoryId,
+      publishing: nextStatus === "published",
+    });
+
     const insert = {
       slug,
       title,
@@ -374,7 +395,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
       body,
       cover_image_url,
       cover_image_alt,
-      featured_image: cover_image_url,
+      featured_image: cover_image_url || null,
       featured_image_alt: cover_image_alt || null,
       category_id: input.categoryId,
       author_id: authorId,
@@ -407,6 +428,9 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     }
 
     if (error || !data) {
+      if (isCoverUniqueViolation(error)) {
+        return { ok: false, error: COVER_TAKEN_MESSAGE };
+      }
       if (uniqueSlugTakenMessage(error?.message)) {
         return { ok: false, error: "That URL is already in use." };
       }

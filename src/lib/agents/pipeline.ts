@@ -14,13 +14,14 @@ import {
   loadRelatedCandidates,
   type RelatedCandidate,
 } from "@/lib/agents/related-articles";
-import { FALLBACK_COVER_IMAGE, sanitizeCoverUrl } from "@/lib/images";
+import { sanitizeCoverUrl } from "@/lib/images";
+import { isCoverUniqueViolation, loadUsedCoverKeys } from "@/lib/cover-picker";
 import { allocateArticleSlug, sanitizeSlug } from "@/lib/studio/slug";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import { completeLlmChat, isLlmQuotaError } from "@/lib/llm";
-import { resolvePublishCoverUrl } from "@/lib/agents/source-cover";
+import { resolveUniquePublishCover } from "@/lib/agents/source-cover";
 import {
   parseLeadNotes,
   polishWireBody,
@@ -372,7 +373,16 @@ function prepareWireBody(
   return { body, notes, failures: assessment.failures, score: assessment.score };
 }
 
-async function publishArticle(insert: ArticleInsert) {
+class ArticleInsertError extends Error {
+  code?: string;
+  constructor(error: { message: string; code?: string }) {
+    super(error.message);
+    this.name = "ArticleInsertError";
+    this.code = error.code;
+  }
+}
+
+async function insertArticle(insert: ArticleInsert) {
   const admin = createAdminClient();
   const withStatus = await admin.from("articles").insert(insert).select("slug").single();
 
@@ -385,16 +395,34 @@ async function publishArticle(insert: ArticleInsert) {
     withStatus.error.message.includes("schema cache");
 
   if (!statusUnknown) {
-    throw new Error(withStatus.error.message);
+    throw new ArticleInsertError(withStatus.error);
   }
 
   const { status, ...withoutStatus } = insert;
   void status;
   const fallback = await admin.from("articles").insert(withoutStatus).select("slug").single();
   if (fallback.error) {
-    throw new Error(fallback.error.message);
+    throw new ArticleInsertError(fallback.error);
   }
   return fallback.data.slug;
+}
+
+/**
+ * Insert; if the DB cover index says another story grabbed the same image in
+ * the meantime (concurrent publish), pick another unused cover and retry.
+ */
+async function publishArticle(insert: ArticleInsert, repickCover?: () => Promise<string>) {
+  let row = insert;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await insertArticle(row);
+    } catch (err) {
+      const coverTaken =
+        err instanceof ArticleInsertError && isCoverUniqueViolation({ code: err.code, message: err.message });
+      if (!coverTaken || !repickCover || attempt >= 2) throw err;
+      row = { ...row, cover_image_url: await repickCover() };
+    }
+  }
 }
 
 async function commitVerdict(
@@ -408,21 +436,23 @@ async function commitVerdict(
   const excerpt = verdict.excerpt.trim().slice(0, 280);
   const slug = await uniquePublishSlug(admin, verdict.editedSlug, title);
   const notes = leadNotes(lead);
-  const [categoryId, authorId, coverImageUrl] = await Promise.all([
+  const [categoryId, authorId, usedCovers] = await Promise.all([
     resolveCategoryId(admin, desk, lead.category),
     resolveAuthorId(admin, desk),
-    resolvePublishCoverUrl({
-      imageUrl: lead.imageUrl,
-      notesCoverUrl: notes.coverUrl,
-      sourceUrl: notes.sourceUrl,
-      article: {
-        id: slug,
-        title,
-        slug,
-        category: { slug: SITE_CATEGORY[desk] },
-      },
-    }),
+    loadUsedCoverKeys(admin),
   ]);
+  const pickCover = async (used: Set<string>) =>
+    (
+      await resolveUniquePublishCover({
+        imageUrl: lead.imageUrl,
+        notesCoverUrl: notes.coverUrl,
+        sourceUrl: notes.sourceUrl,
+        title,
+        categorySlug: SITE_CATEGORY[desk],
+        used,
+      })
+    ).url;
+  const coverImageUrl = await pickCover(usedCovers);
   const prepared = prepareWireBody(lead, title, slug, verdict.editedContent, coverImageUrl, related);
   if (prepared.failures.length) {
     const held = holdForHygiene(desk, verdict, prepared.body, prepared.failures, prepared.score);
@@ -440,6 +470,7 @@ async function commitVerdict(
       author_id: authorId,
       cover_image_url: coverImageUrl,
     }),
+    async () => pickCover(await loadUsedCoverKeys(admin)),
   );
 
   revalidatePath("/");
@@ -478,7 +509,8 @@ async function trySaveHeldDraft(
       dek: excerpt,
       excerpt,
       body,
-      cover_image_url: FALLBACK_COVER_IMAGE,
+      // No stock stand-in: a cover is picked (uniquely) only when it publishes.
+      cover_image_url: "",
       cover_image_alt: title,
       category_id: categoryId,
       author_id: authorId,
@@ -564,7 +596,7 @@ export async function processNewsLead(
     verdict.editedTitle,
     verdict.editedSlug,
     verdict.editedContent,
-    FALLBACK_COVER_IMAGE,
+    "",
     related,
   );
 
@@ -578,7 +610,7 @@ export async function processNewsLead(
         verdict.editedTitle,
         verdict.editedSlug,
         verdict.editedContent,
-        FALLBACK_COVER_IMAGE,
+        "",
         related,
       );
     } catch (err) {
@@ -629,7 +661,7 @@ export async function publishHighestScoringHold(
       verdict.editedTitle.trim(),
       verdict.editedSlug || keywordSlug(verdict.editedTitle),
       verdict.editedContent,
-      FALLBACK_COVER_IMAGE,
+      "",
       related,
     );
     if (prepared.failures.length) continue;

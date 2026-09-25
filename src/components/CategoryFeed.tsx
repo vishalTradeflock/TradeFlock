@@ -69,6 +69,7 @@ export default async function CategoryFeed({
                   fill
                   priority
                   sizes="(min-width: 1024px) 55vw, 100vw"
+                  label={featured.category.name}
                   className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                 />
               </Link>
@@ -110,6 +111,7 @@ export default async function CategoryFeed({
                           fill
                           sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
                           loading="lazy"
+                          label={article.category?.name}
                           className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                         />
                       </div>

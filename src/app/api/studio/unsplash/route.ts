@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import { loadUsedCoverKeys, searchUnsplash, UnsplashRateLimitError } from "@/lib/cover-picker";
+import { isCoverKeyTaken } from "@/lib/cover-dedupe";
 import { getStudioSession } from "@/lib/studio/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
@@ -12,6 +15,11 @@ type UnsplashPhoto = {
   photographerUrl: string;
 };
 
+/**
+ * Studio image search. Photos already used as a cover on another story are
+ * removed from the results (house rule: one image, one story). `exclude` is
+ * the story being edited, so its own cover still shows.
+ */
 export async function GET(request: Request) {
   const session = await getStudioSession();
   if (!session) {
@@ -25,45 +33,31 @@ export async function GET(request: Request) {
     );
   }
 
-  const query = new URL(request.url).searchParams.get("q")?.trim() || "business";
-  const response = await fetch(
-    `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=12&orientation=landscape`,
-    {
-      headers: {
-        Authorization: `Client-ID ${key}`,
-        "Accept-Version": "v1",
-      },
-      next: { revalidate: 60 },
-    },
-  );
+  const params = new URL(request.url).searchParams;
+  const query = params.get("q")?.trim() || "business";
+  const page = Math.min(Math.max(Number(params.get("page")) || 1, 1), 20);
+  const excludeId = params.get("exclude")?.trim() || null;
 
-  if (!response.ok) {
+  try {
+    const [results, used] = await Promise.all([
+      searchUnsplash(query, page, key, 24),
+      loadUsedCoverKeys(createAdminClient(), { excludeId }),
+    ]);
+    const photos: UnsplashPhoto[] = results
+      .filter((photo) => !isCoverKeyTaken(photo.key, used))
+      .map((photo) => ({
+        id: photo.key,
+        alt: photo.alt,
+        url: photo.url,
+        thumb: photo.thumb,
+        photographer: photo.photographer,
+        photographerUrl: photo.photographerUrl,
+      }));
+    return NextResponse.json({ photos, page });
+  } catch (err) {
+    if (err instanceof UnsplashRateLimitError) {
+      return NextResponse.json({ error: "Unsplash rate limit reached. Try again later." }, { status: 429 });
+    }
     return NextResponse.json({ error: "Unsplash search failed." }, { status: 502 });
   }
-
-  const payload = (await response.json()) as {
-    results?: Array<{
-      id: string;
-      alt_description: string | null;
-      urls: { regular?: string; small?: string; full?: string };
-      user: { name: string; links: { html: string } };
-    }>;
-  };
-
-  const photos: UnsplashPhoto[] = (payload.results ?? []).flatMap((photo) => {
-    const url = photo.urls.regular || photo.urls.small || photo.urls.full;
-    if (!url) return [];
-    return [
-      {
-        id: photo.id,
-        alt: photo.alt_description ?? `Photo by ${photo.user.name}`,
-        url,
-        thumb: photo.urls.small || url,
-        photographer: photo.user.name,
-        photographerUrl: photo.user.links.html,
-      },
-    ];
-  });
-
-  return NextResponse.json({ photos });
 }
