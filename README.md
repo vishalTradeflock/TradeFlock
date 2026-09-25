@@ -44,10 +44,12 @@ To pull the Gemini briefing stub (slug `google-s-gemini-breaks-out-and-hacks-com
 - `NEWS_LEAD_BATCH_SIZE` — how many leads to process per run (default **`2`**, max **`3`**). Cron `maxDuration` is **300s** so a default batch of two long-form drafts (writer + editor) can finish.
 - `NEWS_LEAD_DEDUPE_DAYS` — skip titles/URLs seen in this window (default `7`). Near-duplicate titles (rewritten chip-export fixtures, same story different headline) are also skipped.
 - `GEMINI_MODEL` — primary writer/editor model (default `gemini-3.6-flash`). Free-tier Flash is **20 requests/day**; a 15-minute batch of 2 long-form stories needs 4 calls per tick, or 6 when both leads need the repair pass.
-- `GEMINI_FALLBACK_MODEL` — used when the primary model returns 429 (default `gemini-3.5-flash-lite`, ~500 RPD on free tier). Set to empty to disable fallback. Enable Gemini billing (Tier 1+) if you want sustained `gemini-3.6-flash` volume.
+- `GEMINI_FALLBACK_MODEL` — used when the primary model returns 429 or stays busy after retries (default `gemini-3.5-flash-lite`, ~500 RPD on free tier). Set to empty to disable fallback. Enable Gemini billing (Tier 1+) if you want sustained `gemini-3.6-flash` volume.
 - `USE_TEST_LEAD=1` — local/preview fallback that skips RSS and uses the old fixture lead. Ignored when `VERCEL_ENV=production`.
 
-If Gemini quota is exhausted on every configured model, the cron returns **200** with `reason: "llm_quota_exhausted"` so the Action stays green. Auth is unchanged: missing/invalid `CRON_SECRET` is still **401**.
+If Gemini quota is exhausted on every configured model, the cron returns **200** with `reason: "llm_quota_exhausted"` so the Action stays green.
+
+Gemini "busy" errors (503 `UNAVAILABLE` / "high demand" / "overloaded", per-minute 429, 500/502/504, dropped connections) are retried up to 4 attempts per model with backoff of ~2s, ~5s, ~12s (±25% jitter, or the server's `Retry-After`/`retryDelay` if longer, up to 30s), then the fallback model is tried. 400/401/403/404, safety blocks and daily-quota 429s are not retried. All Gemini work runs inside a 270s budget (route `maxDuration` 300s minus 30s headroom): no retry wait starts unless 20s would remain for the call, request timeouts end at the deadline, and no new lead starts with under 60s left (it's picked up next run). A story that still fails is skipped and the run continues; if every attempted story failed that way the cron returns **200** with `reason: "llm_unavailable"` and the `failures` list. Auth is unchanged: missing/invalid `CRON_SECRET` is still **401**.
 
 Default feeds live in `src/lib/agents/feeds.ts` (TechCrunch, CNBC tech/finance/economy/retail, Federal Reserve, SEC, NPR Business, PR Newswire M&A). A dead feed is logged and skipped; the cron keeps going. Per-feed timeout is **12s** (was 8s). **PR Newswire M&A** is marked `optional` with an **18s** budget so a timeout cannot fail the run.
 

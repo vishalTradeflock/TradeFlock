@@ -11,12 +11,24 @@ import {
   publishHighestScoringHold,
   type PipelineResult,
 } from "@/lib/agents/pipeline";
-import { isLlmQuotaError } from "@/lib/llm";
+import {
+  isLlmQuotaError,
+  isLlmUnavailableError,
+  llmTimeRemainingMs,
+  runWithLlmDeadline,
+} from "@/lib/llm";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 // Default batch is 2 long-form drafts (writer + editor). 300s covers that and the max of 3.
 export const maxDuration = 300;
+
+// Gemini calls (including retry backoff) must finish inside this budget, which
+// leaves headroom under maxDuration for Supabase writes and the response.
+const LLM_BUDGET_MS = (maxDuration - 30) * 1000;
+// Don't start a new lead (writer + editor) with less than this left; it stays
+// unprocessed and is picked up by the next 15-minute run.
+const MIN_LEAD_BUDGET_MS = 60_000;
 
 const TEST_LEAD: IncomingLead = {
   topic: "Treasury 10-year auction stop-out forces dealers to widen concessions",
@@ -54,6 +66,14 @@ function errorResponse(err: unknown) {
     return NextResponse.json({
       ok: true,
       reason: "llm_quota_exhausted",
+      error: err.message,
+      results: [],
+    });
+  }
+  if (isLlmUnavailableError(err)) {
+    return NextResponse.json({
+      ok: true,
+      reason: "llm_unavailable",
       error: err.message,
       results: [],
     });
@@ -192,19 +212,35 @@ async function runPipeline(request: Request) {
 
   const outcomes: LeadOutcome[] = [];
   const failures: { topic: string; error: string }[] = [];
+  const deferred: string[] = [];
   let quotaExhausted = false;
+  let unavailableFailures = 0;
 
   for (const lead of intake.leads) {
+    if (llmTimeRemainingMs() < MIN_LEAD_BUDGET_MS) {
+      deferred.push(lead.topic);
+      continue;
+    }
     try {
       outcomes.push(await runLead(lead));
     } catch (err) {
       const message = failureMessage(err);
       failures.push({ topic: lead.topic, error: message });
+      if (isLlmUnavailableError(err)) {
+        // Gemini stayed busy for this story after retries: skip it (it is not
+        // marked processed, so the next run retries it) and try the next lead.
+        unavailableFailures += 1;
+        console.warn(`[publish] skipped "${lead.topic}": ${message}`);
+        continue;
+      }
       if (isLlmQuotaError(err) || isQuotaFailure(message)) {
         quotaExhausted = true;
         break;
       }
     }
+  }
+  if (deferred.length > 0) {
+    console.warn(`[publish] time budget low; deferred ${deferred.length} lead(s) to the next run`);
   }
 
   let forcePublished = false;
@@ -237,6 +273,22 @@ async function runPipeline(request: Request) {
       });
     }
 
+    if (unavailableFailures === failures.length) {
+      // Every attempted story hit Gemini "busy" after retries. Like quota, this
+      // is an upstream outage, not a pipeline bug: report it without a 500.
+      return NextResponse.json({
+        ok: true,
+        mode: "rss",
+        reason: "llm_unavailable",
+        error: failures[0]?.error ?? "Gemini unavailable.",
+        force,
+        intake: intakeSummary,
+        failures,
+        ...(deferred.length ? { deferred } : {}),
+        results,
+      });
+    }
+
     return NextResponse.json(
       {
         ok: false,
@@ -259,13 +311,14 @@ async function runPipeline(request: Request) {
     ...(quotaExhausted ? { reason: "llm_quota_exhausted" } : {}),
     intake: intakeSummary,
     failures,
+    ...(deferred.length ? { deferred } : {}),
     results,
   });
 }
 
 export async function GET(request: Request) {
   try {
-    return await runPipeline(request);
+    return await runWithLlmDeadline(Date.now() + LLM_BUDGET_MS, () => runPipeline(request));
   } catch (err) {
     return errorResponse(err);
   }
@@ -273,7 +326,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    return await runPipeline(request);
+    return await runWithLlmDeadline(Date.now() + LLM_BUDGET_MS, () => runPipeline(request));
   } catch (err) {
     return errorResponse(err);
   }
