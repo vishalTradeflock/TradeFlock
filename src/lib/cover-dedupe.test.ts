@@ -108,15 +108,15 @@ describe("blankRepeatedCovers", () => {
 });
 
 describe("buildCoverSearchQueries", () => {
-  it("leads with the company and person from the headline, not a generic desk term", () => {
+  it("leads with the company and drops the person named in the headline", () => {
     const queries = buildCoverSearchQueries(
       "Constellation Cold Logistics Names Abhy Maharaj CEO",
       "leadership",
     );
     assert.equal(queries[0], "Constellation Cold Logistics logistics warehouse");
     assert.ok(queries.includes("Constellation Cold Logistics"));
-    assert.ok(queries.includes("Abhy Maharaj"));
-    assert.match(queries.at(-1) ?? "", /^business leader/);
+    assert.ok(!queries.some((query) => /\b(abhy|maharaj)\b/i.test(query)));
+    assert.ok(queries.some((query) => /corporate headquarters|modern office|boardroom/i.test(query)));
   });
 
   it("uses headline keywords and a topic visual for sentence-case headlines", () => {
@@ -133,9 +133,9 @@ describe("buildCoverSearchQueries", () => {
     const a = buildCoverSearchQueries("Ecopetrol Appoints Joaquín Gutiérrez Caballero as Chief Executive Officer", "leadership");
     const b = buildCoverSearchQueries("Constellation Cold Logistics Names Abhy Maharaj CEO", "leadership");
     assert.equal(a[0], "Ecopetrol oil refinery");
-    assert.ok(a.includes("Joaquín Gutiérrez Caballero"));
+    assert.ok(!a.some((query) => /joaqu[ií]n|guti[eé]rrez|caballero/i.test(query)));
     assert.notEqual(a[0], b[0]);
-    assert.ok(a.length <= 8 && new Set(a.map((q) => q.toLowerCase())).size === a.length);
+    assert.ok(new Set(a.map((q) => q.toLowerCase())).size === a.length);
   });
 });
 
@@ -229,7 +229,8 @@ describe("pickUniqueCover (Unsplash paging)", () => {
     assert.equal(picked?.query, "Constellation Cold Logistics logistics warehouse");
     assert.match(picked?.url ?? "", /^https:\/\/images\.unsplash\.com\/photo-fresh-1\?auto=format&fit=crop&w=1600&q=80/);
     assert.ok(used.has("unsplash:photo-fresh-1"));
-    assert.equal(calls.filter((url) => url.includes("search/photos")).length, 2);
+    // Page 1 of the first three queries is all taken; the fourth request is page 2.
+    assert.equal(calls.filter((url) => url.includes("search/photos")).length, 4);
     assert.equal(calls.filter((url) => url.includes("/download")).length, 1);
   });
 

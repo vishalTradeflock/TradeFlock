@@ -8,8 +8,10 @@ import {
   buildCoverSearchQueries,
   coverPhotoKey,
   planCoverReassignments,
+  planNameQueryRedos,
   type CoverReassignment,
   type CoverRow,
+  type CoverSearchContext,
 } from "./cover-dedupe.ts";
 import { pickUniqueCover, UnsplashRateLimitError } from "./cover-picker.ts";
 
@@ -46,7 +48,9 @@ export async function loadBackfillRows(client: BackfillClient): Promise<Backfill
   const rows: BackfillRow[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await articles(client)
-      .select("id, title, slug, status, cover_image_url, featured_image, published_at, created_at, category:categories(slug)")
+      .select(
+        "id, title, slug, status, cover_image_url, featured_image, published_at, created_at, excerpt, company, category:categories(slug)",
+      )
       .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw new Error(`Could not load articles: ${error.message}`);
@@ -85,6 +89,8 @@ export type BackfillReport = {
   distinctPublishedCovers: number;
   duplicateGroups: number;
   legacyStockRows: number;
+  /** Profiles whose cover is still a photo assigned by a person-name search. */
+  nameQueryRedos: number;
   toChange: number;
   processed: number;
   applied: number;
@@ -99,6 +105,13 @@ export async function runCoverBackfill(
     apply: boolean;
     limit?: number;
     unsplashAccessKey?: string | null;
+    /**
+     * Re-pick the hardcoded person-name covers before duplicates.
+     * Defaults to on when `apply` is set, so a write pass always clears them once.
+     */
+    redoNameQueries?: boolean;
+    /** Defaults to NAME_QUERY_REDO_SLUGS. A slug is skipped once its cover is no longer one of those photos. */
+    redoSlugs?: readonly string[];
     /** Published rows only are deduped; every row still counts as "used". */
     rows?: BackfillRow[];
     log?: (line: string) => void;
@@ -107,7 +120,13 @@ export async function runCoverBackfill(
   const log = options.log ?? (() => {});
   const rows = options.rows ?? (await loadBackfillRows(client));
   const published = rows.filter((row) => (row.status ?? "published") === "published");
-  const plan = planCoverReassignments(published);
+  const redoNameQueries = options.redoNameQueries ?? options.apply;
+  const redos = redoNameQueries ? planNameQueryRedos(rows, options.redoSlugs) : [];
+  const redoIds = new Set(redos.map((item) => item.row.id));
+  const plan = [
+    ...redos,
+    ...planCoverReassignments(published).filter((item) => !redoIds.has(item.row.id)),
+  ];
 
   const groups = new Map<string, BackfillRow[]>();
   for (const row of published) {
@@ -142,6 +161,7 @@ export async function runCoverBackfill(
     distinctPublishedCovers: groups.size,
     duplicateGroups: [...groups.values()].filter((group) => group.length > 1).length,
     legacyStockRows: plan.filter((item) => item.reason === "legacy_stock").length,
+    nameQueryRedos: redos.length,
     toChange: plan.length,
     processed: 0,
     applied: 0,
@@ -157,7 +177,13 @@ export async function runCoverBackfill(
 
   for (const item of plan.slice(0, limit)) {
     const row = item.row as BackfillRow;
-    const queries = buildCoverSearchQueries(row.title, row.category?.slug);
+    const context: CoverSearchContext = {
+      slug: row.slug,
+      personName: row.personName,
+      company: row.company,
+      excerpt: row.excerpt,
+    };
+    const queries = buildCoverSearchQueries(row.title, row.category?.slug, context);
     const change: BackfillChange = {
       id: row.id,
       slug: row.slug,
@@ -179,6 +205,10 @@ export async function runCoverBackfill(
         const picked = await pickUniqueCover({
           title: row.title,
           categorySlug: row.category?.slug,
+          slug: row.slug,
+          personName: row.personName,
+          company: row.company,
+          excerpt: row.excerpt,
           used,
           accessKey,
           queries,

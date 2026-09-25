@@ -7,22 +7,40 @@ import {
   buildCoverSearchQueries,
   coverPhotoKey,
   isCoverKeyTaken,
+  isProfileCoverStory,
+  MAX_COVER_SEARCHES_PER_STORY,
   pickFirstUnusedCover,
+  planCoverSearchAttempts,
+  type CoverSearchContext,
 } from "./cover-dedupe.ts";
 
 const UNSPLASH_TIMEOUT_MS = 6_000;
 const UNSPLASH_PER_PAGE = 30;
 const USED_PAGE_SIZE = 1000;
 
+/**
+ * Unsplash search has no "exclude portraits" parameter. For profile stories
+ * we drop candidates whose alt text or description is a headshot so a
+ * stranger's face is not used as the subject's photo.
+ */
+const PORTRAIT_TEXT =
+  /\b(portrait|headshot|head shot|selfie|mugshot)\b|\b(close-?up|closeup)\b.{0,40}\b(face|man|woman|person|guy|girl)\b|\b(man|woman|person|guy|girl|businessman|businesswoman)'?s? face\b|\bface of (a |the )?(young |old )?(man|woman|person|guy|girl|businessman|businesswoman)\b/i;
+
 export type UnsplashCandidate = {
   key: string;
   url: string;
   alt: string;
+  /** Alt text plus description, used to drop portraits. */
+  caption: string;
   thumb: string;
   photographer: string;
   photographerUrl: string;
   downloadLocation: string | null;
 };
+
+export function isPortraitCaption(text: string | null | undefined) {
+  return Boolean(text && PORTRAIT_TEXT.test(text));
+}
 
 export type PickedCover = {
   url: string;
@@ -98,13 +116,15 @@ function unsplashCoverUrl(raw: string) {
   }
 }
 
+type UnsplashPage = { candidates: UnsplashCandidate[]; rawCount: number };
+
 /** One page of Unsplash search results (landscape, no Unsplash+ premium photos). */
-export async function searchUnsplash(
+export async function searchUnsplashPage(
   query: string,
   page: number,
   accessKey: string,
   perPage = UNSPLASH_PER_PAGE,
-): Promise<UnsplashCandidate[]> {
+): Promise<UnsplashPage> {
   const url =
     `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}` +
     `&page=${page}&per_page=${perPage}&orientation=landscape&content_filter=high`;
@@ -123,6 +143,7 @@ export async function searchUnsplash(
     results?: Array<{
       id: string;
       alt_description: string | null;
+      description: string | null;
       premium?: boolean;
       sponsorship?: unknown;
       urls: { raw?: string; regular?: string; small?: string };
@@ -131,18 +152,21 @@ export async function searchUnsplash(
     }>;
   };
 
-  return (payload.results ?? []).flatMap((photo) => {
+  const raw = payload.results ?? [];
+  const candidates = raw.flatMap((photo) => {
     if (photo.premium || photo.sponsorship) return [];
-    const raw = photo.urls.raw || photo.urls.regular;
-    if (!raw || !/^https:\/\/images\.unsplash\.com\//.test(raw)) return [];
-    const coverUrl = unsplashCoverUrl(raw);
+    const rawUrl = photo.urls.raw || photo.urls.regular;
+    if (!rawUrl || !/^https:\/\/images\.unsplash\.com\//.test(rawUrl)) return [];
+    const coverUrl = unsplashCoverUrl(rawUrl);
     const key = coverPhotoKey(coverUrl);
     if (!key) return [];
+    const caption = [photo.alt_description, photo.description].filter(Boolean).join(" ");
     return [
       {
         key,
         url: coverUrl,
         alt: photo.alt_description ?? `Photo by ${photo.user.name} on Unsplash`,
+        caption,
         thumb: photo.urls.small || coverUrl,
         photographer: photo.user.name,
         photographerUrl: photo.user.links.html,
@@ -150,6 +174,18 @@ export async function searchUnsplash(
       },
     ];
   });
+  return { candidates, rawCount: raw.length };
+}
+
+/** One page of Unsplash search results (landscape, no Unsplash+ premium photos). */
+export async function searchUnsplash(
+  query: string,
+  page: number,
+  accessKey: string,
+  perPage = UNSPLASH_PER_PAGE,
+): Promise<UnsplashCandidate[]> {
+  const result = await searchUnsplashPage(query, page, accessKey, perPage);
+  return result.candidates;
 }
 
 /** Unsplash API guideline: ping download_location when a photo is used. Best effort. */
@@ -170,6 +206,9 @@ async function trackUnsplashDownload(location: string | null, accessKey: string)
  * Pick a cover no other story uses.
  * 1. Preferred URLs (RSS enclosure, og:image, editor's body image) if unused.
  * 2. Unsplash search with story-specific queries, paging past used photos.
+ *    At most {@link MAX_COVER_SEARCHES_PER_STORY} requests: page 1 of the
+ *    first three queries, then the next page of an earlier query, then one
+ *    generic non-person query. Profile stories skip portrait hits.
  * Returns null when nothing unused was found — callers store "" and the site
  * renders the neutral branded card (never a shared stock photo). Throws
  * UnsplashRateLimitError, or the last error if every search failed.
@@ -178,11 +217,19 @@ async function trackUnsplashDownload(location: string | null, accessKey: string)
 export async function pickUniqueCover(input: {
   title: string;
   categorySlug?: string | null;
+  slug?: string | null;
+  personName?: string | null;
+  company?: string | null;
+  excerpt?: string | null;
+  body?: string | null;
   preferred?: readonly (string | null | undefined)[];
   used: Set<string>;
   accessKey?: string | null;
-  maxPagesPerQuery?: number;
   queries?: readonly string[];
+  /** Override the per-story Unsplash request cap (default 5). */
+  maxSearches?: number;
+  /** Drop headshot results. Defaults on for Success Insights / name-only titles. */
+  avoidPortraits?: boolean;
   /** Ping Unsplash's download endpoint for the chosen photo (off for dry runs). */
   trackDownload?: boolean;
 }): Promise<PickedCover | null> {
@@ -195,28 +242,40 @@ export async function pickUniqueCover(input: {
   const accessKey = input.accessKey?.trim();
   if (!accessKey) return null;
 
-  const queries = input.queries ?? buildCoverSearchQueries(input.title, input.categorySlug);
-  const maxPages = Math.max(1, input.maxPagesPerQuery ?? 3);
+  const context: CoverSearchContext = {
+    slug: input.slug,
+    personName: input.personName,
+    company: input.company,
+    excerpt: input.excerpt,
+    body: input.body,
+  };
+  const queries = input.queries ?? buildCoverSearchQueries(input.title, input.categorySlug, context);
+  const avoidPortraits = input.avoidPortraits ?? isProfileCoverStory(input.title, input.categorySlug, context);
+  const attempts = planCoverSearchAttempts(queries, input.maxSearches ?? MAX_COVER_SEARCHES_PER_STORY);
+  const pageWasFull = new Map<string, boolean>();
   let searched = 0;
   let lastError: unknown = null;
-  for (const query of queries) {
-    for (let page = 1; page <= maxPages; page += 1) {
-      let results: UnsplashCandidate[];
-      try {
-        results = await searchUnsplash(query, page, accessKey);
-        searched += 1;
-      } catch (err) {
-        if (err instanceof UnsplashRateLimitError) throw err;
-        lastError = err;
-        break; // try the next query
-      }
-      const hit = results.find((candidate) => !isCoverKeyTaken(candidate.key, input.used));
-      if (hit) {
-        input.used.add(hit.key);
-        if (input.trackDownload !== false) await trackUnsplashDownload(hit.downloadLocation, accessKey);
-        return { url: hit.url, key: hit.key, source: "unsplash", query, alt: hit.alt };
-      }
-      if (results.length < UNSPLASH_PER_PAGE) break; // no more pages for this query
+  for (const attempt of attempts) {
+    const previousKey = `${attempt.query}\0${attempt.page - 1}`;
+    if (attempt.page > 1 && pageWasFull.get(previousKey) === false) continue;
+    let page: UnsplashPage;
+    try {
+      page = await searchUnsplashPage(attempt.query, attempt.page, accessKey);
+      searched += 1;
+    } catch (err) {
+      if (err instanceof UnsplashRateLimitError) throw err;
+      lastError = err;
+      continue;
+    }
+    pageWasFull.set(`${attempt.query}\0${attempt.page}`, page.rawCount >= UNSPLASH_PER_PAGE);
+    const pool = avoidPortraits
+      ? page.candidates.filter((candidate) => !isPortraitCaption(candidate.caption))
+      : page.candidates;
+    const hit = pool.find((candidate) => !isCoverKeyTaken(candidate.key, input.used));
+    if (hit) {
+      input.used.add(hit.key);
+      if (input.trackDownload !== false) await trackUnsplashDownload(hit.downloadLocation, accessKey);
+      return { url: hit.url, key: hit.key, source: "unsplash", query: attempt.query, alt: hit.alt };
     }
   }
   // Every search failed: that's an outage, not "no unused photo exists".

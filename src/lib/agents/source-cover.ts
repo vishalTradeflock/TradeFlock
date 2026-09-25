@@ -74,7 +74,7 @@ export async function fetchOgImageUrl(pageUrl: string): Promise<string | null> {
 /**
  * Cover for a newly published wire story, unique across all stories:
  * RSS/enclosure → og:image from the source page → Unsplash search with
- * story-specific terms (company / person / topic), skipping any photo another
+ * story-specific terms (company / topic — never a person's name), skipping any photo another
  * story already uses. Returns "" when nothing unused was found; the site then
  * renders the neutral branded card instead of a shared stock photo.
  */

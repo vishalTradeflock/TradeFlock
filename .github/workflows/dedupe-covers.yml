@@ -1,9 +1,14 @@
 name: Cover Backfill (one image per story)
 
-# Manual only. Calls the Vercel route, which already has the Supabase
-# service-role and Unsplash env; this workflow only needs the existing
-# CRON_SECRET repo secret. Dry run unless "apply" is ticked.
+# Manual dispatch, plus an hourly run at :23 UTC. The route already has the
+# Supabase service-role and Unsplash env; this workflow only needs the existing
+# CRON_SECRET repo secret. Dispatch is a dry run unless "apply" is ticked.
+# Scheduled runs apply, 25 stories, one round. Inputs are empty on schedule,
+# so those defaults live in the env expressions. A rate-limit stoppedReason
+# exits 0. When remaining is 0 the scheduled run is a single cheap no-op call.
 on:
+  schedule:
+    - cron: "23 * * * *"
   workflow_dispatch:
     inputs:
       apply:
@@ -25,20 +30,24 @@ jobs:
       - name: Run cover backfill
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          APPLY: ${{ inputs.apply && '1' || '0' }}
-          LIMIT: ${{ inputs.limit }}
-          ROUNDS: ${{ inputs.rounds }}
+          APPLY: ${{ github.event_name == 'schedule' && '1' || (inputs.apply && '1' || '0') }}
+          LIMIT: ${{ github.event_name == 'schedule' && '25' || inputs.limit }}
+          ROUNDS: ${{ github.event_name == 'schedule' && '1' || inputs.rounds }}
         run: |
           for round in $(seq 1 "$ROUNDS"); do
             response=$(curl -s -w "\n%{http_code}" -m 310 \
-              "https://tradeflock-usa-nine.vercel.app/api/cron/dedupe-covers?apply=${APPLY}&limit=${LIMIT}" \
+              "https://tradeflock-usa-nine.vercel.app/api/cron/dedupe-covers?apply=${APPLY}&limit=${LIMIT}&redoNameQueries=${APPLY}" \
               -H "Authorization: Bearer ${CRON_SECRET}")
             body=$(echo "$response" | sed '$d')
             status=$(echo "$response" | tail -n 1)
             echo "Round $round — HTTP $status"
             echo "$body"
+            stopped=$(echo "$body" | jq -r '.stoppedReason // empty' 2>/dev/null || true)
+            if echo "$stopped" | grep -qi "rate limit"; then
+              echo "Unsplash rate limit — exiting 0 so the next scheduled run can continue."
+              exit 0
+            fi
             if [ "$status" -ne 200 ]; then exit 1; fi
             remaining=$(echo "$body" | jq -r '.remaining // 0')
-            stopped=$(echo "$body" | jq -r '.stoppedReason // empty')
             if [ "$APPLY" != "1" ] || [ "$remaining" = "0" ] || [ -n "$stopped" ]; then break; fi
           done

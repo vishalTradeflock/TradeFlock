@@ -20,6 +20,7 @@ export async function studioCoverFor(
     title: string;
     body: string;
     categoryId: string;
+    slug?: string | null;
     currentCover?: string | null;
     publishing: boolean;
   },
@@ -36,6 +37,8 @@ export async function studioCoverFor(
     const picked = await pickUniqueCover({
       title: input.title,
       categorySlug: category.data?.slug ?? null,
+      slug: input.slug,
+      body: input.body,
       preferred,
       used,
       accessKey: process.env.UNSPLASH_ACCESS_KEY ?? null,

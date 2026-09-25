@@ -277,6 +277,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         articleId: existing.id,
         title,
         body,
+        slug: nextSlug,
         categoryId: input.categoryId,
         currentCover: existing.cover_image_url,
         publishing: nextStatus === "published",
@@ -384,6 +385,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     const cover_image_url = await studioCoverFor(admin, {
       title,
       body,
+      slug,
       categoryId: input.categoryId,
       publishing: nextStatus === "published",
     });
