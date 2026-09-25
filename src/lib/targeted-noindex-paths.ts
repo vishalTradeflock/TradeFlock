@@ -1,5 +1,6 @@
 /**
- * Generated from Index status.pdf (9 pages). Do not edit by hand.
+ * Exact public pathnames that must send noindex,follow.
+ * Started from Index status.pdf (9 pages); later editorial additions are appended.
  * Unique pathnames after protocol/host/slash/query/fragment normalization.
  */
 export const TARGETED_NOINDEX_PATHS = [
@@ -113,4 +114,8 @@ export const TARGETED_NOINDEX_PATHS = [
   "/nanthini-sathasivam-most-inspiring-global-hr-leaders-2025",
   "/ilham-mouhriz-most-inspiring-global-hr-leaders-2025",
   "/anam-irfan-ai-in-hr-from-buzzword-to-business-backbone",
+  "/samyuktha-kilaru-samy-most-empowering-women-leaders-to-watch-in-2026",
+  "/anne-marie-charest-most-empowering-women-leaders-to-watch-in-2026",
+  "/crystal-e-rizzuto-most-empowering-women-leaders-to-watch-in-2026",
+  "/gita-poudel-most-empowering-women-leaders-to-watch-in-2026",
 ] as const;

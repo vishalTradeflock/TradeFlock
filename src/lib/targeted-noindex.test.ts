@@ -19,7 +19,7 @@ const SAMPLE_TARGETED = TARGETED_NOINDEX_PATHS.slice(0, 5);
 
 describe("targeted noindex from Index status.pdf", () => {
   it("stores unique pathnames only", () => {
-    assert.equal(TARGETED_NOINDEX_PATHS.length, 110);
+    assert.equal(TARGETED_NOINDEX_PATHS.length, 114);
     assert.equal(new Set(TARGETED_NOINDEX_PATHS).size, TARGETED_NOINDEX_PATHS.length);
   });
 
@@ -61,6 +61,22 @@ describe("targeted noindex from Index status.pdf", () => {
     assert.equal(shouldNoindexPath("/tech"), false);
     assert.equal(shouldNoindexPath("/2026"), false);
     assert.equal(shouldNoindexPath("/magazine"), false);
+  });
+
+  it("noindexes the four Empowering Women Leaders profiles", () => {
+    const paths = [
+      "/samyuktha-kilaru-samy-most-empowering-women-leaders-to-watch-in-2026",
+      "/anne-marie-charest-most-empowering-women-leaders-to-watch-in-2026",
+      "/crystal-e-rizzuto-most-empowering-women-leaders-to-watch-in-2026",
+      "/gita-poudel-most-empowering-women-leaders-to-watch-in-2026",
+    ];
+    for (const path of paths) {
+      assert.equal(shouldNoindexPath(`https://www.tradeflock.net${path}`), true, path);
+      assert.deepEqual(targetedNoindexMetadata(path).robots, {
+        index: false,
+        follow: true,
+      });
+    }
   });
 
   it("leaves the homepage and unrelated public pages indexable", () => {
