@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 300;
 
-const DEFAULT_LIMIT = 25;
+const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 100;
 
 function isAuthorized(request: Request) {
@@ -18,8 +18,14 @@ function isAuthorized(request: Request) {
 
 /**
  * Cover backfill, run where the service-role env already lives (Vercel).
- * Dry run unless `?apply=1`. Processes up to `limit` stories per call; call
- * again until `toChange` reaches 0. Triggered by .github/workflows/dedupe-covers.yml.
+ * Dry run unless `?apply=1`. `redoNameQueries=1` re-picks profiles whose cover
+ * was chosen by searching Unsplash for a person's name (also on whenever apply
+ * is set). Processes up to `limit` stories per call (default 100). A source
+ * photo is tried before Unsplash and does not use the Unsplash quota; after a
+ * rate limit the run keeps taking source photos until the limit or the ~270s
+ * budget. Call again until `toChange` reaches 0. A rate limit sets
+ * `stoppedReason` and returns 200. Finished rows are skipped automatically.
+ * Triggered by .github/workflows/dedupe-covers.yml.
  */
 export async function GET(request: Request) {
   if (!isAuthorized(request)) {
@@ -27,12 +33,15 @@ export async function GET(request: Request) {
   }
   const params = new URL(request.url).searchParams;
   const apply = params.get("apply") === "1" || params.get("apply") === "true";
+  const redoNameQueries =
+    apply || params.get("redoNameQueries") === "1" || params.get("redoNameQueries") === "true";
   const limit = Math.min(Math.max(Number(params.get("limit")) || DEFAULT_LIMIT, 1), MAX_LIMIT);
 
   try {
     const report = await runCoverBackfill(createAdminClient(), {
       apply,
       limit,
+      redoNameQueries,
       unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY ?? null,
     });
     if (report.applied > 0) {
@@ -50,6 +59,7 @@ export async function GET(request: Request) {
         reason: change.reason,
         oldKey: change.oldKey,
         newCover: change.newCover,
+        sourceUrl: change.sourceUrl,
         query: change.query,
         applied: change.applied,
         error: change.error,

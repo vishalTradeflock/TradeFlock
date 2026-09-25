@@ -5,6 +5,7 @@ import {
   sanitizeCoverUrl,
 } from "@/lib/images";
 import { pickUniqueCover, type PickedCover } from "@/lib/cover-picker";
+import { isUnusableSourceImageUrl, shouldTrySourcePhoto } from "@/lib/source-photo";
 
 const OG_TIMEOUT_MS = 4_000;
 const SKIP_OG_HOSTS = /(^|\.)sec\.gov$/i;
@@ -65,7 +66,8 @@ export async function fetchOgImageUrl(pageUrl: string): Promise<string | null> {
     if (!response.ok) return null;
     const html = await response.text();
     const fromMeta = ogImageFromHtml(html, pageUrl);
-    return fromMeta && isHttpsCoverUrl(fromMeta) ? fromMeta : null;
+    if (!fromMeta || !isHttpsCoverUrl(fromMeta) || isUnusableSourceImageUrl(fromMeta)) return null;
+    return fromMeta;
   } catch {
     return null;
   }
@@ -74,8 +76,10 @@ export async function fetchOgImageUrl(pageUrl: string): Promise<string | null> {
 /**
  * Cover for a newly published wire story, unique across all stories:
  * RSS/enclosure → og:image from the source page → Unsplash search with
- * story-specific terms (company / person / topic), skipping any photo another
- * story already uses. Returns "" when nothing unused was found; the site then
+ * story-specific terms (company / topic — never a person's name), skipping any photo another
+ * story already uses. Logos, site defaults, and legacy stock are rejected.
+ * Success Insights profiles skip the source photo and stay on the topic search.
+ * Returns "" when nothing unused was found; the site then
  * renders the neutral branded card instead of a shared stock photo.
  */
 export async function resolveUniquePublishCover(input: {
@@ -101,7 +105,10 @@ export async function resolveUniquePublishCover(input: {
   });
   if (first) return { url: first.url, picked: first };
 
-  const og = input.sourceUrl ? await fetchOgImageUrl(input.sourceUrl) : null;
+  const og =
+    input.sourceUrl && shouldTrySourcePhoto({ title: input.title, categorySlug: input.categorySlug })
+      ? await fetchOgImageUrl(input.sourceUrl)
+      : null;
   let picked: PickedCover | null = null;
   try {
     picked = await pickUniqueCover({

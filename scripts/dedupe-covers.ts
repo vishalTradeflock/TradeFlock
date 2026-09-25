@@ -12,6 +12,14 @@
  *   node --experimental-strip-types scripts/dedupe-covers.ts                 # dry run
  *   node --experimental-strip-types scripts/dedupe-covers.ts --json out.json # dry run + report
  *   node --experimental-strip-types scripts/dedupe-covers.ts --apply --limit 50
+ *   node --experimental-strip-types scripts/dedupe-covers.ts --redo-slugs
+ *   node --experimental-strip-types scripts/dedupe-covers.ts --apply --redo-slugs slug-a,slug-b
+ *
+ * --apply also re-picks the hardcoded Success Insights covers that were chosen
+ * by searching Unsplash for a person's name, before remaining duplicates.
+ * --redo-slugs turns that on for a dry run; an optional comma-separated list
+ * replaces the hardcoded slug set. Each slug is redone only while its current
+ * photo is still one of the ids from that earlier run.
  *
  * Env (also reads .env.local if present):
  *   NEXT_PUBLIC_SUPABASE_URL
@@ -21,12 +29,16 @@
  *   UNSPLASH_ACCESS_KEY         required for --apply; optional in dry run (then the
  *                               report lists search queries instead of picked photos)
  *
- * Unsplash demo keys allow 50 requests/hour. The script stops cleanly on the
- * rate limit; rerun it later — already-fixed stories drop out of the plan.
+ * Each row tries the source article's photo first (og:image, then a large
+ * image). That lookup does not use the Unsplash quota. Unsplash demo keys
+ * allow 50 requests/hour. On a rate limit the script keeps taking source
+ * photos until the story limit or the ~270s budget, then stops cleanly.
+ * Rerun it later — already-fixed stories drop out of the plan.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runCoverBackfill } from "../src/lib/cover-backfill.ts";
+import { NAME_QUERY_REDO_SLUGS } from "../src/lib/cover-dedupe.ts";
 
 function loadEnvLocal() {
   const envPath = resolve(process.cwd(), ".env.local");
@@ -54,10 +66,19 @@ function argValue(argv: string[], name: string): string | undefined {
   return argv[index + 1];
 }
 
+function redoSlugArg(argv: string[]): { enabled: boolean; slugs?: string[] } {
+  const index = argv.indexOf("--redo-slugs");
+  if (index === -1) return { enabled: false };
+  const next = argv[index + 1];
+  if (next === undefined || next.startsWith("--")) return { enabled: true };
+  const slugs = next.split(",").map((slug) => slug.trim()).filter(Boolean);
+  return { enabled: true, slugs: slugs.length ? slugs : undefined };
+}
+
 function printUsage(message?: string) {
   if (message) console.error(message);
   console.error(
-    "Usage: node --experimental-strip-types scripts/dedupe-covers.ts [--dry-run] [--apply] [--limit N] [--json path]",
+    "Usage: node --experimental-strip-types scripts/dedupe-covers.ts [--dry-run] [--apply] [--limit N] [--redo-slugs [slug,slug]] [--json path]",
   );
 }
 
@@ -73,6 +94,8 @@ async function main() {
   const limitArg = argValue(argv, "--limit");
   const limit = limitArg ? Number.parseInt(limitArg, 10) : undefined;
   const jsonPath = argValue(argv, "--json");
+  const redo = redoSlugArg(argv);
+  const redoNameQueries = apply || redo.enabled;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
@@ -104,13 +127,16 @@ async function main() {
 
   console.log(
     `${apply ? "APPLY" : "DRY RUN"} — ${serviceRoleKey ? "all rows" : "published rows only (read-only key)"}` +
-      `${unsplashAccessKey ? "" : " — no UNSPLASH_ACCESS_KEY: listing search queries, not picking photos"}`,
+      `${unsplashAccessKey ? "" : " — no UNSPLASH_ACCESS_KEY: listing search queries, not picking photos"}` +
+      `${redoNameQueries ? ` — name-query redo (${redo.slugs?.length ?? NAME_QUERY_REDO_SLUGS.length} slugs)` : ""}`,
   );
 
   const report = await runCoverBackfill(client, {
     apply,
     limit,
     unsplashAccessKey,
+    redoNameQueries,
+    redoSlugs: redo.slugs,
     log: (line) => console.log(line),
   });
 
@@ -120,6 +146,8 @@ async function main() {
   console.log(`  distinct published covers:   ${report.distinctPublishedCovers}`);
   console.log(`  duplicate cover groups:      ${report.duplicateGroups}`);
   console.log(`  legacy stock-photo rows:     ${report.legacyStockRows}`);
+  console.log(`  person-name covers to redo:  ${report.nameQueryRedos}`);
+  console.log(`  covers taken from source:    ${report.sourcePhotos}`);
   console.log(`  stories needing a new cover: ${report.toChange}`);
   console.log(`  processed this run:          ${report.processed}`);
   console.log(`  written:                     ${report.applied}`);

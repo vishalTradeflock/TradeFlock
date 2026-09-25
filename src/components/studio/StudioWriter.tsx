@@ -438,10 +438,10 @@ export default function StudioWriter({
 
   useEffect(() => {
     if (unsplashOpen && unsplashPhotos.length === 0) {
-      // Story-specific default (company / person / topic) instead of one shared generic term.
+      // Story-specific default (company / topic — never a person's name).
       const suggested =
         unsplashQuery.trim() ||
-        buildCoverSearchQueries(title, categories.find((c) => c.id === categoryId)?.slug)[0] ||
+        buildCoverSearchQueries(title, categories.find((c) => c.id === categoryId)?.slug, { slug })[0] ||
         "business";
       setUnsplashQuery(suggested);
       void searchUnsplash(undefined, suggested);
