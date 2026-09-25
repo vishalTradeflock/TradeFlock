@@ -140,7 +140,7 @@ function toRawSource(candidate: Candidate): string {
   lines.push(
     "",
     "Write a conventional news article, not a market brief. Quote or tightly paraphrase only the facts above.",
-    "Put an HTML <a href> to the URL line in the body. Use the Published timestamp — do not invent Monday/today urgency.",
+    "Name and link the source publication in a body sentence with an HTML <a href> to the URL line. Use the Published timestamp and its real weekday. Do not invent Monday or today urgency.",
     "Do not invent quotes, figures, analysts, or allocator speculation. Do not reprint the source article.",
   );
   return lines.join("\n");

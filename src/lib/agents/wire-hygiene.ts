@@ -317,22 +317,28 @@ export function wireHygieneFailures(
   return failures;
 }
 
-export function writerLeadInstructions(lead: {
-  topic: string;
-  category: string;
-  rawSource: string;
-  sourceUrl?: string;
-}): string {
+export function writerLeadInstructions(
+  lead: {
+    topic: string;
+    category: string;
+    rawSource: string;
+    sourceUrl?: string;
+  },
+  guidance = "",
+): string {
   const notes = parseLeadNotes(lead.rawSource);
   const url = lead.sourceUrl ?? notes.sourceUrl ?? "";
   const published = notes.publishedAt ?? "unknown";
-  return `Write a 600-to-800-word TradeFlock USA reported-news article (not a market brief, not a digest) with real <h3> section heads. Under ~550 words, or only 2–3 skinny sections, is a hard fail and will be held. If these notes cannot support that length with attributed facts, do not stub or pad — the desk will HOLD the lead.
+  const extra = guidance.trim() ? `\n${guidance.trim()}\n` : "";
+  return `Write a 600-to-800-word TradeFlock USA reported-news article (not a market brief, not a digest) with story-specific <h3> section heads. Never use the template headings Strategic Context, Industry & Analyst Perspectives, Financial & Macro Implications, or Forward Outlook. Under ~550 words, or only 2 to 3 skinny sections, is a hard fail and will be held. If these notes cannot support that length with attributed facts, do not stub or pad. The desk will HOLD the lead.
+
+Headline: Title Case, at most 60 characters. No em dashes.
 
 Topic: ${lead.topic}
 Assigned category: ${lead.category}
-Primary source URL (must appear as an HTML <a href> in the body): ${url || "(missing — do not invent a URL)"}
-Source published timestamp (use this date; do not write Monday/today unless it matches): ${published}
-
+Primary source URL (must appear as an HTML <a href> in the body, and the publication name must appear in that sentence): ${url || "(missing; do not invent a URL)"}
+Source published timestamp (use this date and its real weekday; do not write Monday/today unless it matches): ${published}
+${extra}
 Source notes:
 ${lead.rawSource}`;
 }
