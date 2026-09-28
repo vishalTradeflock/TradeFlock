@@ -102,7 +102,9 @@ export default function SafeArticleImage({
         alt={alt}
         loading={priority ? "eager" : loading ?? "lazy"}
         className={cn(
-          fill ? "absolute inset-0 h-full w-full object-cover" : "object-cover",
+          fill
+            ? "absolute inset-0 h-full w-full object-cover"
+            : "h-full w-full object-cover",
           className,
         )}
         onError={handleError}

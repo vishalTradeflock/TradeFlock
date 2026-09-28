@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import SafeArticleImage from "@/components/SafeArticleImage";
+import { RELATED_CARD } from "@/lib/image-optimization";
 import { articleCoverSrc } from "@/lib/images";
 import type { ArticleWithRelations } from "@/lib/types";
 import { articlePath } from "@/lib/types";
@@ -91,17 +92,17 @@ export function RelatedArticles({
             <Link
               key={article.id}
               href={articlePath(article.slug)}
-              className="group w-[280px] max-w-[340px] min-w-[280px] flex-shrink-0 snap-start sm:w-[340px] sm:min-w-[340px]"
+              className="group w-[min(17.5rem,calc(100vw-2rem))] shrink-0 snap-start sm:w-[min(21.25rem,calc(100vw-3rem))]"
             >
               <div className="relative aspect-[16/9] overflow-hidden rounded-lg border border-neutral-200/50">
                 <SafeArticleImage
                   src={imageUrl}
                   alt={article.cover_image_alt}
-                  fill
-                  sizes="340px"
+                  width={RELATED_CARD.width}
+                  height={RELATED_CARD.height}
                   loading="lazy"
                   label={article.category.name}
-                  className="rounded-lg object-cover"
+                  className="h-full w-full rounded-lg object-cover"
                 />
               </div>
               <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-[#c41e3a]">
