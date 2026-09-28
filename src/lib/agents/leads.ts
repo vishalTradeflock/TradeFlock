@@ -1,6 +1,11 @@
 import { pickBalancedLeads } from "@/lib/agents/desk-balance";
 import { resolveNewsFeeds, type NewsFeed } from "@/lib/agents/feeds";
-import { isUsableLeadItem, titlesAreNearDuplicate } from "@/lib/agents/lead-filters";
+import {
+  isUsableLeadItem,
+  titlesAreNearDuplicate,
+  TOPIC_DEDUPE_WINDOW_MS,
+  topicsShareEntities,
+} from "@/lib/agents/lead-filters";
 import type { NewsLead } from "@/lib/agents/pipeline";
 import { resolveWriterDesk, type WriterDesk } from "@/lib/agents/prompts";
 import { parseFeedItems } from "@/lib/agents/rss";
@@ -9,8 +14,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 const FEED_TIMEOUT_MS = 12_000;
 const SUMMARY_LIMIT = 700;
 const DEFAULT_DEDUPE_DAYS = 7;
-const DEFAULT_BATCH_SIZE = 2;
-const MAX_BATCH_SIZE = 3;
+const DEFAULT_BATCH_SIZE = 3;
+const MAX_BATCH_SIZE = 4;
 const FEED_USER_AGENT = "TradeFlock USA newsroom@tradeflock-usa-nine.vercel.app";
 
 const MA_RE =
@@ -53,12 +58,20 @@ type Candidate = {
   titleKey: string;
   normalizedUrl: string;
   imageUrl: string | null;
+  /** A second English item on the same story, used only if this page is thin. */
+  supplementUrl?: string;
+};
+
+type RecentTopic = {
+  title: string;
+  at: number;
 };
 
 type TakenKeys = {
   titleKeys: Set<string>;
   urls: Set<string>;
   slugs: string[];
+  recentTopics: RecentTopic[];
 };
 
 function envInt(name: string, fallback: number): number {
@@ -73,13 +86,14 @@ export function leadBatchSize(): number {
   return Math.min(MAX_BATCH_SIZE, Math.max(1, size));
 }
 
-const DEFAULT_SOURCE_POOL = 12;
-const MAX_SOURCE_POOL = 18;
+const DEFAULT_SOURCE_POOL = 28;
+const MAX_SOURCE_POOL = 40;
 
 /**
- * Fresh RSS items to consider per run. Pages that are too thin or blocked
+ * Fresh RSS items to consider per run. Non-English, thin, and blocked pages
  * do not count toward `leadBatchSize()`, so the pool is larger than the
- * number of stories the desk will actually write.
+ * number of stories the desk will actually write. The 300s cron budget still
+ * defers a lead that would start with under a minute left.
  */
 export function leadSourcePoolSize(): number {
   const size = envInt("NEWS_LEAD_SOURCE_POOL", Math.max(DEFAULT_SOURCE_POOL, leadBatchSize() * 6));
@@ -168,6 +182,7 @@ function toIncomingLead(candidate: Candidate): IncomingLead {
     sourceUrl: candidate.link,
     titleKey: candidate.titleKey,
     imageUrl: candidate.imageUrl ?? undefined,
+    supplementUrl: candidate.supplementUrl,
   };
 }
 
@@ -207,7 +222,7 @@ async function fetchFeedXml(feed: NewsFeed): Promise<string> {
 
 function candidatesFromFeed(feed: NewsFeed, xml: string): Candidate[] {
   return parseFeedItems(xml).flatMap((item) => {
-    if (!isUsableLeadItem(item.title, item.link)) return [];
+    if (!isUsableLeadItem(item.title, item.link, item.summary)) return [];
     const titleKey = normalizeTitleKey(item.title);
     if (!titleKey) return [];
     return [
@@ -231,6 +246,7 @@ async function loadTakenKeys(sinceIso: string): Promise<TakenKeys> {
   const titleKeys = new Set<string>();
   const urls = new Set<string>();
   const slugs: string[] = [];
+  const recentTopics: RecentTopic[] = [];
 
   const articles = await admin
     .from("articles")
@@ -246,6 +262,8 @@ async function loadTakenKeys(sinceIso: string): Promise<TakenKeys> {
   for (const row of articles.data ?? []) {
     titleKeys.add(normalizeTitleKey(row.title));
     slugs.push(row.slug);
+    const at = Date.parse(row.created_at);
+    if (row.title && Number.isFinite(at)) recentTopics.push({ title: row.title, at });
     const haystack = `${row.body}\n${row.excerpt}`;
     for (const match of haystack.matchAll(/https?:\/\/[^\s"'<>]+/g)) {
       urls.add(normalizeUrl(match[0]));
@@ -254,7 +272,7 @@ async function loadTakenKeys(sinceIso: string): Promise<TakenKeys> {
 
   const processed = await admin
     .from("processed_leads")
-    .select("title_key, source_url")
+    .select("title_key, source_url, title, created_at")
     .gte("created_at", sinceIso)
     .limit(500);
 
@@ -266,10 +284,12 @@ async function loadTakenKeys(sinceIso: string): Promise<TakenKeys> {
     for (const row of processed.data ?? []) {
       if (row.title_key) titleKeys.add(row.title_key);
       if (row.source_url) urls.add(normalizeUrl(row.source_url));
+      const at = Date.parse(row.created_at);
+      if (row.title && Number.isFinite(at)) recentTopics.push({ title: row.title, at });
     }
   }
 
-  return { titleKeys, urls, slugs };
+  return { titleKeys, urls, slugs, recentTopics };
 }
 
 function isTaken(candidate: Candidate, taken: TakenKeys): boolean {
@@ -283,6 +303,12 @@ function isTaken(candidate: Candidate, taken: TakenKeys): boolean {
 
   for (const key of taken.titleKeys) {
     if (titlesAreNearDuplicate(candidate.titleKey, key)) return true;
+  }
+
+  const topicCutoff = Date.now() - TOPIC_DEDUPE_WINDOW_MS;
+  for (const topic of taken.recentTopics) {
+    if (topic.at < topicCutoff) continue;
+    if (topicsShareEntities(candidate.title, topic.title)) return true;
   }
 
   return false;
@@ -310,17 +336,26 @@ export async function leadWasRecentlySeen(lead: IncomingLead): Promise<boolean> 
 }
 
 function dedupeCandidates(items: Candidate[]): Candidate[] {
+  const sorted = [...items].sort((a, b) => b.publishedAt - a.publishedAt);
   const seen = new Set<string>();
   const unique: Candidate[] = [];
 
-  for (const item of items) {
+  for (const item of sorted) {
     if (seen.has(item.titleKey) || seen.has(item.normalizedUrl)) continue;
+    const sameStory = unique.find((kept) => topicsShareEntities(kept.title, item.title));
+    if (sameStory) {
+      // Keep the newer English item as the story, and hold the other URL so a
+      // thin page can be topped up instead of skipped.
+      if (!sameStory.supplementUrl) sameStory.supplementUrl = item.link;
+      seen.add(item.titleKey);
+      seen.add(item.normalizedUrl);
+      continue;
+    }
     seen.add(item.titleKey);
     seen.add(item.normalizedUrl);
-    unique.push(item);
+    unique.push({ ...item });
   }
 
-  unique.sort((a, b) => b.publishedAt - a.publishedAt);
   return unique;
 }
 

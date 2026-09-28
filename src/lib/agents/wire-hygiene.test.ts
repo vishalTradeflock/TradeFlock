@@ -51,13 +51,22 @@ describe("publish bar", () => {
     assert.match(REPAIR_PROMPT, /internal links/i);
   });
 
-  it("tells writer and EiC to hold thin notes instead of stubbing or padding", () => {
+  it("tells the writer to use the source fully and the editor to keep that length", () => {
     assert.doesNotMatch(WRITER_PROMPTS.tech, /If the notes are thin, write fewer paragraphs rather than padding/);
     assert.doesNotMatch(EDITOR_IN_CHIEF_PROMPT, /shorter when they do not/);
-    assert.match(WRITER_PROMPTS.tech, /Prefer hold over padding OR stubbing/);
+    assert.doesNotMatch(WRITER_PROMPTS.tech, /HOLD the lead/);
+    assert.doesNotMatch(WRITER_PROMPTS.tech, /fullest honest draft/);
+    assert.match(WRITER_PROMPTS.tech, /650 to 850/);
+    assert.match(WRITER_PROMPTS.tech, /every newsworthy fact/i);
     assert.match(WRITER_PROMPTS.tech, /550/);
     assert.match(EDITOR_IN_CHIEF_PROMPT, /Briefing \/ digest \/ stub length/);
-    assert.match(EDITOR_IN_CHIEF_PROMPT, /HOLD the lead/);
+    assert.match(EDITOR_IN_CHIEF_PROMPT, /Preserve or increase length/);
+    assert.match(EDITOR_IN_CHIEF_PROMPT, /never return an empty editedContent/i);
+    assert.doesNotMatch(EDITOR_IN_CHIEF_PROMPT, /HOLD the lead/);
+    assert.doesNotMatch(EDITOR_IN_CHIEF_PROMPT, /Strip any fact/);
+    assert.match(REPAIR_PROMPT, /Preserve or increase length/);
+    assert.match(REPAIR_PROMPT, /Never return an empty editedContent/);
+    assert.doesNotMatch(REPAIR_PROMPT, /fullest honest draft/);
     assert.match(EDITOR_IN_CHIEF_PROMPT, /Never use the template headings/);
     assert.match(EDITOR_IN_CHIEF_PROMPT, /Strategic Context/);
     assert.match(EDITOR_IN_CHIEF_PROMPT, /Forward Outlook/);
@@ -296,8 +305,11 @@ describe("pipeline writer capacity", () => {
       resolve(dirname(fileURLToPath(import.meta.url)), "pipeline.ts"),
       "utf8",
     );
-    assert.match(src, /WRITER_MAX_TOKENS = 4096/);
+    assert.match(src, /WRITER_MAX_TOKENS = 8192/);
     assert.match(src, /EDITOR_MAX_TOKENS = 8192/);
+    assert.match(src, /empty_generation/);
+    assert.match(src, /expandWithEditor/);
+    assert.match(src, /MIN_GENERATION_WORDS/);
     assert.doesNotMatch(src, /maxTokens:\s*2048/);
   });
 });

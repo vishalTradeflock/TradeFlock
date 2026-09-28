@@ -2,6 +2,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import OpenAI, { APIConnectionError } from "openai";
 import {
   classifyTransientLlmError,
+  isLengthFinish,
+  raisedMaxTokens,
   withLlmRetry,
   type TransientLlmErrorKind,
 } from "@/lib/llm-retry";
@@ -142,6 +144,18 @@ export function getLlmClient() {
   });
 }
 
+export type LlmUsage = {
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+};
+
+export type LlmCompletion = {
+  text: string;
+  finishReason: string | null;
+  usage: LlmUsage;
+};
+
 async function completeOnce(
   model: string,
   options: {
@@ -151,7 +165,7 @@ async function completeOnce(
     json?: boolean;
     maxTokens?: number;
   },
-) {
+): Promise<LlmCompletion> {
   const client = getLlmClient();
   const maxTokens = options.maxTokens ?? 2048;
   const remaining = llmTimeRemainingMs();
@@ -170,12 +184,23 @@ async function completeOnce(
     Number.isFinite(remaining) ? { timeout: Math.max(LLM_MIN_REQUEST_MS, remaining) } : undefined,
   );
 
-  const text = completion.choices[0]?.message.content?.trim();
+  const choice = completion.choices[0];
+  const finishReason = choice?.finish_reason ?? null;
+  const usage: LlmUsage = {
+    promptTokens: completion.usage?.prompt_tokens ?? null,
+    completionTokens: completion.usage?.completion_tokens ?? null,
+    totalTokens: completion.usage?.total_tokens ?? null,
+  };
+  console.log(
+    `[llm] ${model} finish_reason=${finishReason ?? "unknown"} prompt_tokens=${usage.promptTokens ?? "n/a"} completion_tokens=${usage.completionTokens ?? "n/a"} total_tokens=${usage.totalTokens ?? "n/a"}`,
+  );
+
+  const text = choice?.message.content?.trim() ?? "";
   if (!text) {
     throw new Error("Gemini returned an empty completion");
   }
 
-  return text;
+  return { text, finishReason, usage };
 }
 
 export async function completeLlmChat(options: {
@@ -203,11 +228,25 @@ export async function completeLlmChat(options: {
     attempted.push(model);
     try {
       // Busy/overloaded errors are retried on this model before falling back.
-      return await withLlmRetry(() => completeOnce(model, options), {
+      const first = await withLlmRetry(() => completeOnce(model, options), {
         label: model,
         deadline,
         classify: classifyLlmError,
       });
+      const bumped = isLengthFinish(first.finishReason)
+        ? raisedMaxTokens(options.maxTokens ?? 2048)
+        : null;
+      if (bumped === null) return first.text;
+      if (deadline !== undefined && deadline - Date.now() < LLM_MIN_REQUEST_MS) {
+        console.warn(`[llm] ${model} finish_reason=length; no time left to raise max_tokens`);
+        return first.text;
+      }
+      console.warn(`[llm] ${model} finish_reason=${first.finishReason}; retrying once with max_tokens=${bumped}`);
+      const second = await withLlmRetry(
+        () => completeOnce(model, { ...options, maxTokens: bumped }),
+        { label: model, deadline, classify: classifyLlmError },
+      );
+      return second.text;
     } catch (err) {
       lastError = err;
       const next = models[attempted.length];

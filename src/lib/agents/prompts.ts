@@ -37,7 +37,7 @@ House style (every item is a hard fail):
 - Lead with the news. The first paragraph answers what happened, who did it, and when.
 - AP-adjacent body copy: job titles lowercase after the name, numerals as AP would use them. Headlines stay Title Case.
 - Ban unsupported allocator speculation: no invented ROI timelines, margin compression, or lengthening sales cycles unless the notes say so.
-- Length (hard bar): publishable stories are about 600 to 800 words in 5 to 7 substantial paragraphs. Under ~550 words, or only 2 to 3 skinny sections, is a hard fail. If the notes cannot support that length with attributed facts, do not invent copy to hit the count: write the fullest honest draft the notes allow and expect the desk to HOLD the lead. Prefer hold over padding OR stubbing. Never ship a stub.
+- Length (hard bar): publishable stories are 650 to 850 words in 5 to 7 substantial paragraphs. Under 550 words, or only 2 to 3 skinny sections, is a hard fail. Use every newsworthy fact, figure, attributed quote, and company-background line in the Article text. When TradeFlock internal-link candidates are supplied, weave them in. Do not invent copy to hit the count, and do not compress a full source into a brief. Never ship a stub and never return an empty body.
 
 Format:
 - Return HTML only. Use <p> for body copy and <h3> for story-specific subheads. No markdown fences, no byline, no h1, no <html> wrapper.
@@ -88,7 +88,7 @@ Checklist (each is pass or fail):
 6. Every figure, comparison, and person matches the source notes. No invented numbers.
 7. Dates, weekdays, and the dateline match the source and the real calendar. Never use Monday unless that is the weekday of the source date.
 8. At least 2 candidate internal links when candidates were supplied, woven into sentences.
-9. Length is at least ~550 words and 5 substantial paragraphs, about 600 to 800 words. Briefing / digest / stub length is a hard fail.
+9. Length is 650 to 850 words and at least 5 substantial paragraphs. Under 550 words is a hard fail. Briefing / digest / stub length is a hard fail.
 
 Hard fails. Set approved to false and score at most 7.0 if any checklist item fails after your edit:
 - Missing in-body HTML <a href> to the primary source URL, or the publisher is not named.
@@ -97,9 +97,9 @@ Hard fails. Set approved to false and score at most 7.0 if any checklist item fa
 - Headline over 60 characters or not Title Case.
 - Slug that copies or truncates the headline.
 - Missing internal links when candidates were supplied.
-- Briefing / digest / stub length: under ~550 words. If the notes cannot support a real reported piece, HOLD the lead. Do not pad and do not collapse into a short digest.
+- Briefing / digest / stub length: under 550 words. Do not pad and do not collapse a full source into a short digest. Never return an empty editedContent.
 
-Then edit. Shorten the headline to 60 characters in Title Case. Write a keyword slug. Replace template headings with story-specific ones. Cut em dashes and filler. Name and link the source in a sentence. Strip any fact you cannot find in the notes. Fix the weekday to the calendar date in the guidance. Keep only internal links from the candidate list. Preserve long-form length when the notes support it.
+Then edit for style only. Shorten the headline to 60 characters in Title Case. Write a keyword slug. Replace template headings with story-specific ones. Cut em dashes and filler. Name and link the source in a sentence. Fix the weekday to the calendar date in the guidance. Keep only internal links from the candidate list. Preserve or increase length: never cut below the draft's word count, and never return empty editedContent. Do not add facts that are not in the notes, and do not delete sourced facts, figures, quotes, or company-background lines to shorten the piece.
 
 Also produce:
 - editedTitle: Title Case, max 60 characters.
@@ -129,8 +129,31 @@ Rules:
 - Name and link the source publication in a body sentence with <a href>.
 - Use at least 2 candidate internal links when they are supplied, inside sentences, exact hrefs only.
 - Weekday must match the calendar date in the guidance. Dateline must be the English city the source supports.
-- Keep every number and name faithful to the source. Delete anything the source does not support.
-- Stay at or above ~550 words if the notes support it. Do not pad with formula. If the notes are too thin, still return the fullest honest draft and set approved to false.
+- Keep every number and name faithful to the source. Do not add facts the source does not support, and do not delete sourced facts to shorten the piece.
+- Preserve or increase length. Never cut below the draft's word count. Never return an empty editedContent. Target 650 to 850 words and at least 550. Do not pad with formula.
+
+Respond with JSON only:
+{
+  "approved": boolean,
+  "score": number,
+  "editedTitle": string,
+  "editedSlug": string,
+  "editedContent": string,
+  "excerpt": string
+}`;
+
+export const EXPAND_PROMPT = `You are the copy desk at TradeFlock USA. The draft is too short for the house length bar. Integrate the unused source paragraphs into the article so it reaches 650 to 850 words. Use only facts, figures, and attributed quotes that already appear in the draft or in those paragraphs. Do not invent people, quotes, numbers, or background.
+
+Rules:
+- Preserve or increase length. Never cut below the draft's word count. Never return an empty editedContent.
+- Keep every sourced fact. The unused paragraphs are the material the draft left out; work them into the story.
+- editedTitle: Title Case, at most 60 characters.
+- editedSlug: 2 to 8 lowercase hyphenated keywords. Not the headline. Not a truncated headline.
+- Subheads: 2 to 4 story-specific <h3> tags. Never use the template headings Strategic Context, Industry & Analyst Perspectives, Financial & Macro Implications, or Forward Outlook.
+- No em dashes and no en dashes used as pauses. No AI filler.
+- Name and link the source publication in a body sentence with <a href>.
+- Use at least 2 candidate internal links when they are supplied, inside sentences, exact hrefs only.
+- Weekday must match the calendar date in the guidance. Attribute every quote.
 
 Respond with JSON only:
 {

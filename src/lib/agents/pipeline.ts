@@ -3,6 +3,7 @@ import { formatFactBrief } from "@/lib/agents/fact-check";
 import { assessWireArticle, keywordSlug, slugShapeFailures, toTitleCase } from "@/lib/agents/house-style";
 import {
   EDITOR_IN_CHIEF_PROMPT,
+  EXPAND_PROMPT,
   PUBLISH_SCORE_MIN,
   REPAIR_PROMPT,
   WRITER_PROMPTS,
@@ -23,11 +24,14 @@ import type { Database } from "@/lib/supabase/database.types";
 import { completeLlmChat, isLlmQuotaError } from "@/lib/llm";
 import { editorialDek, holdPublishedAt, withHoldNote } from "@/lib/agents/hold-copy";
 import { resolveUniquePublishCover } from "@/lib/agents/source-cover";
+import { articleSectionText, countSourceWords, SOURCE_MIN_WORDS } from "@/lib/agents/source-article";
 import {
   parseLeadNotes,
   polishWireBody,
   writerLeadInstructions,
   isTooShortFailure,
+  unusedSourceParagraphs,
+  countBodyWords,
   type LeadNotes,
 } from "@/lib/agents/wire-hygiene";
 
@@ -41,6 +45,8 @@ export type NewsLead = {
   sourceOgImageUrl?: string | null;
   /** True when the wire downloaded the source page, even if it had no og:image. */
   sourcePageFetched?: boolean;
+  /** Second English source on the same story, used when the primary page is thin. */
+  supplementUrl?: string | null;
 };
 
 export type EditorVerdict = {
@@ -52,6 +58,13 @@ export type EditorVerdict = {
   excerpt: string;
 };
 
+export type WordCounts = {
+  source: number;
+  writer: number;
+  editor: number;
+  final: number;
+};
+
 export type PipelineResult =
   | {
       published: true;
@@ -59,6 +72,7 @@ export type PipelineResult =
       title: string;
       score: number;
       desk: WriterDesk;
+      wordCounts?: WordCounts;
     }
   | {
       published: false;
@@ -67,6 +81,7 @@ export type PipelineResult =
       reason: string;
       title?: string;
       verdict?: EditorVerdict;
+      wordCounts?: WordCounts;
     };
 
 export type ProcessLeadOptions = {
@@ -77,8 +92,14 @@ export type ProcessLeadOptions = {
 /** Floor for ?force=1. Hygiene (source link, dating, invented observers, market-brief voice, length) still blocks publish. */
 export const FORCE_PUBLISH_SCORE_MIN = 6;
 
-/** Writer output must fit a 600–800 word HTML article; 2048 truncates. EiC and repair JSON stay at 8192. */
-const WRITER_MAX_TOKENS = 4096;
+/**
+ * Writer output must fit a 650–850 word HTML article. Gemini thinking tokens
+ * count against max_tokens; a "length" finish is retried once higher in llm.ts.
+ */
+const WRITER_MAX_TOKENS = 8192;
+
+/** Below this, the model body is a failed generation, not a draft to save. */
+export const MIN_GENERATION_WORDS = 150;
 const EDITOR_MAX_TOKENS = 8192;
 const REPAIR_MAX_TOKENS = 8192;
 
@@ -178,12 +199,19 @@ function normalizeVerdict(verdict: EditorVerdict): EditorVerdict {
 }
 
 async function draftFromWriter(desk: WriterDesk, lead: NewsLead, guidance: string) {
-  return completeLlmChat({
-    system: WRITER_PROMPTS[desk],
-    temperature: 0.45,
-    maxTokens: WRITER_MAX_TOKENS,
-    user: writerLeadInstructions(lead, guidance),
-  });
+  try {
+    return await completeLlmChat({
+      system: WRITER_PROMPTS[desk],
+      temperature: 0.45,
+      maxTokens: WRITER_MAX_TOKENS,
+      user: writerLeadInstructions(lead, guidance),
+    });
+  } catch (err) {
+    if (isLlmQuotaError(err)) throw err;
+    // An empty model body is a failed generation, not a draft. The caller retries once.
+    if (err instanceof Error && /empty completion/i.test(err.message)) return "";
+    throw err;
+  }
 }
 
 function editorUser(desk: WriterDesk, lead: NewsLead, draft: string, guidance: string) {
@@ -237,6 +265,41 @@ Failures to fix (every one must be gone; do not add new facts):
 ${failures.map((failure) => `- ${failure}`).join("\n")}`,
   });
   return parseEditorVerdict(raw);
+}
+
+async function expandWithEditor(
+  desk: WriterDesk,
+  lead: NewsLead,
+  verdict: EditorVerdict,
+  failures: readonly string[],
+  guidance: string,
+) {
+  const unused = unusedSourceParagraphs(articleSectionText(lead.rawSource), verdict.editedContent);
+  const raw = await completeLlmChat({
+    system: EXPAND_PROMPT,
+    temperature: 0.2,
+    json: true,
+    maxTokens: EDITOR_MAX_TOKENS,
+    user: `${editorUser(desk, lead, verdict.editedContent, guidance)}
+
+Current title: ${verdict.editedTitle}
+Current slug: ${verdict.editedSlug}
+
+Unused source paragraphs (integrate these facts; do not add anything else):
+${unused || "(none parsed; restore sourced facts from the notes that the draft dropped, and do not invent)"}
+
+Failures to fix while you expand (do not add new facts):
+${failures.map((failure) => `- ${failure}`).join("\n")}`,
+  });
+  return parseEditorVerdict(raw);
+}
+
+function isFactCheckFailure(failure: string): boolean {
+  return failure.startsWith("figures:") || failure.startsWith("dates:");
+}
+
+function leadSourceWords(lead: NewsLead): number {
+  return countSourceWords(articleSectionText(lead.rawSource));
 }
 
 type ArticleInsert = Pick<
@@ -575,6 +638,46 @@ function holdForHygiene(
   };
 }
 
+function emptyGeneration(
+  desk: WriterDesk,
+  lead: NewsLead,
+  wordCounts: WordCounts,
+): Extract<PipelineResult, { published: false }> {
+  console.error(
+    `[pipeline] skip empty generation "${lead.topic}": source=${wordCounts.source} writer=${wordCounts.writer} editor=${wordCounts.editor}`,
+  );
+  return {
+    published: false,
+    score: 0,
+    desk,
+    title: lead.topic,
+    reason: `empty_generation — model body was ${Math.max(wordCounts.writer, wordCounts.editor)} words`,
+    wordCounts,
+  };
+}
+
+async function editOrFallback(
+  desk: WriterDesk,
+  lead: NewsLead,
+  draft: string,
+  guidance: string,
+): Promise<EditorVerdict> {
+  try {
+    return normalizeVerdict(await editWithEditor(desk, lead, draft, guidance));
+  } catch (err) {
+    if (isLlmQuotaError(err)) throw err;
+    if (!isUnusableEditorPayload(err)) throw err;
+    return normalizeVerdict({
+      approved: false,
+      score: 0,
+      editedTitle: lead.topic,
+      editedSlug: "",
+      editedContent: draft,
+      excerpt: "",
+    });
+  }
+}
+
 export async function processNewsLead(
   lead: NewsLead,
   options: ProcessLeadOptions = {},
@@ -584,22 +687,33 @@ export async function processNewsLead(
   const requireApproved = options.requireApproved ?? true;
   const related = await loadRelatedCandidates({ topic: lead.topic, category: lead.category });
   const guidance = writerGuidance(lead, related);
-  const draft = await draftFromWriter(desk, lead, guidance);
+  const source = leadSourceWords(lead);
 
-  let verdict: EditorVerdict;
-  try {
-    verdict = normalizeVerdict(await editWithEditor(desk, lead, draft, guidance));
-  } catch (err) {
-    if (isLlmQuotaError(err)) throw err;
-    if (!isUnusableEditorPayload(err)) throw err;
-    verdict = normalizeVerdict({
-      approved: false,
-      score: 0,
-      editedTitle: lead.topic,
-      editedSlug: "",
-      editedContent: draft,
-      excerpt: "",
-    });
+  let draft = await draftFromWriter(desk, lead, guidance);
+  let writer = countBodyWords(draft);
+  if (writer < MIN_GENERATION_WORDS) {
+    console.warn(`[pipeline] writer body ${writer} words; retrying once "${lead.topic}"`);
+    draft = await draftFromWriter(desk, lead, guidance);
+    writer = countBodyWords(draft);
+  }
+  if (writer < MIN_GENERATION_WORDS) {
+    return emptyGeneration(desk, lead, { source, writer, editor: 0, final: 0 });
+  }
+
+  let verdict = await editOrFallback(desk, lead, draft, guidance);
+  let editor = countBodyWords(verdict.editedContent);
+  if (editor < MIN_GENERATION_WORDS) {
+    console.warn(`[pipeline] editor body ${editor} words; retrying writer once "${lead.topic}"`);
+    draft = await draftFromWriter(desk, lead, guidance);
+    writer = countBodyWords(draft);
+    if (writer < MIN_GENERATION_WORDS) {
+      return emptyGeneration(desk, lead, { source, writer, editor, final: 0 });
+    }
+    verdict = await editOrFallback(desk, lead, draft, guidance);
+    editor = countBodyWords(verdict.editedContent);
+  }
+  if (editor < MIN_GENERATION_WORDS) {
+    return emptyGeneration(desk, lead, { source, writer, editor, final: 0 });
   }
 
   let prepared = prepareWireBody(
@@ -612,24 +726,69 @@ export async function processNewsLead(
   );
 
   if (prepared.failures.length) {
+    const shortIsMajor =
+      prepared.failures.some(isTooShortFailure) &&
+      !prepared.failures.some(isFactCheckFailure) &&
+      source >= SOURCE_MIN_WORDS;
     try {
-      verdict = normalizeVerdict(
-        await repairWithEditor(desk, lead, verdict, prepared.failures, guidance),
-      );
-      prepared = prepareWireBody(
-        lead,
-        verdict.editedTitle,
-        verdict.editedSlug,
-        verdict.editedContent,
-        "",
-        related,
-      );
+      if (shortIsMajor) {
+        verdict = normalizeVerdict(
+          await expandWithEditor(desk, lead, verdict, prepared.failures, guidance),
+        );
+        prepared = prepareWireBody(
+          lead,
+          verdict.editedTitle,
+          verdict.editedSlug,
+          verdict.editedContent,
+          "",
+          related,
+        );
+        if (prepared.failures.length > 0 && !prepared.failures.some(isTooShortFailure)) {
+          verdict = normalizeVerdict(
+            await repairWithEditor(desk, lead, verdict, prepared.failures, guidance),
+          );
+          prepared = prepareWireBody(
+            lead,
+            verdict.editedTitle,
+            verdict.editedSlug,
+            verdict.editedContent,
+            "",
+            related,
+          );
+        }
+      } else {
+        verdict = normalizeVerdict(
+          await repairWithEditor(desk, lead, verdict, prepared.failures, guidance),
+        );
+        prepared = prepareWireBody(
+          lead,
+          verdict.editedTitle,
+          verdict.editedSlug,
+          verdict.editedContent,
+          "",
+          related,
+        );
+      }
     } catch (err) {
       if (isLlmQuotaError(err)) throw err;
     }
   }
 
+  editor = countBodyWords(verdict.editedContent);
+  if (editor < MIN_GENERATION_WORDS) {
+    return emptyGeneration(desk, lead, { source, writer, editor, final: 0 });
+  }
+
   verdict = { ...verdict, editedContent: prepared.body, score: prepared.score, approved: prepared.failures.length === 0 };
+  const wordCounts: WordCounts = {
+    source,
+    writer,
+    editor,
+    final: countBodyWords(prepared.body),
+  };
+  console.log(
+    `[pipeline] words source=${wordCounts.source} writer=${wordCounts.writer} editor=${wordCounts.editor} final=${wordCounts.final} "${lead.topic}"`,
+  );
   const belowBar =
     prepared.failures.length > 0 ||
     prepared.score < minScore ||
@@ -637,10 +796,10 @@ export async function processNewsLead(
 
   if (belowBar) {
     await trySaveHeldDraft(lead, desk, verdict, prepared.body, prepared.failures);
-    return holdForHygiene(desk, verdict, prepared.body, prepared.failures, prepared.score);
+    return { ...holdForHygiene(desk, verdict, prepared.body, prepared.failures, prepared.score), wordCounts };
   }
 
-  return commitVerdict(lead, desk, verdict, related);
+  return { ...(await commitVerdict(lead, desk, verdict, related)), wordCounts };
 }
 
 export async function publishHighestScoringHold(
