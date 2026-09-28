@@ -24,6 +24,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
 import { studioPublishFailures } from "@/lib/agents/studio-gate";
+import {
+  holdPublishedAt,
+  isHoldCopy,
+  publishedAtForStudioPublish,
+  stripHoldNote,
+} from "@/lib/agents/hold-copy";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { studioCoverFor } from "@/lib/studio/cover";
 import { isCoverUniqueViolation } from "@/lib/cover-picker";
@@ -200,7 +206,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     const requested = input.status;
 
     const title = input.title.trim() || "Untitled draft";
-    const rawBody = input.body.trim();
+    const rawBody = stripHoldNote(input.body.trim());
     const body = sanitizeArticleBody(rawBody, { title });
     const excerpt = excerptFromHtml(body);
     const cover_image_alt = sanitizeAltText(input.coverImageAlt);
@@ -223,7 +229,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     if (input.id) {
       const { data: existing, error: existingError } = await admin
         .from("articles")
-        .select("id, slug, status, author_id, published_at, cover_image_url")
+        .select("id, slug, status, author_id, published_at, cover_image_url, dek")
         .eq("id", input.id)
         .maybeSingle();
 
@@ -299,8 +305,16 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         ...seoPayload(input),
       };
 
-      if (nextStatus === "published" && existing.status !== "published") {
-        update.published_at = new Date().toISOString();
+      if (isHoldCopy(existing.dek)) {
+        update.dek = excerpt;
+      }
+
+      if (nextStatus === "published") {
+        const stamp = publishedAtForStudioPublish({
+          previousStatus: existing.status,
+          previousPublishedAt: existing.published_at,
+        });
+        if (stamp) update.published_at = stamp;
       }
 
       if (existing.status === "published" && nextSlug !== existing.slug) {
@@ -319,6 +333,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
           author_id: update.author_id,
           status: update.status,
           slug: update.slug,
+          ...(typeof update.dek === "string" ? { dek: update.dek } : {}),
           ...(typeof update.published_at === "string" ? { published_at: update.published_at } : {}),
         };
         const retry = await admin.from("articles").update(withoutSeo).eq("id", existing.id);
@@ -403,10 +418,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
       author_id: authorId,
       status: nextStatus,
       faqs,
-      published_at:
-        nextStatus === "published"
-          ? new Date().toISOString()
-          : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      published_at: nextStatus === "published" ? new Date().toISOString() : holdPublishedAt(),
       ...seoPayload(input),
     };
     let { data, error } = await admin.from("articles").insert(insert).select("id, slug, status").single();

@@ -21,6 +21,7 @@ import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import { completeLlmChat, isLlmQuotaError } from "@/lib/llm";
+import { editorialDek, holdPublishedAt, withHoldNote } from "@/lib/agents/hold-copy";
 import { resolveUniquePublishCover } from "@/lib/agents/source-cover";
 import {
   parseLeadNotes,
@@ -36,6 +37,10 @@ export type NewsLead = {
   category: string;
   sourceUrl?: string;
   imageUrl?: string | null;
+  /** og:image from the source page already fetched for the article text. */
+  sourceOgImageUrl?: string | null;
+  /** True when the wire downloaded the source page, even if it had no og:image. */
+  sourcePageFetched?: boolean;
 };
 
 export type EditorVerdict = {
@@ -450,6 +455,8 @@ async function commitVerdict(
         title,
         categorySlug: SITE_CATEGORY[desk],
         used,
+        ogAlreadyFetched: lead.sourcePageFetched === true,
+        prefetchedOgImageUrl: lead.sourceOgImageUrl ?? null,
       })
     ).url;
   const coverImageUrl = await pickCover(usedCovers);
@@ -502,13 +509,15 @@ async function trySaveHeldDraft(
       resolveCategoryId(admin, desk, lead.category),
       resolveAuthorId(admin, desk),
     ]);
-    const excerpt = failures.join("; ").slice(0, 280) || title;
+    const reason = holdReason(failures);
+    const excerpt = editorialDek(verdict.excerpt, body, title);
+    console.warn(`[pipeline] held "${title}": ${reason}`);
     const insert: ArticleInsert = {
       slug,
       title,
       dek: excerpt,
       excerpt,
-      body,
+      body: withHoldNote(body, reason),
       // No stock stand-in: a cover is picked (uniquely) only when it publishes.
       cover_image_url: "",
       cover_image_alt: title,
@@ -518,7 +527,9 @@ async function trySaveHeldDraft(
       is_breaking: false,
       view_count: 0,
       status: "draft",
-      published_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      // Intentional hide marker: public queries keep published_at <= now.
+      // Studio resets this to now when the draft is published.
+      published_at: holdPublishedAt(),
     };
     const written = await admin.from("articles").insert(insert).select("slug").single();
     if (written.error) {

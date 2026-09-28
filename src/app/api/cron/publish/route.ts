@@ -2,10 +2,16 @@ import { NextResponse } from "next/server";
 import {
   collectFreshLeads,
   leadBatchSize,
+  leadSourcePoolSize,
   leadWasRecentlySeen,
   markLeadProcessed,
   type IncomingLead,
 } from "@/lib/agents/leads";
+import {
+  selectWritableLeads,
+  SOURCE_ARTICLE_TIMEOUT_MS,
+  type SourceSelection,
+} from "@/lib/agents/source-article";
 import {
   processNewsLead,
   publishHighestScoringHold,
@@ -127,6 +133,22 @@ async function applyForcePublish(outcomes: LeadOutcome[]) {
   };
 }
 
+function sourceReport(
+  stats: SourceSelection<IncomingLead>["stats"],
+  outcomes: LeadOutcome[],
+) {
+  const written = outcomes.length;
+  const published = outcomes.filter((outcome) => outcome.result.published).length;
+  return {
+    fetched: stats.fetched,
+    "skipped-thin": stats.skippedThin,
+    "skipped-blocked": stats.skippedBlocked,
+    written,
+    published,
+    held: written - published,
+  };
+}
+
 function failureMessage(err: unknown): string {
   if (isLlmQuotaError(err)) return err.message;
   return err instanceof Error ? err.message : "Pipeline failed";
@@ -170,7 +192,7 @@ async function runPipeline(request: Request) {
     });
   }
 
-  const intake = await collectFreshLeads(leadBatchSize());
+  const intake = await collectFreshLeads(leadSourcePoolSize());
   if (intake.leads.length === 0) {
     if (process.env.VERCEL_ENV !== "production" && !(await leadWasRecentlySeen(TEST_LEAD))) {
       let outcome = await runLead(TEST_LEAD);
@@ -210,13 +232,62 @@ async function runPipeline(request: Request) {
     });
   }
 
+  const intakeSummary = {
+    feedsAttempted: intake.feedsAttempted,
+    feedErrors: intake.feedErrors,
+    feedWarning: intake.feedWarning,
+    candidates: intake.candidates,
+    skipped: intake.skipped,
+  };
+
+  const selected = await selectWritableLeads(intake.leads, {
+    limit: leadBatchSize(),
+    timeRemainingMs: llmTimeRemainingMs,
+    minBudgetMs: MIN_LEAD_BUDGET_MS + SOURCE_ARTICLE_TIMEOUT_MS,
+  });
+  for (const skip of selected.skipped) {
+    const bucket = skip.reason === "thin" ? "thin" : "blocked";
+    console.warn(`[publish] skip ${bucket} "${skip.lead.topic}": ${skip.detail}`);
+    if (skip.persist) await markLeadProcessed(skip.lead, "held");
+  }
+  if (selected.stopped === "time" && selected.deferred.length > 0) {
+    console.warn(
+      `[publish] source fetch deferred ${selected.deferred.length} lead(s); time budget`,
+    );
+  }
+  const skips = selected.skipped.map((skip) => ({
+    topic: skip.lead.topic,
+    reason: skip.reason,
+    detail: skip.detail,
+  }));
+
+  if (selected.leads.length === 0) {
+    const source = sourceReport(selected.stats, []);
+    console.log(
+      `[publish] source fetched=${source.fetched} skipped-thin=${source["skipped-thin"]} skipped-blocked=${source["skipped-blocked"]} written=0 published=0 held=0`,
+    );
+    return NextResponse.json({
+      ok: true,
+      mode: "rss",
+      reason: "no_writable_leads",
+      force,
+      intake: intakeSummary,
+      source,
+      skips,
+      ...(selected.stopped === "time" && selected.deferred.length
+        ? { deferred: selected.deferred.map((lead) => lead.topic) }
+        : {}),
+      results: [],
+    });
+  }
+
   const outcomes: LeadOutcome[] = [];
   const failures: { topic: string; error: string }[] = [];
   const deferred: string[] = [];
   let quotaExhausted = false;
   let unavailableFailures = 0;
 
-  for (const lead of intake.leads) {
+  for (const lead of selected.leads) {
     if (llmTimeRemainingMs() < MIN_LEAD_BUDGET_MS) {
       deferred.push(lead.topic);
       continue;
@@ -251,13 +322,10 @@ async function runPipeline(request: Request) {
   }
 
   const results = outcomes.map((outcome) => summarizeResult(outcome.lead, outcome.result));
-  const intakeSummary = {
-    feedsAttempted: intake.feedsAttempted,
-    feedErrors: intake.feedErrors,
-    feedWarning: intake.feedWarning,
-    candidates: intake.candidates,
-    skipped: intake.skipped,
-  };
+  const source = sourceReport(selected.stats, outcomes);
+  console.log(
+    `[publish] source fetched=${source.fetched} skipped-thin=${source["skipped-thin"]} skipped-blocked=${source["skipped-blocked"]} written=${source.written} published=${source.published} held=${source.held}`,
+  );
 
   if (results.length === 0 && failures.length > 0) {
     if (quotaExhausted || failures.every((item) => isQuotaFailure(item.error))) {
@@ -268,6 +336,8 @@ async function runPipeline(request: Request) {
         error: failures[0]?.error ?? "Gemini quota exhausted.",
         force,
         intake: intakeSummary,
+        source,
+        skips,
         failures,
         results,
       });
@@ -283,6 +353,8 @@ async function runPipeline(request: Request) {
         error: failures[0]?.error ?? "Gemini unavailable.",
         force,
         intake: intakeSummary,
+        source,
+        skips,
         failures,
         ...(deferred.length ? { deferred } : {}),
         results,
@@ -296,6 +368,8 @@ async function runPipeline(request: Request) {
         error: failures[0]?.error ?? "Pipeline failed",
         force,
         intake: intakeSummary,
+        source,
+        skips,
         failures,
         results,
       },
@@ -310,6 +384,8 @@ async function runPipeline(request: Request) {
     ...(forcePublished ? { reason: "force_published_highest_score" } : {}),
     ...(quotaExhausted ? { reason: "llm_quota_exhausted" } : {}),
     intake: intakeSummary,
+    source,
+    skips,
     failures,
     ...(deferred.length ? { deferred } : {}),
     results,
