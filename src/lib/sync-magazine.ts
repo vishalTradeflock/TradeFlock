@@ -1,5 +1,4 @@
 import { revalidatePath } from "next/cache";
-import { FALLBACK_COVER_IMAGE } from "@/lib/images";
 import { fetchLegacyHonorees } from "@/lib/legacy-honorees";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
@@ -62,7 +61,9 @@ function toInsertRows(
   return honorees.map((honoree, index) => {
     const page = honoree.magazine_page ?? honoree.page ?? index * 2 + 4;
     const excerpt = excerptFor(honoree);
-    const photo = honoree.photo_url?.trim() || FALLBACK_COVER_IMAGE;
+    // Empty cover renders the neutral card. Never the retired FALLBACK_COVER_IMAGE:
+    // the DB publish gate (supabase/migrations/20260928_publish_gate.sql) rejects it.
+    const photo = honoree.photo_url?.trim() || "";
     return {
       slug: honoree.slug?.trim() || honoreeSlug(honoree.name, magazine.slug),
       title: `${honoree.name} ${magazine.title}`.trim(),
