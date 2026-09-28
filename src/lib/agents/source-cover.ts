@@ -1,47 +1,12 @@
-import {
-  decodeCoverHtmlEntities,
-  isHttpsCoverUrl,
-  publishCoverCandidates,
-  sanitizeCoverUrl,
-} from "@/lib/images";
+import { isHttpsCoverUrl, publishCoverCandidates } from "@/lib/images";
 import { pickUniqueCover, type PickedCover } from "@/lib/cover-picker";
-import { isUnusableSourceImageUrl, shouldTrySourcePhoto } from "@/lib/source-photo";
+import { isUnusableSourceImageUrl, ogImageFromHtml, shouldTrySourcePhoto } from "@/lib/source-photo";
 
 const OG_TIMEOUT_MS = 4_000;
 const SKIP_OG_HOSTS = /(^|\.)sec\.gov$/i;
 
-function metaContent(html: string, key: "og:image" | "twitter:image"): string | null {
-  const property = key === "og:image" ? "property" : "name";
-  const patterns = [
-    new RegExp(
-      `<meta[^>]+${property}=["']${key}["'][^>]+content=["']([^"']+)["']`,
-      "i",
-    ),
-    new RegExp(
-      `<meta[^>]+content=["']([^"']+)["'][^>]+${property}=["']${key}["']`,
-      "i",
-    ),
-  ];
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    const value = match?.[1]?.trim();
-    if (value) return value;
-  }
-  return null;
-}
-
 /** Parse og:image / twitter:image from markup. Decodes `&amp;` before resolving. */
-export function ogImageFromHtml(html: string, pageUrl: string): string | null {
-  const raw = metaContent(html, "og:image") ?? metaContent(html, "twitter:image");
-  if (!raw) return null;
-  const decoded = decodeCoverHtmlEntities(raw);
-  try {
-    const absolute = new URL(decoded, pageUrl).toString();
-    return sanitizeCoverUrl(absolute);
-  } catch {
-    return null;
-  }
-}
+export { ogImageFromHtml };
 
 /** Best-effort og:image from the source page. Never invents a URL; returns null on timeout/block. */
 export async function fetchOgImageUrl(pageUrl: string): Promise<string | null> {
@@ -89,6 +54,12 @@ export async function resolveUniquePublishCover(input: {
   title: string;
   categorySlug?: string | null;
   used: Set<string>;
+  /**
+   * When the wire already downloaded this source page, pass its og:image
+   * (or null) so publish does not fetch the page again.
+   */
+  prefetchedOgImageUrl?: string | null;
+  ogAlreadyFetched?: boolean;
 }): Promise<{ url: string; picked: PickedCover | null }> {
   const accessKey = process.env.UNSPLASH_ACCESS_KEY ?? null;
   const fromFeed = publishCoverCandidates({
@@ -105,10 +76,14 @@ export async function resolveUniquePublishCover(input: {
   });
   if (first) return { url: first.url, picked: first };
 
-  const og =
-    input.sourceUrl && shouldTrySourcePhoto({ title: input.title, categorySlug: input.categorySlug })
-      ? await fetchOgImageUrl(input.sourceUrl)
-      : null;
+  const trySource = shouldTrySourcePhoto({ title: input.title, categorySlug: input.categorySlug });
+  let og: string | null = null;
+  if (input.ogAlreadyFetched) {
+    og = input.prefetchedOgImageUrl ?? null;
+  } else if (input.sourceUrl && trySource) {
+    og = await fetchOgImageUrl(input.sourceUrl);
+  }
+  if (og && (!isHttpsCoverUrl(og) || isUnusableSourceImageUrl(og))) og = null;
   let picked: PickedCover | null = null;
   try {
     picked = await pickUniqueCover({

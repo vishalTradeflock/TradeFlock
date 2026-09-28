@@ -405,17 +405,17 @@ export function factCheckFailures(
 
 export function formatFactBrief(rawSource: string, publishedAt: string | null): string {
   const line = formatPublishedLine(publishedAt);
-  const figures = extractFigures(rawSource).slice(0, 30);
-  const names = extractPersonNames(rawSource).slice(0, 20);
+  const figures = extractFigures(rawSource).slice(0, 40);
+  const names = extractPersonNames(rawSource).slice(0, 24);
   return [
     line
       ? `Use this weekday and date for the source timestamp: ${line}. Do not invent a different weekday.`
       : "Published date: unknown. Do not invent a weekday.",
     figures.length
-      ? `Figures in the source (do not add others, and back every comparison with these): ${figures.join(", ")}.`
+      ? `Figures parsed from the source notes (do not invent numbers; any figure written in the notes is allowed, and this list may be partial): ${figures.join(", ")}.`
       : "No figures were parsed from the source. Do not invent numbers, percentages, or sums.",
     names.length
-      ? `People named in the source (do not add others): ${names.join(", ")}.`
+      ? `People named in the source notes (do not invent names; any person named in the notes is allowed, and this list may be partial): ${names.join(", ")}.`
       : "No people were parsed from the source. Do not invent named executives, analysts, or spokespeople.",
   ].join("\n");
 }

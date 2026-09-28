@@ -73,6 +73,19 @@ export function leadBatchSize(): number {
   return Math.min(MAX_BATCH_SIZE, Math.max(1, size));
 }
 
+const DEFAULT_SOURCE_POOL = 12;
+const MAX_SOURCE_POOL = 18;
+
+/**
+ * Fresh RSS items to consider per run. Pages that are too thin or blocked
+ * do not count toward `leadBatchSize()`, so the pool is larger than the
+ * number of stories the desk will actually write.
+ */
+export function leadSourcePoolSize(): number {
+  const size = envInt("NEWS_LEAD_SOURCE_POOL", Math.max(DEFAULT_SOURCE_POOL, leadBatchSize() * 6));
+  return Math.min(MAX_SOURCE_POOL, Math.max(leadBatchSize(), size));
+}
+
 export function normalizeTitleKey(title: string): string {
   return title
     .toLowerCase()

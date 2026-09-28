@@ -169,6 +169,13 @@ function metaContent(html: string, key: "og:image" | "twitter:image"): string | 
   return null;
 }
 
+/** og:image, otherwise twitter:image, resolved against the page. Null when it is not a usable https image. */
+export function ogImageFromHtml(html: string, pageUrl: string): string | null {
+  const raw = metaContent(html, "og:image") ?? metaContent(html, "twitter:image");
+  const absolute = resolveAgainst(pageUrl, raw);
+  return absolute ? sanitizeCoverUrl(absolute) : null;
+}
+
 function attr(tag: string, name: string): string | null {
   const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, "i"));
   return match?.[2]?.trim() ?? null;

@@ -330,7 +330,13 @@ export function writerLeadInstructions(
   const url = lead.sourceUrl ?? notes.sourceUrl ?? "";
   const published = notes.publishedAt ?? "unknown";
   const extra = guidance.trim() ? `\n${guidance.trim()}\n` : "";
+  const hasArticle = /\nArticle text\b/.test(`\n${lead.rawSource}`);
+  const sourceRule = hasArticle
+    ? "The Article text section is the full source article. Report only facts written there. Attribute and link the source publication by name in a sentence. Do not pad, and do not add background, quotes, or figures the article does not contain."
+    : "Report only facts written in the source notes. Attribute and link the source publication by name. Do not pad.";
   return `Write a 600-to-800-word TradeFlock USA reported-news article (not a market brief, not a digest) with story-specific <h3> section heads. Never use the template headings Strategic Context, Industry & Analyst Perspectives, Financial & Macro Implications, or Forward Outlook. Under ~550 words, or only 2 to 3 skinny sections, is a hard fail and will be held. If these notes cannot support that length with attributed facts, do not stub or pad. The desk will HOLD the lead.
+
+${sourceRule}
 
 Headline: Title Case, at most 60 characters. No em dashes.
 

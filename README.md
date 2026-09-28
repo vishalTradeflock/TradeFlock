@@ -41,7 +41,8 @@ To pull the Gemini briefing stub (slug `google-s-gemini-breaks-out-and-hacks-com
 
 **Optional env vars:**
 - `NEWS_FEEDS_JSON` — JSON array that replaces the default feed list, e.g. `[{"name":"TechCrunch","url":"https://techcrunch.com/feed/","desk":"tech"}]`. Desk must be `tech`, `markets`, `ma`, `strategy`, `macro`, or `retail`. Optional feeds may set `"optional": true` and `"timeoutMs": 18000`.
-- `NEWS_LEAD_BATCH_SIZE` — how many leads to process per run (default **`2`**, max **`3`**). Cron `maxDuration` is **300s** so a default batch of two long-form drafts (writer + editor) can finish.
+- `NEWS_LEAD_BATCH_SIZE` — how many leads to **write** per run (default **`2`**, max **`3`**). Cron `maxDuration` is **300s** so a default batch of two long-form drafts (writer + editor) can finish.
+- `NEWS_LEAD_SOURCE_POOL` — how many fresh RSS items to open per run before writing (default **`12`**, max **`18`**). Thin or blocked source pages are skipped and do not use a write slot.
 - `NEWS_LEAD_DEDUPE_DAYS` — skip titles/URLs seen in this window (default `7`). Near-duplicate titles (rewritten chip-export fixtures, same story different headline) are also skipped.
 - `GEMINI_MODEL` — primary writer/editor model (default `gemini-3.6-flash`). Free-tier Flash is **20 requests/day**; a 15-minute batch of 2 long-form stories needs 4 calls per tick, or 6 when both leads need the repair pass.
 - `GEMINI_FALLBACK_MODEL` — used when the primary model returns 429 or stays busy after retries (default `gemini-3.5-flash-lite`, ~500 RPD on free tier). Set to empty to disable fallback. Enable Gemini billing (Tier 1+) if you want sustained `gemini-3.6-flash` volume.
@@ -57,7 +58,7 @@ Intake prefers a **least-recently-used desk rotation**: when several fresh leads
 
 Dedupe checks recent Supabase `articles` (normalized title, slug prefix, source URL in body) plus `processed_leads` so held stories are not retried every run. Apply the `processed_leads` table from `supabase/schema.sql` in the Supabase SQL editor. If that table is missing, intake still runs and falls back to article-only dedupe.
 
-Attribution is source name + URL + a short RSS summary in `rawSource` notes. The pipeline does not scrape article HTML.
+Before the writer runs, the cron fetches each candidate's source page (browser user agent, redirects followed, 8s timeout, 1.5MB cap) and extracts the article text. The same download supplies `og:image` when the feed did not already provide a cover. Pages that fail, are paywalled or blocked, or yield under ~350 words are skipped: no model call and no draft row. The run summary counts `fetched`, `skipped-thin`, `skipped-blocked`, `written`, `published`, and `held`. The 550-word house-style gate is unchanged. Held drafts keep a future `published_at` so they stay off the public site; Studio sets that stamp to now on publish, and does not ship the hold reason as the dek.
 
 ## Getting Started
 
