@@ -27,7 +27,7 @@ export function ArticleHeader({
   const photo = author?.avatar_url?.trim() || "";
 
   return (
-    <div className="my-6 flex flex-col justify-between gap-4 border-y border-neutral-200 py-3 sm:flex-row sm:items-center">
+    <div className="my-6 flex flex-col justify-between gap-4 border-y border-neutral-200 py-4 sm:flex-row sm:items-center">
       <div className="flex min-w-0 items-center gap-3">
         {photo ? (
           <Image

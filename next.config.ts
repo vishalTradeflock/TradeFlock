@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
+import { IMAGE_DEVICE_SIZES, IMAGE_SIZES } from "./src/lib/image-optimization";
+import { targetedNoindexHeaders } from "./src/lib/targeted-noindex";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["pdfjs-dist"],
+  async headers() {
+    return targetedNoindexHeaders();
+  },
   async redirects() {
     return [
       {
@@ -62,6 +67,8 @@ const nextConfig: NextConfig = {
     // Vercel image optimization returns 402 once the plan quota is exhausted,
     // which blanked covers site-wide. Serve every image from its own source.
     unoptimized: true,
+    deviceSizes: [...IMAGE_DEVICE_SIZES],
+    imageSizes: [...IMAGE_SIZES],
     remotePatterns: [
       {
         protocol: "https",

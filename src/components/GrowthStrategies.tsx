@@ -3,7 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { THUMB_80 } from "@/lib/image-optimization";
 import { articlePath, type ArticleListCard } from "@/lib/types";
 import { cn, formatShortDate } from "@/lib/utils";
 
@@ -57,10 +58,11 @@ function LeaderPortrait({
 }) {
   const usable = isUsableSrc(src);
   const [failed, setFailed] = useState(!usable);
-
-  useEffect(() => {
+  const [seenSrc, setSeenSrc] = useState(src);
+  if (seenSrc !== src) {
+    setSeenSrc(src);
     setFailed(!isUsableSrc(src));
-  }, [src]);
+  }
 
   if (failed) {
     return (
@@ -77,10 +79,10 @@ function LeaderPortrait({
     <Image
       src={src}
       alt={alt}
-      fill
-      sizes="80px"
+      width={THUMB_80.width}
+      height={THUMB_80.height}
       unoptimized={skipOptimizer(src)}
-      className="object-cover transition duration-300 group-hover:scale-105"
+      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
       onError={() => setFailed(true)}
     />
   );
