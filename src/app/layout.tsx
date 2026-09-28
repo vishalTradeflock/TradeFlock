@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Script from "next/script";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Playfair_Display, Source_Sans_3 } from "next/font/google";
 import { GlobalHeadCode } from "@/components/GlobalHeadCode";
 import { GlobalHeadScripts } from "@/components/GlobalHeadScripts";
@@ -73,6 +74,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         {injectPublicHead ? <GlobalHeadScripts scripts={headerScripts} /> : null}
         {children}
         <SiteFooter />
+        <SpeedInsights />
       </body>
     </html>
   );
