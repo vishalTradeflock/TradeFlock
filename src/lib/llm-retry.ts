@@ -8,6 +8,19 @@
 
 export type TransientLlmErrorKind = "busy" | "rate_limit" | "server" | "network";
 
+/** Gemini thinking tokens count against max_tokens, so a "length" finish gets one larger try. */
+export const LLM_LENGTH_RETRY_CAP = 16_384;
+
+export function isLengthFinish(finishReason: string | null | undefined): boolean {
+  return finishReason === "length" || finishReason === "MAX_TOKENS" || finishReason === "max_tokens";
+}
+
+/** Next max_tokens after a length truncation, or null when there is no room to raise it. */
+export function raisedMaxTokens(current: number): number | null {
+  if (current >= LLM_LENGTH_RETRY_CAP) return null;
+  return Math.min(LLM_LENGTH_RETRY_CAP, Math.max(current * 2, 8192));
+}
+
 /** Total tries per model, including the first call. */
 export const LLM_RETRY_MAX_ATTEMPTS = 4;
 /** Base waits before retry 1, 2, 3 (jittered ±25%). */

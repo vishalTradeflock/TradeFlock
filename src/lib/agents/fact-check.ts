@@ -1,3 +1,4 @@
+import { foldDiacritics } from "./lead-filters.ts";
 import type { LeadNotes } from "@/lib/agents/wire-hygiene";
 
 const WEEKDAYS = [
@@ -340,11 +341,12 @@ function figureFailures(articleText: string, rawSource: string): string[] {
   return failures;
 }
 
-function nameFailures(articleText: string, rawSource: string): string[] {
-  const source = stripMarkup(rawSource, false).toLowerCase();
+function nameFailures(articleHtml: string, rawSource: string): string[] {
+  const source = foldDiacritics(stripMarkup(rawSource, false)).toLowerCase();
   const failures: string[] = [];
-  for (const name of extractPersonNames(articleText)) {
-    if (source.includes(name.toLowerCase())) continue;
+  for (const name of extractPersonNames(articleHtml)) {
+    const folded = foldDiacritics(name).toLowerCase();
+    if (source.includes(folded)) continue;
     failures.push(`figures: name "${name}" is not in the source`);
   }
   return failures;
@@ -397,7 +399,9 @@ export function factCheckFailures(
   if (mode === "calendar") return [...new Set(failures)];
   failures.push(
     ...figureFailures(articleText, rawSource),
-    ...nameFailures(articleText, rawSource),
+    // Person names are checked on the body only. A Title Case headline
+    // ("Moyom Biotech Secures Cathay Capital") is not a person pair.
+    ...nameFailures(html, rawSource),
     ...datelineFailures(html, rawSource),
   );
   return [...new Set(failures)];

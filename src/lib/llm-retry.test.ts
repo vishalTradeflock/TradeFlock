@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   classifyTransientLlmError,
+  isLengthFinish,
   llmBackoffMs,
   llmRetryAfterMs,
+  raisedMaxTokens,
   withLlmRetry,
 } from "./llm-retry.ts";
 
@@ -185,5 +187,16 @@ describe("withLlmRetry", () => {
     assert.equal(calls, 3);
     assert.deepEqual(h.sleeps, [2000, 5000]);
     assert.match(h.logs.at(-1) ?? "", /time budget too low/);
+  });
+});
+
+describe("raisedMaxTokens", () => {
+  it("retries a length finish once at a higher budget and then stops", () => {
+    assert.equal(isLengthFinish("length"), true);
+    assert.equal(isLengthFinish("MAX_TOKENS"), true);
+    assert.equal(isLengthFinish("stop"), false);
+    assert.equal(raisedMaxTokens(4096), 8192);
+    assert.equal(raisedMaxTokens(8192), 16384);
+    assert.equal(raisedMaxTokens(16384), null);
   });
 });

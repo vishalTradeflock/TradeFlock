@@ -7,14 +7,19 @@ import { ARTICLE_MIN_WORDS } from "./wire-hygiene.ts";
 import { writerLeadInstructions } from "./wire-hygiene.ts";
 import {
   SOURCE_MIN_WORDS,
+  SOURCE_TOPUP_CORE_MIN,
   appendArticleText,
   classifyExtractedSource,
   countSourceWords,
   extractSourceArticle,
   fetchSourceArticle,
+  mergeSupplementalSource,
+  prepareSourceText,
   selectWritableLeads,
+  sourceIsSufficient,
   trimSourceText,
 } from "./source-article.ts";
+import { unusedSourceParagraphs } from "./wire-hygiene.ts";
 
 const fixtureDir = resolve(dirname(fileURLToPath(import.meta.url)), "fixtures");
 const articleHtml = readFileSync(resolve(fixtureDir, "source-article.html"), "utf8");
@@ -228,10 +233,153 @@ describe("source text budget", () => {
       { topic: "Acme", category: "markets", rawSource: notes, sourceUrl: "https://www.cnbc.com/story" },
       "",
     );
-    assert.match(instructions, /Report only facts written there/);
+    assert.match(instructions, /every newsworthy fact/i);
     assert.match(instructions, /Do not pad/);
+    assert.match(instructions, /650-to-850-word/);
+    assert.doesNotMatch(instructions, /HOLD the lead/);
     assert.match(instructions, /Article text/);
     assert.equal(ARTICLE_MIN_WORDS, 550);
-    assert.equal(SOURCE_MIN_WORDS, 350);
+    assert.equal(SOURCE_MIN_WORDS, 450);
+  });
+});
+
+function words(count: number, sentence: string): string {
+  const once = sentence.trim();
+  const unit = countSourceWords(once);
+  return Array.from({ length: Math.ceil(count / unit) }, () => once).join(" ");
+}
+
+describe("prepareSourceText", () => {
+  it("drops safe harbor, contacts, and the SOURCE line, and does not count About toward the gate", () => {
+    const core = words(
+      470,
+      "Moyom Biotech said Cathay Capital led a financing round that closed in New York on Monday.",
+    );
+    const about = words(160, "Moyom Biotech develops therapies for rare metabolic disease and employs scientists in Boston.");
+    const raw = [
+      "NEW YORK, Sept. 28, 2026 /PRNewswire/ -- " + core,
+      "About Moyom Biotech",
+      about,
+      "Forward-Looking Statements",
+      "This press release contains forward-looking statements that are not facts.",
+      "Media Contact",
+      "Jane Doe jane@moyom.example",
+      "SOURCE Moyom Biotech",
+      "View original content to download multimedia: https://www.prnewswire.com/moyom",
+    ].join("\n\n");
+    const prepared = prepareSourceText(raw);
+    assert.ok(prepared.coreWords >= SOURCE_MIN_WORDS);
+    assert.ok(prepared.backgroundWords > 0);
+    assert.equal(prepared.core.includes("Forward-Looking"), false);
+    assert.equal(prepared.core.includes("Jane Doe"), false);
+    assert.equal(prepared.core.includes("SOURCE Moyom"), false);
+    assert.equal(prepared.core.includes("/PRNewswire/"), false);
+    assert.equal(prepared.core.includes("View original content"), false);
+    assert.match(prepared.text, /Company background/);
+    assert.match(prepared.text, /rare metabolic disease/);
+    assert.equal(sourceIsSufficient(prepared), true);
+  });
+
+  it("keeps a sentence that happens to start with a number after About", () => {
+    const prepared = prepareSourceText(
+      "Ortiz said Acme will keep the brand. About 1,200 Northwind employees work at that office, the company said.",
+    );
+    assert.match(prepared.core, /About 1,200 Northwind employees/);
+    assert.equal(prepared.background, "");
+  });
+
+  it("tops a thin news peg up with the labelled About section instead of calling it sufficient on its own", () => {
+    const core = words(SOURCE_TOPUP_CORE_MIN + 20, "TrendAI reported a contract with a hospital group in Chicago.");
+    const about = words(300, "TrendAI builds clinical software and was founded by engineers in Austin.");
+    const prepared = prepareSourceText(`${core}\n\nAbout TrendAI\n\n${about}`);
+    assert.ok(prepared.coreWords < SOURCE_MIN_WORDS);
+    assert.ok(prepared.coreWords >= SOURCE_TOPUP_CORE_MIN);
+    assert.equal(sourceIsSufficient(prepared), true);
+    assert.match(prepared.text, /Company background/);
+  });
+
+  it("stays thin when the news peg is only a blurb plus a long About", () => {
+    const core = words(80, "TrendAI won an award.");
+    const about = words(400, "TrendAI builds clinical software and was founded by engineers in Austin.");
+    const prepared = prepareSourceText(`${core}\n\nAbout TrendAI\n\n${about}`);
+    assert.ok(prepared.coreWords < SOURCE_TOPUP_CORE_MIN);
+    assert.equal(sourceIsSufficient(prepared), false);
+  });
+});
+
+describe("second source top-up", () => {
+  it("merges one other English source on the same story when the primary page is thin", async () => {
+    const primary = words(220, "Arcadis said the Autodesk work covers project data in Amsterdam.");
+    const extra = words(260, "Autodesk said Arcadis will use Assistant on design reviews for clients.");
+    const selected = await selectWritableLeads(
+      [
+        {
+          topic: "Arcadis deepens Autodesk collaboration to accelerate AI and data-led delivery for clients",
+          rawSource: "Source: PR Newswire\nURL: https://www.example.com/arcadis-en\n\nHeadline: Arcadis",
+          sourceUrl: "https://www.example.com/arcadis-en",
+          supplementUrl: "https://www.example.com/arcadis-trade",
+        },
+      ],
+      {
+        limit: 1,
+        concurrency: 1,
+        fetchArticle: async (url) => {
+          const text = url.endsWith("/arcadis-en") ? primary : extra;
+          return {
+            ok: false,
+            reason: "thin",
+            detail: "thin",
+            wordCount: countSourceWords(text),
+            text,
+            title: "Arcadis",
+            ogImageUrl: null,
+          };
+        },
+      },
+    );
+    assert.equal(selected.leads.length, 1);
+    assert.match(selected.leads[0]?.rawSource ?? "", /Additional reporting/);
+    assert.equal(selected.stats.skippedThin, 0);
+    assert.ok(countSourceWords(mergeSupplementalSource(primary, extra)) >= SOURCE_MIN_WORDS);
+  });
+
+  it("skips a non-English article before any model call", async () => {
+    const spanish = "Arcadis profundiza su colaboración con Autodesk para acelerar el uso de la inteligencia artificial y los datos en los proyectos de sus clientes. ".repeat(40);
+    const selected = await selectWritableLeads(
+      [
+        {
+          topic: "Arcadis profundiza su colaboración con Autodesk",
+          rawSource: "Source: PR Newswire",
+          sourceUrl: "https://www.example.com/arcadis-es",
+        },
+      ],
+      {
+        limit: 1,
+        fetchArticle: async () => ({
+          ok: false,
+          reason: "non_english",
+          detail: "source article is not English",
+          wordCount: countSourceWords(spanish),
+          text: spanish,
+        }),
+      },
+    );
+    assert.equal(selected.leads.length, 0);
+    assert.equal(selected.stats.skippedNonEnglish, 1);
+    assert.equal(selected.skipped[0]?.persist, true);
+    assert.equal(selected.skipped[0]?.reason, "non_english");
+  });
+});
+
+describe("unusedSourceParagraphs", () => {
+  it("returns source paragraphs the draft has not used", () => {
+    const source = [
+      "Arcadis said the Autodesk collaboration covers project data and design reviews in Amsterdam for hospital clients.",
+      "The companies said a quality-control task that took five days now takes about half a day after the automation work.",
+    ].join("\n\n");
+    const draft = "<p>Arcadis said the Autodesk collaboration covers project data and design reviews in Amsterdam for hospital clients.</p>";
+    const unused = unusedSourceParagraphs(source, draft);
+    assert.match(unused, /half a day/);
+    assert.equal(unused.includes("hospital clients"), false);
   });
 });

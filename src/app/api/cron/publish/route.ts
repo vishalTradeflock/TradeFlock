@@ -26,7 +26,8 @@ import {
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-// Default batch is 2 long-form drafts (writer + editor). 300s covers that and the max of 3.
+// Default batch is 3 long-form drafts (writer + editor). Cap is 4. A lead is
+// deferred when less than 60s remains, so the 300s maxDuration still holds.
 export const maxDuration = 300;
 
 // Gemini calls (including retry backoff) must finish inside this budget, which
@@ -143,6 +144,7 @@ function sourceReport(
     fetched: stats.fetched,
     "skipped-thin": stats.skippedThin,
     "skipped-blocked": stats.skippedBlocked,
+    "skipped-non-english": stats.skippedNonEnglish,
     written,
     published,
     held: written - published,
@@ -246,7 +248,8 @@ async function runPipeline(request: Request) {
     minBudgetMs: MIN_LEAD_BUDGET_MS + SOURCE_ARTICLE_TIMEOUT_MS,
   });
   for (const skip of selected.skipped) {
-    const bucket = skip.reason === "thin" ? "thin" : "blocked";
+    const bucket =
+      skip.reason === "thin" ? "thin" : skip.reason === "non_english" ? "non_english" : "blocked";
     console.warn(`[publish] skip ${bucket} "${skip.lead.topic}": ${skip.detail}`);
     if (skip.persist) await markLeadProcessed(skip.lead, "held");
   }
@@ -264,7 +267,7 @@ async function runPipeline(request: Request) {
   if (selected.leads.length === 0) {
     const source = sourceReport(selected.stats, []);
     console.log(
-      `[publish] source fetched=${source.fetched} skipped-thin=${source["skipped-thin"]} skipped-blocked=${source["skipped-blocked"]} written=0 published=0 held=0`,
+      `[publish] source fetched=${source.fetched} skipped-thin=${source["skipped-thin"]} skipped-blocked=${source["skipped-blocked"]} skipped-non-english=${source["skipped-non-english"]} written=0 published=0 held=0`,
     );
     return NextResponse.json({
       ok: true,
@@ -324,7 +327,7 @@ async function runPipeline(request: Request) {
   const results = outcomes.map((outcome) => summarizeResult(outcome.lead, outcome.result));
   const source = sourceReport(selected.stats, outcomes);
   console.log(
-    `[publish] source fetched=${source.fetched} skipped-thin=${source["skipped-thin"]} skipped-blocked=${source["skipped-blocked"]} written=${source.written} published=${source.published} held=${source.held}`,
+    `[publish] source fetched=${source.fetched} skipped-thin=${source["skipped-thin"]} skipped-blocked=${source["skipped-blocked"]} skipped-non-english=${source["skipped-non-english"]} written=${source.written} published=${source.published} held=${source.held}`,
   );
 
   if (results.length === 0 && failures.length > 0) {

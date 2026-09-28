@@ -1,3 +1,5 @@
+import { foldDiacritics } from "./lead-filters.ts";
+
 export type LeadNotes = {
   sourceName: string | null;
   sourceUrl: string | null;
@@ -332,9 +334,9 @@ export function writerLeadInstructions(
   const extra = guidance.trim() ? `\n${guidance.trim()}\n` : "";
   const hasArticle = /\nArticle text\b/.test(`\n${lead.rawSource}`);
   const sourceRule = hasArticle
-    ? "The Article text section is the full source article. Report only facts written there. Attribute and link the source publication by name in a sentence. Do not pad, and do not add background, quotes, or figures the article does not contain."
-    : "Report only facts written in the source notes. Attribute and link the source publication by name. Do not pad.";
-  return `Write a 600-to-800-word TradeFlock USA reported-news article (not a market brief, not a digest) with story-specific <h3> section heads. Never use the template headings Strategic Context, Industry & Analyst Perspectives, Financial & Macro Implications, or Forward Outlook. Under ~550 words, or only 2 to 3 skinny sections, is a hard fail and will be held. If these notes cannot support that length with attributed facts, do not stub or pad. The desk will HOLD the lead.
+    ? "The Article text section is the full source. Use every newsworthy fact, figure, attributed quote, and company-background line in it. Attribute quotes. Attribute and link the source publication by name in a sentence. When the guidance supplies TradeFlock internal-link candidates, use them. Do not pad, and do not add background, quotes, figures, or people the article does not contain."
+    : "Use every newsworthy fact, figure, and attributed quote written in the source notes. Attribute and link the source publication by name. When the guidance supplies TradeFlock internal-link candidates, use them. Do not pad.";
+  return `Write a 650-to-850-word TradeFlock USA reported-news article (not a market brief, not a digest) with story-specific <h3> section heads. Never use the template headings Strategic Context, Industry & Analyst Perspectives, Financial & Macro Implications, or Forward Outlook. The piece must be at least 550 words and at least 5 substantial paragraphs. 650 to 850 words is the target. Use the source fully. Do not stub, do not pad, and do not stop short of the facts the source supports.
 
 ${sourceRule}
 
@@ -347,4 +349,23 @@ Source published timestamp (use this date and its real weekday; do not write Mon
 ${extra}
 Source notes:
 ${lead.rawSource}`;
+}
+
+/** Paragraphs whose distinctive words are mostly absent from the draft. */
+export function unusedSourceParagraphs(sourceText: string, draft: string): string {
+  const draftFolded = foldDiacritics(stripTagsForWordCount(draft)).toLowerCase();
+  const unused: string[] = [];
+  for (const paragraph of sourceText.split(/\n{2,}/)) {
+    const trimmed = paragraph.trim();
+    if (!trimmed) continue;
+    if (/^(?:company background|additional reporting)\b/i.test(trimmed)) continue;
+    const words = foldDiacritics(trimmed).toLowerCase().match(/[a-z]{5,}/g) ?? [];
+    if (words.length < 6) continue;
+    let hits = 0;
+    for (const word of words) {
+      if (draftFolded.includes(word)) hits += 1;
+    }
+    if (hits / words.length < 0.4) unused.push(trimmed);
+  }
+  return unused.join("\n\n");
 }

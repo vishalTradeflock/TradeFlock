@@ -163,6 +163,26 @@ describe("fact check", () => {
     assert.ok(failures.some((failure) => /Jane Doe/.test(failure)));
   });
 
+  it("does not treat a Title Case headline verb as a person, and folds diacritics", () => {
+    const headline = factCheckFailures(
+      "<p>Moyom Biotech said Cathay Capital led the financing round.</p>",
+      "Moyom Biotech said Cathay Capital led the financing round.",
+      { publishedAt: null },
+      "full",
+      "Moyom Biotech Secures Cathay Capital Financing",
+    );
+    assert.equal(headline.some((failure) => /Secures Cathay/.test(failure)), false);
+
+    const accent = factCheckFailures(
+      "<p>Angelica Dass showed the work in Paris.</p>",
+      "Photographer Angélica Dass showed the work in Paris.",
+      { publishedAt: null },
+      "full",
+      "Portrait Project Opens",
+    );
+    assert.equal(accent.some((failure) => /Angelica Dass/.test(failure)), false);
+  });
+
   it("rejects a non-English dateline when the source uses the English city", () => {
     const failures = factCheckFailures(
       "<p>Hambourg, Allemagne: The company showed the blade.</p>",
