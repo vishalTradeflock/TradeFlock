@@ -2,7 +2,7 @@ import { cache } from "react";
 import { exactRequestedArticleSlug } from "@/lib/article-slug-request";
 import { BIG_TAKE_LIMIT, HOME_ARTICLE_LIMIT } from "@/lib/cache";
 import { SEED_ARTICLES } from "@/lib/data/seed";
-import { assignDistinctCovers, articleCoverSrc, portraitImageUrl } from "@/lib/images";
+import { assignDistinctCovers, articleCoverSrc, portraitImageUrl, sanitizeCoverUrl } from "@/lib/images";
 import { parseArticleFaqs } from "@/lib/seo";
 import {
   isSuccessInsightsArticle,
@@ -139,13 +139,7 @@ function mapArticleRow(row: ArticleRow, includeBody: boolean): ArticleWithRelati
   return {
     ...article,
     body: includeBody ? String(row.body ?? "") : "",
-    cover_image_url: articleCoverSrc({
-      id: article.id,
-      title: article.title,
-      slug: article.slug,
-      cover_image_url: article.cover_image_url,
-      category,
-    }),
+    cover_image_url: sanitizeCoverUrl(article.cover_image_url) ?? "",
     meta_title: typeof row.meta_title === "string" && row.meta_title.trim() ? row.meta_title : null,
     meta_description:
       typeof row.meta_description === "string" && row.meta_description.trim()
@@ -859,7 +853,7 @@ export const getArticleBySlug = cache(async (slug: string) => {
   if (!seed) return null;
   return {
     ...seed,
-    cover_image_url: articleCoverSrc(seed),
+    cover_image_url: sanitizeCoverUrl(seed.cover_image_url) ?? "",
   };
 });
 

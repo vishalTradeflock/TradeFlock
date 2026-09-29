@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
+import { articleCoverSrc } from "@/lib/images";
 import { articlePath, type ArticleWithRelations } from "@/lib/types";
 import { cn, formatShortDate } from "@/lib/utils";
 
@@ -93,7 +93,6 @@ export default function LatestScroller({
 
 function LatestCard({ article }: { article: ArticleWithRelations }) {
   const src = articleCoverSrc(article);
-  const fallbackSrc = deskCoverFallback(article);
 
   return (
     <Link href={articlePath(article.slug)} className="group block">
@@ -103,7 +102,7 @@ function LatestCard({ article }: { article: ArticleWithRelations }) {
           alt={article.cover_image_alt}
           fill
           sizes="(min-width: 768px) 33vw, 100vw"
-          fallbackSrc={fallbackSrc === src ? undefined : fallbackSrc}
+          label={article.category.name}
           className="object-cover"
         />
       </div>

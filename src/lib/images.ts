@@ -87,6 +87,19 @@ export function coverIdentity(url: string) {
   return url.split("?")[0];
 }
 
+const LEGACY_STOCK_IDENTITIES = new Set(
+  [FALLBACK_COVER_IMAGE, ...EDITORIAL_COVERS].map((url) => coverIdentity(url)),
+);
+
+/**
+ * Shared desk-pool and skyscraper photos. They were stamped onto many stories,
+ * so they are not a real cover: the render path shows the neutral card instead.
+ */
+export function isLegacyStockCover(url: string | null | undefined): boolean {
+  if (typeof url !== "string" || !url.trim()) return false;
+  return LEGACY_STOCK_IDENTITIES.has(coverIdentity(url.trim()));
+}
+
 /** Stable hotlink for the Studio editor (TipTap <img src>, not next/image). */
 export function unsplashEditorSrc(url: string) {
   try {
@@ -127,7 +140,7 @@ export function decodeCoverHtmlEntities(value: string): string {
 
 /**
  * Trim, decode HTML entities, and reject empty / non-https / document URLs.
- * Never invents a host; returns null so callers can fall back to a desk Unsplash URL.
+ * Never invents a host; returns null so the render path can show the neutral card.
  */
 export function sanitizeCoverUrl(url: string | null | undefined): string | null {
   if (typeof url !== "string") return null;
@@ -154,8 +167,14 @@ export function isHttpsCoverUrl(url: string | null | undefined): url is string {
   return sanitizeCoverUrl(url) !== null;
 }
 
-export function resolveCoverImage(url: string | null | undefined): string {
-  return sanitizeCoverUrl(url) ?? FALLBACK_COVER_IMAGE;
+/**
+ * A renderable cover URL, or null. Legacy shared stock photos count as no
+ * cover so one Unsplash file cannot land on many stories.
+ */
+export function resolveCoverImage(url: string | null | undefined): string | null {
+  const sanitized = sanitizeCoverUrl(url);
+  if (!sanitized || isLegacyStockCover(sanitized)) return null;
+  return sanitized;
 }
 
 /** RSS/enclosure first, then og:image, then a deterministic desk Unsplash hotlink. */
@@ -193,12 +212,6 @@ export function shouldBypassImageOptimizer(url: string): boolean {
   }
 }
 
-export function pickEditorialCover(article: CoverSource, offset = 0) {
-  const index =
-    (article.title.length + hashKey(article.id) + offset) % EDITORIAL_COVERS.length;
-  return EDITORIAL_COVERS[index];
-}
-
 const DESK_COVER_POOLS: Record<string, readonly string[]> = {
   tech: EDITORIAL_COVERS.slice(0, 7),
   technology: EDITORIAL_COVERS.slice(0, 7),
@@ -207,7 +220,10 @@ const DESK_COVER_POOLS: Record<string, readonly string[]> = {
   leadership: EDITORIAL_COVERS.slice(20, 26),
 };
 
-/** Deterministic stand-in when a story has no usable cover — keyed by id/slug, not row index. */
+/**
+ * Publish-time stand-in only. Never pass this into SafeArticleImage or any
+ * other render path — it is a shared stock pool.
+ */
 export function deskCoverFallback(article: {
   id: string;
   title: string;
@@ -220,12 +236,12 @@ export function deskCoverFallback(article: {
   return pool[index];
 }
 
-export function articleCoverSrc(article: CoverArticleRef & { cover_image_url?: string | null }) {
-  const sanitized = sanitizeCoverUrl(article.cover_image_url);
-  if (!sanitized || sanitized === FALLBACK_COVER_IMAGE) {
-    return deskCoverFallback(article);
-  }
-  return sanitized;
+/**
+ * Cover to render for a story: its own sanitized URL, or "" (neutral card).
+ * Never substitutes a shared stock photo.
+ */
+export function articleCoverSrc(article: CoverArticleRef & { cover_image_url?: string | null }): string {
+  return resolveCoverImage(article.cover_image_url) ?? "";
 }
 
 export function isStockCoverUrl(url: string | null | undefined) {
@@ -259,32 +275,18 @@ export function portraitImageUrl(...values: unknown[]) {
   return null;
 }
 
+/**
+ * List-level guard: each story keeps its own cover. A cover identity already
+ * shown earlier in the list, or a legacy stock photo, renders as "".
+ */
 export function assignDistinctCovers<T extends CoverSource>(articles: T[]): T[] {
-  const used = new Set<string>();
-  let previous = "";
-
-  return articles.map((article, index) => {
-    const sanitized = sanitizeCoverUrl(article.cover_image_url);
-    let url =
-      !sanitized || sanitized === FALLBACK_COVER_IMAGE
-        ? pickEditorialCover(article, index)
-        : sanitized;
-    let identity = coverIdentity(url);
-
-    if (used.has(identity) || identity === previous) {
-      for (let step = 1; step <= EDITORIAL_COVERS.length; step += 1) {
-        const candidate = pickEditorialCover(article, index + step);
-        const candidateId = coverIdentity(candidate);
-        if (!used.has(candidateId) && candidateId !== previous) {
-          url = candidate;
-          identity = candidateId;
-          break;
-        }
-      }
-    }
-
-    used.add(identity);
-    previous = identity;
+  const seen = new Set<string>();
+  return articles.map((article) => {
+    const url = resolveCoverImage(article.cover_image_url);
+    if (!url) return { ...article, cover_image_url: "" };
+    const identity = coverIdentity(url);
+    if (seen.has(identity)) return { ...article, cover_image_url: "" };
+    seen.add(identity);
     return { ...article, cover_image_url: url };
   });
 }

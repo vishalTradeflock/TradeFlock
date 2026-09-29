@@ -21,7 +21,7 @@ import {
 } from "@/lib/articles";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { THUMB_96x64 } from "@/lib/image-optimization";
-import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
+import { articleCoverSrc } from "@/lib/images";
 import {
   articlePageMetadata,
   articleStructuredData,
@@ -84,7 +84,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   const currentCategory = article.category?.name?.trim() || "Tech";
   const related = await getRelatedArticles(article, 9);
   const coverSrc = articleCoverSrc(article);
-  const coverFallback = deskCoverFallback(article);
   const body = sanitizeArticleBody(article.body, {
     title: article.title,
     coverImageUrl: article.cover_image_url,
@@ -124,20 +123,18 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               shareTitle={article.title}
             />
 
-            {coverSrc ? (
-              <div className="relative my-6 aspect-[16/9] w-full overflow-hidden border border-neutral-200">
-                <SafeArticleImage
-                  src={coverSrc}
-                  alt={article.featured_image_alt?.trim() || article.cover_image_alt || article.title}
-                  fill
-                  priority
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 70vw, 850px"
-                  fallbackSrc={coverFallback === coverSrc ? undefined : coverFallback}
-                  className="object-cover transition-transform duration-500 hover:scale-[1.01]"
-                />
-              </div>
-            ) : null}
-            {showCoverCaption ? (
+            <div className="relative my-6 aspect-[16/9] w-full overflow-hidden border border-neutral-200">
+              <SafeArticleImage
+                src={coverSrc}
+                alt={article.featured_image_alt?.trim() || article.cover_image_alt || article.title}
+                fill
+                priority
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 70vw, 850px"
+                label={article.category.name}
+                className="object-cover transition-transform duration-500 hover:scale-[1.01]"
+              />
+            </div>
+            {showCoverCaption && coverSrc ? (
               <p className="mt-2 text-[11px] text-neutral-500">
                 {article.featured_image_alt?.trim() || article.cover_image_alt}
               </p>
@@ -167,7 +164,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                         width={THUMB_96x64.width}
                         height={THUMB_96x64.height}
                         loading="lazy"
-                        fallbackSrc={deskCoverFallback(item)}
+                        label={item.category.name}
                         className="h-full w-full"
                       />
                     </div>
