@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { RELATED_CARD } from "@/lib/image-optimization";
-import { articleCoverSrc, deskCoverFallback } from "@/lib/images";
+import { articleCoverSrc } from "@/lib/images";
 import type { ArticleWithRelations } from "@/lib/types";
 import { articlePath } from "@/lib/types";
 import { formatShortDate } from "@/lib/utils";
@@ -88,7 +88,6 @@ export function RelatedArticles({
       >
         {articles.map((article) => {
           const imageUrl = articleCoverSrc(article);
-          const fallbackSrc = deskCoverFallback(article);
           return (
             <Link
               key={article.id}
@@ -102,7 +101,7 @@ export function RelatedArticles({
                   width={RELATED_CARD.width}
                   height={RELATED_CARD.height}
                   loading="lazy"
-                  fallbackSrc={fallbackSrc === imageUrl ? undefined : fallbackSrc}
+                  label={article.category.name}
                   className="h-full w-full rounded-lg object-cover"
                 />
               </div>

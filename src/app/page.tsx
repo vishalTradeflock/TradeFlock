@@ -12,9 +12,6 @@ import { isSuccessInsightsArticle, onlySuccessInsights, SUCCESS_INSIGHTS_SLUG } 
 import { NAV_CATEGORIES, articlePath, type ArticleWithRelations } from "@/lib/types";
 import { formatShortDate, formatTimeAgo } from "@/lib/utils";
 
-const DEEP_DIVE_FALLBACK =
-  "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&q=80";
-
 const DESK_SCROLLER_LIMIT = 12;
 const MIDDLE_SCROLLER_LIMIT = 15;
 
@@ -137,7 +134,7 @@ export default async function Home() {
                         sizes="(min-width: 640px) 25vw, 100vw"
                         loading="lazy"
                         unoptimized
-                        fallbackSrc={DEEP_DIVE_FALLBACK}
+                        label={article.category.name}
                       />
                     </div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">
