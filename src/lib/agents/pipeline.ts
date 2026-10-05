@@ -13,9 +13,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import { completeLlmChat, isLlmQuotaError } from "@/lib/llm";
 import { resolvePublishCoverUrl } from "@/lib/agents/source-cover";
+import { leadPublishedSkipReason } from "@/lib/agents/lead-filters";
 import {
   parseLeadNotes,
   polishWireBody,
+  unsourcedNameFailures,
   wireHygieneFailures,
   writerLeadInstructions,
   type LeadNotes,
@@ -283,7 +285,14 @@ function prepareWireBody(lead: NewsLead, title: string, content: string, coverIm
     coverImageUrl,
   });
   const body = polishWireBody(sanitized, notes);
-  return { body, notes, failures: wireHygieneFailures(body, notes, lead.rawSource) };
+  return {
+    body,
+    notes,
+    failures: [
+      ...wireHygieneFailures(body, notes, lead.rawSource),
+      ...unsourcedNameFailures(body, lead.rawSource),
+    ],
+  };
 }
 
 async function publishArticle(insert: ArticleInsert) {
@@ -393,6 +402,16 @@ export async function processNewsLead(
   options: ProcessLeadOptions = {},
 ): Promise<PipelineResult> {
   const desk = resolveWriterDesk(lead.category);
+  const stale = leadPublishedSkipReason(parseLeadNotes(lead.rawSource).publishedAt);
+  if (stale) {
+    console.warn(`[pipeline] skip "${lead.topic}": ${stale}`);
+    return {
+      published: false,
+      score: 0,
+      desk,
+      reason: `Skipped — ${stale}.`,
+    };
+  }
   const minScore = options.minScore ?? PUBLISH_SCORE_MIN;
   const requireApproved = options.requireApproved ?? true;
   const draft = await draftFromWriter(desk, lead);
