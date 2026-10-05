@@ -9,6 +9,7 @@ import {
   hasDishonestRelativeDate,
   parseLeadNotes,
   polishWireBody,
+  unsourcedNameFailures,
   wireHygieneFailures,
 } from "./wire-hygiene.ts";
 
@@ -121,6 +122,38 @@ describe("polishWireBody", () => {
     );
     assert.match(html, /<h3>Forward Outlook<\/h3>/);
     assert.doesNotMatch(html, /## Forward Outlook/);
+  });
+});
+
+describe("unsourced names", () => {
+  const notes = `Source: CNBC
+URL: https://www.cnbc.com/example
+Published: 2026-10-05T05:00:00.000Z
+
+Headline: Moyom Biotech said Cathay Capital led the round
+
+Summary:
+Marc Benioff told Jim Cramer that Moyom Biotech said Cathay Capital led the financing round. Photographer Angélica Dass showed the work.`;
+
+  it("does not hold ordinary title-case phrases", () => {
+    const body = `<p>Use Airlines settled after Airlines Hit a ceiling. Faces Staff joined the Cloud Foundation. Yet Why met Than Action inside the Task Force.</p>`;
+    assert.deepEqual(unsourcedNameFailures(body, notes), []);
+  });
+
+  it("holds an invented person or company and keeps names that are in the notes", () => {
+    const body = `<p>Helena Voss said Nimbus Holdings would rival Moyom Biotech. Benioff Told Cramer the round was led by Cathay Capital. Angelica Dass attended.</p>`;
+    const failures = unsourcedNameFailures(body, notes);
+    assert.ok(failures.some((item) => item.includes("Helena Voss")));
+    assert.ok(failures.some((item) => item.includes("Nimbus Holdings")));
+    assert.equal(failures.some((item) => /Benioff|Cramer|Moyom|Cathay|Angelica Dass/.test(item)), false);
+  });
+
+  it("is part of the publish hold, not only the prompt", () => {
+    const pipeline = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "pipeline.ts"),
+      "utf8",
+    );
+    assert.match(pipeline, /unsourcedNameFailures/);
   });
 });
 
