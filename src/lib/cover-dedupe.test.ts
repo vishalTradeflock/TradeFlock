@@ -189,6 +189,47 @@ describe("pickUniqueCover (Unsplash paging)", () => {
     };
   }
 
+  it("rejects a PR Newswire company logo and falls back to the topic search", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes("/download")) return new Response("{}", { status: 200 });
+      return new Response(JSON.stringify(unsplashPage(["photo-steel-mill"])), { status: 200 });
+    }) as typeof fetch;
+    const picked = await pickUniqueCover({
+      title: "SeAH Besteel expands U.S. steel production",
+      preferred: [
+        "https://mmx.prnewswire.com/media/MS1861915/SeAH-Logo_Logo.jpg?p=original",
+        "https://mma.prnewswire.com/media/2553642/Solidion_Logo.jpg",
+        "https://mma.prnewswire.com/media/9/mark.jpg?w=400&h=400",
+      ],
+      used: new Set(),
+      accessKey: "k",
+      queries: ["steel mill production"],
+    });
+    assert.equal(picked?.source, "unsplash");
+    assert.equal(picked?.query, "steel mill production");
+    assert.match(picked?.url ?? "", /photo-steel-mill/);
+    assert.doesNotMatch(picked?.url ?? "", /logo|prnewswire/i);
+    assert.equal(calls.filter((url) => url.includes("search/photos")).length, 1);
+  });
+
+  it("still prefers a non-logo PR Newswire photograph", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("should not be called");
+    }) as typeof fetch;
+    const photo = "https://mmx.prnewswire.com/media/123/steel-mill-floor.jpg?w=1600&h=900";
+    const picked = await pickUniqueCover({
+      title: "Steel production",
+      preferred: [photo],
+      used: new Set(),
+      accessKey: "k",
+    });
+    assert.equal(picked?.source, "preferred");
+    assert.equal(picked?.url, photo);
+  });
+
   it("prefers an unused source image without calling Unsplash", async () => {
     globalThis.fetch = (async () => {
       throw new Error("should not be called");

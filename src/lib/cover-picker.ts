@@ -13,6 +13,7 @@ import {
   planCoverSearchAttempts,
   type CoverSearchContext,
 } from "./cover-dedupe.ts";
+import { isLogoLikeSourceImage } from "./source-photo.ts";
 
 const UNSPLASH_TIMEOUT_MS = 6_000;
 const UNSPLASH_PER_PAGE = 30;
@@ -233,7 +234,12 @@ export async function pickUniqueCover(input: {
   /** Ping Unsplash's download endpoint for the chosen photo (off for dry runs). */
   trackDownload?: boolean;
 }): Promise<PickedCover | null> {
-  const fromSource = pickFirstUnusedCover(input.preferred ?? [], input.used);
+  // Source photos first, but never a company logo or square brand mark.
+  // Those fall through to the topic/industry search below.
+  const preferred = (input.preferred ?? []).filter(
+    (url) => typeof url !== "string" || !isLogoLikeSourceImage(url),
+  );
+  const fromSource = pickFirstUnusedCover(preferred, input.used);
   if (fromSource) {
     input.used.add(fromSource.key);
     return { ...fromSource, source: "preferred" };

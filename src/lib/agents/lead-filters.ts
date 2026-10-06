@@ -293,8 +293,33 @@ export function isPrNewswireFeed(name: string, url: string): boolean {
   return /pr\s*newswire/i.test(name) || /prnewswire\.com/i.test(url);
 }
 
+/**
+ * Deal, financing, antitrust, regulatory, and bankruptcy news. An investor-day
+ * release that also states one of these is kept. Earnings guidance and a CEO
+ * appointment do not rescue an investor-day announcement.
+ */
+const DEAL_FINANCING_REGULATORY_RE =
+  /\b(?:acquir(?:e|es|ed|ing)(?!\s+(?:customers|users|talent|clients|skills|attention|market share))|acquisition|merger|buyout|takeover|to buy|agreed to buy|to be acquired|definitive agreement|letter of intent|business combination|take-private|go-private|divest(?:iture|s|ed|ing)?|spin-?off|tender offer|majority stake|minority stake|controlling stake|(?:financing|funding) (?:round|facility|agreement|package)|series [a-e]\b|credit facility|term loan|revolving credit|private placement|\bipo\b|initial public offering|secondary offering|bond offering|notes offering|(?:raises?|secures?|closes?|invests?|invested) \$\s?\d|antitrust|hart-scott|\bhsr\b|federal trade commission|\bftc\b|department of justice|\bdoj\b|european commission|\bcma\b|regulator(?:y)? approval|consent decree|bankruptcy|chapter 11|chapter 7)\b/i;
+
 const MATERIAL_PR_RE =
   /\b(?:acquir(?:e|es|ed|ing)(?!\s+(?:customers|users|talent|clients|skills|attention|market share))|acquisition|merger|buyout|takeover|to buy|agreed to buy|to be acquired|definitive agreement|letter of intent|business combination|take-private|go-private|divest(?:iture|s|ed|ing)?|spin-?off|tender offer|majority stake|minority stake|controlling stake|(?:financing|funding) (?:round|facility|agreement|package)|series [a-e]\b|credit facility|term loan|revolving credit|private placement|\bipo\b|initial public offering|secondary offering|bond offering|notes offering|(?:raises?|secures?|closes?|invests?|invested) \$\s?\d|antitrust|hart-scott|\bhsr\b|federal trade commission|\bftc\b|department of justice|\bdoj\b|european commission|\bcma\b|regulator(?:y)? approval|consent decree|bankruptcy|chapter 11|chapter 7|\bearnings\b|profit warning|restatement|steps down|resigns as|nam(?:es|ed) .{0,40}chief executive|appoints .{0,40}chief executive)\b/i;
+
+/**
+ * Plaintiff-firm solicitations. These often quote the underlying merger, so
+ * they match the materiality pattern and used to be kept.
+ */
+const PLAINTIFF_FIRM_RE =
+  /\b(?:bfa law|bleichmar(?:\s+fonti)?|pomerantz|rosen law|levi\s*(?:&|and)\s*kors\w*|korsinsky|robbins geller|bernstein litowitz|glancy prongay|bronstein,?\s+gewirtz|bragar eagel|schall law|kessler topaz|labaton|hagens berman|faruqi|scott\s*\+\s*scott|block\s*(?:&|and)\s*leviton|kirby mcinerney|kahn swick)\b/i;
+
+const SHAREHOLDER_SOLICITATION_RE =
+  /\b(?:shareholder alert|investor alert|legal alert|class[- ]actions?|lead plaintiff|securities law firm|securities litigation|securities fraud|on behalf of (?:[\w.'’-]+ ){0,4}(?:investors|shareholders|stockholders)|(?:shareholders|investors|stockholders)[^.]{0,80}(?:encouraged|urged|invited|notified)[^.]{0,50}\bcontact|law firm[^.]{0,80}(?:investigat\w*|shareholders?|stockholders?|investors?|class[- ]action)|(?:investigat\w*|shareholders?|class[- ]action)[^.]{0,80}law firm)\b/i;
+
+const INVESTOR_DAY_RE = /\binvestor[-\s]?days?\b/i;
+
+/** Law-firm investigation / class-action solicitation, including notices that describe a real deal. */
+export function isLawFirmShareholderNotice(text: string): boolean {
+  return PLAINTIFF_FIRM_RE.test(text) || SHAREHOLDER_SOLICITATION_RE.test(text);
+}
 
 const AWARD_PR_RE =
   /\b(?:awards?|awarded|honou?rs?|honou?red|recognition|recogniz\w+|inner circle)\b/i;
@@ -325,6 +350,11 @@ function softPr(kind: string): string {
  */
 export function prNewswireSkipReason(title: string, summary = ""): string | null {
   const text = `${title} ${summary}`.replace(/<[^>]+>/g, " ");
+  // Before the materiality keep: plaintiff notices quote the merger they are soliciting on.
+  if (isLawFirmShareholderNotice(text)) return "soft PR Newswire (law-firm shareholder notice)";
+  if (INVESTOR_DAY_RE.test(text) && !DEAL_FINANCING_REGULATORY_RE.test(text)) {
+    return "soft PR Newswire (investor day announcement)";
+  }
   if (MATERIAL_PR_RE.test(text)) return null;
   if (AWARD_PR_RE.test(text)) return softPr("award or recognition");
   if (CLINIC_PR_RE.test(text)) return softPr("local clinic or practice opening");

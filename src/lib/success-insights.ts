@@ -127,7 +127,8 @@ export function successInsightsOnly<T extends {
 /**
  * Breaking ticker selection: latest news only, capped at `limit`.
  * Drops Success Insights (desk or listicle) on every page. An empty result
- * means the caller should fall back to `getBreakingArticles`.
+ * means the caller should fall back to `getBreakingArticles`, which is the
+ * same newest editorial list the homepage ticker uses.
  */
 export function newsTickerArticles<T extends {
   category?: { slug?: string | null; name?: string | null } | null;

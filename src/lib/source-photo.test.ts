@@ -6,6 +6,7 @@ import {
   chooseSourceImage,
   evaluateSourceImage,
   extractSourceArticleUrl,
+  isLogoLikeSourceImage,
   shouldTrySourcePhoto,
   sourceImageCandidatesFromHtml,
 } from "./source-photo.ts";
@@ -90,6 +91,30 @@ describe("source image rejection", () => {
     if (!decision.ok) assert.equal(decision.reason, "duplicate");
   });
 
+  it("rejects PR Newswire logo assets, flagged logos, and square brand marks", () => {
+    const logos = [
+      "https://mmx.prnewswire.com/media/MS1861915/SeAH-Logo_Logo.jpg?id=OA2732461&p=original",
+      "https://mma.prnewswire.com/media/2553642/Solidion_Logo.jpg",
+      "https://www.prnewswire.com/content/dam/prnewswire/common/logo-prn-01_PRN.gif",
+      "https://mma.prnewswire.com/media/9/mark.jpg?w=400&h=400",
+      "https://cdn.example.com/brand.png?w=64&h=64",
+    ];
+    for (const url of logos) {
+      const decision = evaluateSourceImage(url, new Set());
+      assert.equal(decision.ok, false, url);
+      assert.equal(decision.reason, "logo", url);
+      assert.equal(isLogoLikeSourceImage(url), true, url);
+    }
+    const photo = "https://mmx.prnewswire.com/media/123/steel-mill-floor.jpg?w=1600&h=900";
+    assert.equal(isLogoLikeSourceImage(photo), false);
+    assert.equal(evaluateSourceImage(photo, new Set()).ok, true);
+    const flagged = evaluateSourceImage("https://mmx.prnewswire.com/media/9/plant.jpg", new Set(), {
+      alt: "SeAH Group Logo",
+    });
+    assert.equal(flagged.ok, false);
+    if (!flagged.ok) assert.equal(flagged.reason, "logo");
+  });
+
   it("rejects the legacy skyscraper stock photo", () => {
     const decision = evaluateSourceImage(SKYSCRAPER, new Set());
     assert.equal(decision.ok, false);
@@ -133,6 +158,33 @@ describe("source image rejection", () => {
     const chosen = chooseSourceImage(candidates, new Set());
     assert.equal(chosen?.ok, true);
     if (chosen?.ok) assert.equal(chosen.url, "https://www.npr.org/images/retail-aisle.jpg");
+  });
+
+  it("skips a flagged or square PR Newswire logo and keeps a topic photograph", () => {
+    const page = "https://www.prnewswire.com/news-releases/seah-besteel";
+    const html = `
+      <meta property="og:image" content="https://mma.prnewswire.com/media/9/mark.jpg" />
+      <meta property="og:image:width" content="400" />
+      <meta property="og:image:height" content="400" />
+      <meta property="og:image:alt" content="Solidion logo" />
+      <div class="image logo logo-wrapper">
+        <img alt="SeAH Group Logo" data-asset-label="Logo" src="https://mmx.prnewswire.com/media/MS1861915/SeAH-Logo_Logo.jpg?p=publish" width="920" height="289" />
+      </div>
+      <img src="https://cdn.example.com/square-mark.jpg" width="400" height="400" alt="Brand mark" />
+      <img src="https://cdn.example.com/steel-coil.jpg" width="1600" height="900" alt="Steel coil on a mill floor" />
+    `;
+    const candidates = sourceImageCandidatesFromHtml(html, page);
+    assert.deepEqual(candidates, ["https://cdn.example.com/steel-coil.jpg"]);
+    const chosen = chooseSourceImage(
+      [
+        "https://mmx.prnewswire.com/media/MS1861915/SeAH-Logo_Logo.jpg?p=original",
+        "https://mma.prnewswire.com/media/2553642/Solidion_Logo.jpg",
+        ...candidates,
+      ],
+      new Set(),
+    );
+    assert.equal(chosen?.ok, true);
+    if (chosen?.ok) assert.equal(chosen.url, "https://cdn.example.com/steel-coil.jpg");
   });
 });
 
@@ -197,6 +249,47 @@ describe("runCoverBackfill source photo first", () => {
     assert.doesNotMatch(report.changes[0]?.alt ?? "", /tom|cyriac|henry|nkumbe/i);
     assert.equal(updates[0]?.values.cover_image_url, GOOD_IMAGE);
     assert.equal(updates[0]?.values.cover_image_alt, report.changes[0]?.alt);
+  });
+
+  it("rejects a PR Newswire logo and falls back to the topic photo search", async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/download")) return new Response("{}", { status: 200 });
+      if (!url.includes("api.unsplash.com/search/photos")) {
+        throw new Error(`unexpected fetch ${url}`);
+      }
+      const query = new URL(url).searchParams.get("query") ?? "";
+      assert.doesNotMatch(query, /\b(seah|besteel|solidion|polar)\b/i);
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              id: "photo-steel-mill",
+              alt_description: "steel mill floor",
+              urls: { raw: "https://images.unsplash.com/photo-steel-mill" },
+              links: { download_location: "https://api.unsplash.com/photos/photo-steel-mill/download" },
+              user: { name: "P", links: { html: "https://unsplash.com/@p" } },
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+    const { client, updates } = fakeClient([shelf]);
+    const report = await runCoverBackfill(client, {
+      apply: true,
+      unsplashAccessKey: "k",
+      redoNameQueries: false,
+      rows: [shelf],
+      fetchPage: async () =>
+        htmlResponse("https://mmx.prnewswire.com/media/MS1861915/SeAH-Logo_Logo.jpg?p=original"),
+    });
+    assert.equal(report.sourcePhotos, 0);
+    assert.notEqual(report.changes[0]?.newSource, "source_photo");
+    assert.equal(report.changes[0]?.newSource, "unsplash");
+    assert.match(report.changes[0]?.newCover ?? "", /photo-steel-mill/);
+    assert.doesNotMatch(report.changes[0]?.newCover ?? "", /logo|prnewswire/i);
+    assert.match(String(updates[0]?.values.cover_image_url), /photo-steel-mill/);
   });
 
   it("keeps taking source photos after Unsplash is rate limited", async () => {
