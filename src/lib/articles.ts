@@ -971,22 +971,17 @@ export const getSuccessInsightsArchive = cache(async () => {
   return seedRows();
 });
 
+/**
+ * Latest news for the Breaking ticker (same pool as the homepage strip).
+ *
+ * Do not query `is_breaking`. The publish pipeline writes that flag false, so
+ * it stays set only on older rows. Article pages omit `tickerArticles` and
+ * fall back here; filtering on the flag kept weeks-old headlines on those
+ * pages while the homepage passed the newest editorial list. Success Insights
+ * is already excluded by `getEditorialArticles`.
+ */
 export const getBreakingArticles = cache(async () => {
-  const fetchLimit = editorialQueryLimit(5);
-  const rows = withoutSuccessInsights(
-    (await queryList({
-      breaking: true,
-      excludeSuccessInsights: true,
-      limit: fetchLimit,
-    })) ?? filterSeed({ breaking: true, excludeSuccessInsights: true, limit: fetchLimit }),
-  );
-  const source = rows.length
-    ? rows
-    : withoutSuccessInsights(
-        (await queryList({ excludeSuccessInsights: true, limit: fetchLimit })) ??
-          filterSeed({ excludeSuccessInsights: true, limit: fetchLimit }),
-      );
-  return withListCovers(source.slice(0, 3));
+  return getEditorialArticles(8);
 });
 
 export function toArticleListCard(article: ArticleWithRelations): ArticleListCard {

@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   countRealParagraphs,
@@ -274,5 +277,14 @@ describe("newsTickerArticles", () => {
 
   it("returns nothing when every story is Success Insights so the ticker can fall back to news", () => {
     assert.deepEqual(newsTickerArticles([si(1), si(2)], 8), []);
+  });
+
+  it("falls back to the newest editorial list, not rows still flagged is_breaking", () => {
+    const root = resolve(dirname(fileURLToPath(import.meta.url)), "articles.ts");
+    const source = readFileSync(root, "utf8");
+    const match = source.match(/export const getBreakingArticles = cache\(async \(\) => \{[\s\S]*?\n\}\);/);
+    assert.ok(match, "getBreakingArticles");
+    assert.match(match[0], /getEditorialArticles\(8\)/);
+    assert.doesNotMatch(match[0], /breaking:\s*true|is_breaking/);
   });
 });

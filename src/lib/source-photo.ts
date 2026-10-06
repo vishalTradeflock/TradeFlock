@@ -121,11 +121,82 @@ export function shouldTrySourcePhoto(input: SourcePageInput) {
   return !isProfileCoverStory(input.title, input.categorySlug, { slug: input.slug });
 }
 
-/** Logo, site-default, placeholder, favicon, sprite, or a known default image. */
+export type LogoImageHint = {
+  alt?: string | null;
+  width?: number | null;
+  height?: number | null;
+  /** Class, asset label, or other markup that marks the file as a logo. */
+  flaggedAsLogo?: boolean;
+};
+
+function hasLogoWord(value: string | null | undefined) {
+  return Boolean(value && /\blogos?\b/i.test(value));
+}
+
+function parsePixel(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+/**
+ * Very small icons, or square-ish brand marks that are not a large photograph.
+ * Both sides are required so a lone `?w=1` cache-buster is not treated as a logo.
+ */
+export function isBrandMarkSize(width: number | null, height: number | null) {
+  if (width == null || height == null || width <= 0 || height <= 0) return false;
+  const long = Math.max(width, height);
+  const short = Math.min(width, height);
+  if (long < 200) return true;
+  return long <= 512 && long / short <= 1.25;
+}
+
+function dimensionsFromCoverUrl(url: string): { width: number | null; height: number | null } {
+  try {
+    const parsed = new URL(url);
+    return {
+      width: parsePixel(parsed.searchParams.get("w") ?? parsed.searchParams.get("width")),
+      height: parsePixel(parsed.searchParams.get("h") ?? parsed.searchParams.get("height")),
+    };
+  } catch {
+    return { width: null, height: null };
+  }
+}
+
+/** PR Newswire / Cision logo files on the media CDN (mma and mmx). A photo on the same host is kept. */
+export function isPrNewswireLogoAssetUrl(url: string) {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  const host = parsed.hostname.toLowerCase().replace(/\.$/, "");
+  const onPrNewswire = host === "prnewswire.com" || host.endsWith(".prnewswire.com");
+  if (!onPrNewswire) return false;
+  const path = decodeURIComponent(`${parsed.pathname} ${parsed.search}`).toLowerCase();
+  return /\blogos?\b/.test(path) || /(?:^|[/_-])logos?(?:[./_-]|$)/.test(path);
+}
+
+/**
+ * Logo-like source art: the word "logo" in the filename or alt text, a PR Newswire
+ * logo asset, markup flagged as a logo, or a very small / square-ish brand mark.
+ */
+export function isLogoLikeSourceImage(url: string | null | undefined, hint?: LogoImageHint) {
+  if (hint?.flaggedAsLogo || hasLogoWord(hint?.alt)) return true;
+  if (isBrandMarkSize(hint?.width ?? null, hint?.height ?? null)) return true;
+  if (typeof url !== "string" || !url.trim()) return false;
+  const decoded = sanitizeCoverUrl(url) ?? decodeCoverHtmlEntities(url);
+  if (GENERIC_IMAGE.test(decoded) || KNOWN_DEFAULT_IMAGE.test(decoded)) return true;
+  if (isPrNewswireLogoAssetUrl(decoded)) return true;
+  const sized = dimensionsFromCoverUrl(decoded);
+  return isBrandMarkSize(sized.width, sized.height);
+}
+
+/** Logo, site-default, placeholder, favicon, sprite, brand mark, or a known default image. */
 export function isUnusableSourceImageUrl(url: string | null | undefined) {
   if (typeof url !== "string" || !url.trim()) return true;
-  const lower = url.toLowerCase();
-  if (KNOWN_DEFAULT_IMAGE.test(lower) || GENERIC_IMAGE.test(lower)) return true;
+  if (isLogoLikeSourceImage(url)) return true;
   return isLegacyStockCover(url);
 }
 
@@ -134,10 +205,14 @@ export type SourceImageDecision =
   | { ok: false; reason: "invalid" | "logo" | "legacy" | "duplicate" };
 
 /** Absolute https image that is not a default/logo, not legacy stock, and not already used. */
-export function evaluateSourceImage(url: string | null | undefined, used: ReadonlySet<string>): SourceImageDecision {
+export function evaluateSourceImage(
+  url: string | null | undefined,
+  used: ReadonlySet<string>,
+  hint?: LogoImageHint,
+): SourceImageDecision {
   const absolute = typeof url === "string" ? sanitizeCoverUrl(url) : null;
   if (!absolute) return { ok: false, reason: "invalid" };
-  if (GENERIC_IMAGE.test(absolute) || KNOWN_DEFAULT_IMAGE.test(absolute)) return { ok: false, reason: "logo" };
+  if (isLogoLikeSourceImage(absolute, hint)) return { ok: false, reason: "logo" };
   if (isLegacyStockCover(absolute)) return { ok: false, reason: "legacy" };
   const key = coverPhotoKey(absolute);
   if (!key) return { ok: false, reason: "invalid" };
@@ -197,6 +272,34 @@ function isTinyImage(tag: string) {
   return false;
 }
 
+function metaByKey(html: string, key: string): string | null {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const patterns = [
+    new RegExp(`<meta[^>]+(?:property|name)=["']${escaped}["'][^>]+content=["']([^"']+)["']`, "i"),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${escaped}["']`, "i"),
+  ];
+  for (const pattern of patterns) {
+    const value = html.match(pattern)?.[1]?.trim();
+    if (value) return decodeCoverHtmlEntities(value);
+  }
+  return null;
+}
+
+/** Class, asset label, or alt text that marks a brand mark rather than a photograph. */
+export function isFlaggedLogoTag(tag: string) {
+  const className = attr(tag, "class") ?? "";
+  if (/(?:^|\s)logos?(?:\s|$|[-_])/i.test(className)) return true;
+  const label = attr(tag, "data-asset-label") ?? "";
+  if (hasLogoWord(label)) return true;
+  return hasLogoWord(attr(tag, "alt"));
+}
+
+function hintSkipsImage(hint: LogoImageHint) {
+  return Boolean(
+    hint.flaggedAsLogo || hasLogoWord(hint.alt) || isBrandMarkSize(hint.width ?? null, hint.height ?? null),
+  );
+}
+
 /**
  * og:image, then twitter:image, then the first large `<img>`.
  * Relative URLs are resolved against the source page.
@@ -210,11 +313,17 @@ export function sourceImageCandidatesFromHtml(html: string, pageUrl: string): st
     if (found.some((item) => item.split("#")[0] === key)) return;
     found.push(absolute);
   };
-  push(metaContent(html, "og:image"));
+  const ogAlt = metaByKey(html, "og:image:alt");
+  const ogWidth = parsePixel(metaByKey(html, "og:image:width"));
+  const ogHeight = parsePixel(metaByKey(html, "og:image:height"));
+  if (!hintSkipsImage({ alt: ogAlt, width: ogWidth, height: ogHeight })) {
+    push(metaContent(html, "og:image"));
+  }
   push(metaContent(html, "twitter:image"));
   for (const tag of html.matchAll(/<img\b[^>]*>/gi)) {
     const element = tag[0];
-    if (isTinyImage(element)) continue;
+    if (isTinyImage(element) || isFlaggedLogoTag(element)) continue;
+    if (isBrandMarkSize(dimension(element, "width"), dimension(element, "height"))) continue;
     const src = attr(element, "src");
     const lazy = attr(element, "data-src");
     const preferred = src && !src.startsWith("data:") ? src : lazy;

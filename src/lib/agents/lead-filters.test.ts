@@ -258,6 +258,85 @@ describe("PR Newswire intake", () => {
     );
   });
 
+  it("drops law-firm solicitations and investor-day announcements before the writer", () => {
+    const bfa =
+      "PRTH Deal Notice: Priority Technology's $8.05 per Share Take-Private Merger Under Investigation - Shareholders Encouraged to Contact BFA Law";
+    const bfaSummary =
+      "Leading securities law firm Bleichmar Fonti & Auld LLP announces that it is investigating the pending take-private. Shareholders are encouraged to contact the firm.";
+    assert.match(prNewswireSkipReason(bfa, bfaSummary), /law-firm shareholder notice/);
+    assert.match(
+      prNewswireSkipReason(
+        "Priority Technology Legal Alert: Investors are Notified of the Ongoing Investigation into the Take Private Deal",
+        "Contact BFA Law to discuss your rights.",
+      ),
+      /law-firm shareholder notice/,
+    );
+    assert.match(
+      prNewswireSkipReason(
+        "ROSEN, A LEADING LAW FIRM, Encourages Solidion Technology Investors to Secure Counsel in a Securities Class Action",
+      ),
+      /law-firm shareholder notice/,
+    );
+    assert.match(
+      prNewswireSkipReason(
+        "Levi & Korsky Notifies Shareholders of Polar Power of a Class Action Lawsuit and Lead Plaintiff Deadline",
+      ),
+      /law-firm shareholder notice/,
+    );
+    assert.match(
+      prNewswireSkipReason(
+        "Pomerantz Law Firm Announces a Shareholder Investigation of Priority Technology on Behalf of Investors",
+        "The notice describes the company's proposed acquisition.",
+      ),
+      /law-firm shareholder notice/,
+    );
+    assert.match(
+      prNewswireSkipReason("SeAH Besteel Holdings to Host Investor Day on U.S. Steel Production"),
+      /investor day announcement/,
+    );
+    assert.match(
+      prNewswireSkipReason("Acme Hosts Its 2026 Investor Day and Reaffirms Full-Year Earnings Guidance"),
+      /investor day announcement/,
+    );
+
+    assert.equal(prNewswireSkipReason("Acme agrees to acquire Beta for $2 billion"), null);
+    assert.equal(prNewswireSkipReason("FTC sues to block the Mega Retail merger"), null);
+    assert.equal(prNewswireSkipReason("European Commission opens an antitrust review of the Mega Retail merger"), null);
+    assert.equal(prNewswireSkipReason("Acme closes a $400 million term loan"), null);
+    assert.equal(
+      prNewswireSkipReason(
+        "Acme agrees to acquire Beta for $2 billion and will present the deal at its investor day",
+      ),
+      null,
+    );
+    assert.equal(
+      prNewswireSkipReason("Acme to Host Investor Day to Announce a $400 Million Term Loan"),
+      null,
+    );
+
+    assert.match(
+      intakeSkipReason({
+        ...pr,
+        title: bfa,
+        summary: bfaSummary,
+        publishedAt: FRESH,
+        now: NOW,
+      }) ?? "",
+      /law-firm shareholder notice/,
+    );
+    assert.equal(
+      intakeSkipReason({
+        sourceName: "CNBC Finance",
+        sourceUrl: "https://www.cnbc.com/finance/",
+        title: bfa,
+        summary: bfaSummary,
+        publishedAt: FRESH,
+        now: NOW,
+      }),
+      null,
+    );
+  });
+
   it("does not apply the soft-PR rule to other wires", () => {
     assert.equal(
       intakeSkipReason({

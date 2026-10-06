@@ -42,7 +42,9 @@ export async function fetchOgImageUrl(pageUrl: string): Promise<string | null> {
  * Cover for a newly published wire story, unique across all stories:
  * RSS/enclosure → og:image from the source page → Unsplash search with
  * story-specific terms (company / topic — never a person's name), skipping any photo another
- * story already uses. Logos, site defaults, and legacy stock are rejected.
+ * story already uses. Logos — including PR Newswire `mma`/`mmx` logo assets,
+ * filenames or alt text containing "logo", and very small or square brand marks —
+ * site defaults, and legacy stock are rejected before that search.
  * Success Insights profiles skip the source photo and stay on the topic search.
  * Returns "" when nothing unused was found; the site then
  * renders the neutral branded card instead of a shared stock photo.
