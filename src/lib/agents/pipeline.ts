@@ -23,11 +23,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import { completeLlmChat, isLlmQuotaError } from "@/lib/llm";
 import { editorialDek, holdPublishedAt, withHoldNote } from "@/lib/agents/hold-copy";
+import { leadPublishedSkipReason } from "@/lib/agents/lead-filters";
 import { resolveUniquePublishCover } from "@/lib/agents/source-cover";
 import { articleSectionText, countSourceWords, SOURCE_MIN_WORDS } from "@/lib/agents/source-article";
 import {
   parseLeadNotes,
   polishWireBody,
+  unsourcedNameFailures,
   writerLeadInstructions,
   isTooShortFailure,
   unusedSourceParagraphs,
@@ -438,7 +440,21 @@ function prepareWireBody(
     related,
     factCheck: "full",
   });
-  return { body, notes, failures: assessment.failures, score: assessment.score };
+  const failures = mergeNameHolds(assessment.failures, body, lead.rawSource);
+  return { body, notes, failures, score: assessment.score };
+}
+
+/**
+ * The house-style gate already reports these via fact-check. Keep any name
+ * hold the gate did not already quote, so a two-word span still blocks publish.
+ */
+function mergeNameHolds(failures: string[], html: string, rawSource: string): string[] {
+  const extra = unsourcedNameFailures(html, rawSource).filter((failure) => {
+    const quoted = /"([^"]+)"/.exec(failure)?.[1];
+    if (!quoted) return true;
+    return !failures.some((item) => item.includes(quoted));
+  });
+  return extra.length ? [...failures, ...extra] : failures;
 }
 
 class ArticleInsertError extends Error {
@@ -683,6 +699,16 @@ export async function processNewsLead(
   options: ProcessLeadOptions = {},
 ): Promise<PipelineResult> {
   const desk = resolveWriterDesk(lead.category);
+  const stale = leadPublishedSkipReason(parseLeadNotes(lead.rawSource).publishedAt);
+  if (stale) {
+    console.warn(`[pipeline] skip "${lead.topic}": ${stale}`);
+    return {
+      published: false,
+      score: 0,
+      desk,
+      reason: `Skipped — ${stale}.`,
+    };
+  }
   const minScore = options.minScore ?? PUBLISH_SCORE_MIN;
   const requireApproved = options.requireApproved ?? true;
   const related = await loadRelatedCandidates({ topic: lead.topic, category: lead.category });

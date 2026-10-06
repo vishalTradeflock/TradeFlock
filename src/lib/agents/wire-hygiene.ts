@@ -249,6 +249,214 @@ export function hasDishonestRelativeDate(
   return true;
 }
 
+/**
+ * Everyday news words. A title-case pair is a person or company only when at
+ * least one token is outside this list ("Jane Doe", "Cathay Capital").
+ * Pairs such as "Use Airlines" or "Task Force" are not names.
+ */
+const ORDINARY_TITLE_WORDS = new Set(
+  `a an the and but or nor for on at to from by of in with as vs via over into amid after before during
+  under within without across among around since until because although however still just only even more
+  most less many much some any each every other another such same own per its his her she him our your they
+  them this that these those what when where who whom whose how why than then also not so if can may might
+  must will would could should have has had been being be do does did done say says said tell tells told
+  according expected already new next first last big small high low major top best open public private
+  national global local world home early late long short near far above below out up down off back
+  use uses used using hit hits face faces faced staff cloud foundation action task force yet
+  airlines airline air flight flights market markets price prices stock stocks share shares bond bonds
+  rate rates bank banks fund funds group groups company companies business businesses industry industries
+  sector growth profit profits revenue sales sale cost costs deal deals plan plans risk risks data week
+  weeks month months year years today yesterday tomorrow report reports survey surveys index number numbers
+  total average record records demand supply outlook forecast guidance quarter earnings margin margins
+  debt equity credit loan loans capital management partner partners system systems platform platforms
+  network networks security digital online retail consumer consumers store stores brand brands chain chains
+  club clubs portfolio
+  factory plant plants product products service services software technology team teams people worker workers
+  employee employees customer customers union government policy trade energy power oil gas fuel diesel
+  inflation economy labor jobs job wage wages payroll clinic clinics hospital patient patients doctor care
+  health healthcare medical holiday cheer pet pets shelter award awards campaign campaigns landmark landmarks
+  orange glow bullying prevention expansion opening openings launch launches research study studies paper
+  bill law rule rules court case cases suit trial fine fines fee fees tax taxes budget spending hike hikes
+  gain gains loss losses drop drops rise rises fall falls jump jumps surge slump rally crisis shock blow
+  boost push pull shift change changes trend trends view views look take takes stake stakes role roles
+  post posts seat seats vote votes election leader leaders member members panel committee board council
+  agency bureau department ministry office authority commission association institute university school
+  college center centre program programme project projects effort efforts move moves step steps call calls
+  warning alert made make makes work works run runs lead leads leave leaves stay stays remain remains
+  become becomes include includes follow follows expect expects continue continues announce announces
+  announced unveil unveils unveiled introduce introduces introduced release releases released issue issues
+  issued file files filed sue sues buy buys sell sells pay pays grow grows build builds close closes closed
+  sign signs signed agree agrees agreed pass passes fail fails miss misses beat beats slow slows join joins
+  joined weigh weighs spark sparks fuel fuels drive drives mark marks exit exits resign resigns earn earns
+  earned invite invites invited support supports enter enters entered meet meets deliver delivers develop
+  develops developed debut debuts celebrate celebrates spread spreads help helps need needs want wants
+  get gets got give gives find finds found show shows showed start starts end ends add adds added keep keeps
+  kept hold holds held cut cuts raise raises raised name names named win wins expand expands expanded
+  complete completes seek seeks offer offers see sees set sets move warn warns warned ban bans appoint
+  appoints appointed report plan seek strategic context analyst analysts perspectives financial macro
+  implications forward outlook dateline hook source press release news wire media online chief executive
+  officer president director directors governor chairman chair managing senior vice personal investing wall
+  street journal times review annual small forum congress technology technologies artificial intelligence
+  prime minister white house european central international monetary federal reserve united states america
+  american britain british england kingdom china chinese japan japanese europe european swiss germany german
+  france french india indian korea korean canada canadian global north south east west pacific london
+  washington beijing shanghai tokyo paris berlin frankfurt hamburg geneva zurich chicago boston seattle
+  dallas houston miami atlanta denver detroit dublin rome milan madrid lisbon amsterdam brussels singapore
+  sydney toronto seoul taipei dubai new york san francisco los angeles hong kong mexico city fort lauderdale
+  sao paulo buenos aires kuala lumpur tel aviv monday tuesday wednesday thursday friday saturday sunday
+  january february march april may june july august september october november december sept jan feb aug oct
+  nov dec mad money chorus growing record told saying added including inc corp corporation llc ltd plc co
+  company limited holdings holding group incorporated systems solution solutions based across about
+  investors investor shares equity yield yields decision statement speech visit agreement already knows
+  observers observer experts expert unnamed familiar matter industry legislative market participants
+  exchange securities formation regulation regulatory agenda commissioners commissioner notice session
+  topics recommendations recommendation participants officials entrepreneurs webcast remarks accredited
+  investor definition eligibility regardless float exempt offering updates proposals cited consider item
+  document forecast volumes comments relevant video archives transcript discussions posted materials facts
+  watch statutory clock started mailing headquarters private sector smaller public companies founders
+  empowering supporting innovation considerations early stage growth stage capital raising crowdfunding
+  form cap caps million billion trillion percent percentage point points basis target analysts analyst
+  quarter point chip chips week month year inflation interest economic economy energy financial services
+  management partners limited association authority agency bureau institute center centre union state city
+  names says said told holds hold leaves keeps kept raises raised cuts votes vote rises rose falls fell
+  jumps climbs bans launches appoints appointed named wins expands completes warns warning according
+  expected after before from with into about their there which while have been will quarter
+  cloud native task force inner circle farm profit recognition award awards honored honored honour
+  clinic dermatology staff faces face airlines airline use uses hit hits why yet than action
+  san francisco angeles paulo aires lumpur aviv lauderdale minneapolis edinburgh canberra wellington
+  johannesburg santiago athens riyadh warsaw vienna stockholm oslo copenhagen helsinki prague budapest
+  luxembourg manchester birmingham glasgow cardiff belfast mumbai delhi kyiv moscow cairo lagos
+  radnor austin ottawa sao hong kong fort tel`.split(/\s+/).filter(Boolean),
+);
+
+/** Place phrases that are not a person, even though neither word is generic news English. */
+const ORDINARY_TITLE_PHRASES = new Set(["silicon valley"]);
+
+const OWN_SECTION_SLUGS = new Set([
+  "tech",
+  "technology",
+  "markets",
+  "leadership",
+  "finance",
+  "business",
+  "magazine",
+  "author",
+  "studio",
+  "api",
+  "about",
+  "contact",
+  "search",
+  "success-insights",
+  "news",
+  "tag",
+  "category",
+  "privacy",
+  "terms",
+  "sitemap",
+  "media",
+  "brand",
+  "og",
+]);
+
+function isOwnStoryHref(href: string): boolean {
+  const trimmed = href.trim();
+  if (!trimmed || trimmed.startsWith("#") || /^mailto:/i.test(trimmed)) return false;
+  let pathname = trimmed.split("#")[0]?.split("?")[0] ?? "";
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const url = new URL(trimmed);
+      if (!/tradeflock/i.test(url.hostname)) return false;
+      pathname = url.pathname;
+    } catch {
+      return false;
+    }
+  } else if (!pathname.startsWith("/")) {
+    return false;
+  }
+  const parts = pathname.split("/").filter(Boolean).map((part) => {
+    try {
+      return decodeURIComponent(part).toLowerCase();
+    } catch {
+      return part.toLowerCase();
+    }
+  });
+  if (parts.length === 2 && parts[0] === "news") return /^[a-z0-9][a-z0-9-]*$/.test(parts[1] ?? "");
+  if (parts.length !== 1) return false;
+  const slug = parts[0] ?? "";
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) return false;
+  return !OWN_SECTION_SLUGS.has(slug);
+}
+
+/** Story titles inside our own links are not invented people. */
+function stripOwnStoryAnchors(html: string): string {
+  return html.replace(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi, (full, attrs: string) => {
+    const href = /href\s*=\s*["']([^"']+)["']/i.exec(attrs)?.[1] ?? "";
+    return isOwnStoryHref(href) ? " " : full;
+  });
+}
+
+function nameScanText(value: string): string {
+  return stripOwnStoryAnchors(value)
+    .replace(/<p>\s*Source:\s*[\s\S]*?<\/p>/gi, " ")
+    .replace(/<h[1-6]\b[^>]*>[\s\S]*?<\/h[1-6]>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isOrdinaryTitleToken(token: string): boolean {
+  const bare = foldDiacritics(token).toLowerCase().replace(/\.$/, "");
+  return ORDINARY_TITLE_WORDS.has(bare);
+}
+
+function isOrdinaryTitlePhrase(name: string): boolean {
+  return ORDINARY_TITLE_PHRASES.has(foldDiacritics(name).toLowerCase().replace(/\s+/g, " ").trim());
+}
+
+function sourceHasToken(foldedSource: string, token: string): boolean {
+  const folded = foldDiacritics(token).toLowerCase().replace(/\.$/, "");
+  if (!folded) return true;
+  return new RegExp(`\\b${escapeRegExp(folded)}\\b`, "i").test(foldedSource);
+}
+
+/**
+ * Two-word title case is not automatically a proper name. Generic phrases are
+ * ignored. A remaining name is unsourced only when a distinctive token is
+ * absent from the notes — the two-word span itself is often not in the source
+ * even when the person or company is ("Benioff Told").
+ */
+export function unsourcedNameFailures(html: string, rawSource: string): string[] {
+  const text = nameScanText(html);
+  const source = foldDiacritics(nameScanText(rawSource)).toLowerCase();
+  const failures: string[] = [];
+  const seen = new Set<string>();
+  const pattern = /\b([A-Z][a-z]+(?:\s+[A-Z]\.)?\s+[A-Z][a-z]+)\b/g;
+  let match: RegExpExecArray | null;
+  let previous = -1;
+
+  while ((match = pattern.exec(text))) {
+    const index = match.index ?? 0;
+    if (index <= previous) break;
+    previous = index;
+    // Step one character so "Benioff Told Cramer" also checks "Told Cramer".
+    pattern.lastIndex = index + 1;
+    const name = match[1]?.replace(/\s+/g, " ").trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    if (isOrdinaryTitlePhrase(name)) continue;
+    const tokens = name.split(" ").filter((part) => !/^[A-Z]\.$/.test(part));
+    const distinctive = tokens.filter((token) => !isOrdinaryTitleToken(token));
+    if (distinctive.length === 0) continue;
+    const missing = distinctive.some((token) => !sourceHasToken(source, token));
+    if (!missing) continue;
+    failures.push(`names not in the source: "${name}"`);
+  }
+  return failures;
+}
+
 function usedWithoutNotes(html: string, rawSource: string, pattern: RegExp): boolean {
   const match = html.match(pattern);
   if (!match) return false;

@@ -1,5 +1,4 @@
-import { foldDiacritics } from "./lead-filters.ts";
-import type { LeadNotes } from "@/lib/agents/wire-hygiene";
+import { unsourcedNameFailures, type LeadNotes } from "./wire-hygiene.ts";
 
 const WEEKDAYS = [
   "Sunday",
@@ -342,14 +341,10 @@ function figureFailures(articleText: string, rawSource: string): string[] {
 }
 
 function nameFailures(articleHtml: string, rawSource: string): string[] {
-  const source = foldDiacritics(stripMarkup(rawSource, false)).toLowerCase();
-  const failures: string[] = [];
-  for (const name of extractPersonNames(articleHtml)) {
-    const folded = foldDiacritics(name).toLowerCase();
-    if (source.includes(folded)) continue;
-    failures.push(`figures: name "${name}" is not in the source`);
-  }
-  return failures;
+  return unsourcedNameFailures(articleHtml, rawSource).map((failure) => {
+    const name = /"([^"]+)"/.exec(failure)?.[1] ?? failure;
+    return `figures: name "${name}" is not in the source`;
+  });
 }
 
 function dateFailures(

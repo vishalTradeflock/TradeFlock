@@ -4,7 +4,7 @@ export const HOLD_PUBLISHED_AT_OFFSET_MS = 365 * 24 * 60 * 60 * 1000;
 const HOLD_NOTE_RE = /<!--\s*tradeflock-hold:[\s\S]*?-->/gi;
 
 const FAILURE_PREFIX =
-  /(?:^|;\s*)(?:too_short\b|title:|slug:|headings:|voice:|source:|figures:|dates:|links:|formula-empty\b|dateline\b|invented observers|unsupported allocator|synthetic market-brief|body is missing|source notes are missing)/i;
+  /(?:^|;\s*)(?:too_short\b|title:|slug:|headings:|voice:|source:|figures:|dates:|links:|formula-empty\b|dateline\b|invented observers|unsupported allocator|synthetic market-brief|body is missing|source notes are missing|names not in the source)/i;
 
 export function holdPublishedAt(now = Date.now()): string {
   return new Date(now + HOLD_PUBLISHED_AT_OFFSET_MS).toISOString();
