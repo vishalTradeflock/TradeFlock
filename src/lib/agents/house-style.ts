@@ -410,7 +410,9 @@ function criterionFor(failure: string): StyleCriterion | null {
   if (/^source:/i.test(failure) || /source URL|source notes are missing|primary source/i.test(failure)) {
     return "source";
   }
-  if (/^figures:/i.test(failure) || /observer|allocator/i.test(failure)) return "figures";
+  if (/^figures:/i.test(failure) || /observer|allocator/i.test(failure) || /names not in the source/i.test(failure)) {
+    return "figures";
+  }
   if (/^dates:/i.test(failure) || /^dateline/i.test(failure) || /dateline uses relative/i.test(failure)) {
     return "dates";
   }

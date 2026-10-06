@@ -163,6 +163,18 @@ describe("fact check", () => {
     assert.ok(failures.some((failure) => /Jane Doe/.test(failure)));
   });
 
+  it("does not treat ordinary phrases or our own story links as invented people", () => {
+    const failures = factCheckFailures(
+      `<p>The Task Force met in Silicon Valley. See <a href="/when-lucid-slipped">When Lucid</a>, <a href="/musk-feud">Musk Feud</a>, <a href="https://www.tradeflock.net/how-patagonia-held">How Patagonia</a>, and <a href="/amid-turbulence">Amid Turbulence</a>. Jane Doe was not there.</p>`,
+      "The company reported revenue.",
+      { publishedAt: null },
+      "full",
+      "Suppliers Watch Demand",
+    );
+    assert.equal(failures.some((failure) => /Task Force|Silicon Valley|When Lucid|Musk Feud|How Patagonia|Amid Turbulence/.test(failure)), false);
+    assert.ok(failures.some((failure) => /Jane Doe/.test(failure)));
+  });
+
   it("does not treat a Title Case headline verb as a person, and folds diacritics", () => {
     const headline = factCheckFailures(
       "<p>Moyom Biotech said Cathay Capital led the financing round.</p>",

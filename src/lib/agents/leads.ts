@@ -1,6 +1,7 @@
 import { pickBalancedLeads } from "@/lib/agents/desk-balance";
 import { resolveNewsFeeds, type NewsFeed } from "@/lib/agents/feeds";
 import {
+  intakeSkipReason,
   isUsableLeadItem,
   titlesAreNearDuplicate,
   TOPIC_DEDUPE_WINDOW_MS,
@@ -223,6 +224,17 @@ async function fetchFeedXml(feed: NewsFeed): Promise<string> {
 function candidatesFromFeed(feed: NewsFeed, xml: string): Candidate[] {
   return parseFeedItems(xml).flatMap((item) => {
     if (!isUsableLeadItem(item.title, item.link, item.summary)) return [];
+    const skip = intakeSkipReason({
+      sourceName: feed.name,
+      sourceUrl: feed.url,
+      title: item.title,
+      summary: item.summary,
+      publishedAt: item.publishedAt,
+    });
+    if (skip) {
+      console.warn(`[leads] skip "${item.title}": ${skip}`);
+      return [];
+    }
     const titleKey = normalizeTitleKey(item.title);
     if (!titleKey) return [];
     return [
