@@ -261,11 +261,13 @@ describe("sitemap article URLs", () => {
 
   it("builds sitemap article URLs on www.tradeflock.net/{slug}", () => {
     const source = readFileSync(new URL("../../app/sitemap.ts", import.meta.url), "utf8");
+    const entries = readFileSync(new URL("../sitemap-entries.ts", import.meta.url), "utf8");
     assert.match(source, /const BASE_URL = PRODUCTION_ORIGIN/);
-    assert.match(source, /\$\{BASE_URL\}\/\$\{article\.slug\}/);
+    assert.match(source, /buildSitemap\([\s\S]*BASE_URL/);
+    assert.match(entries, /\$\{origin\}\/\$\{article\.slug\}/);
     assert.doesNotMatch(source, /article\.category|article\.section/);
-    assert.doesNotMatch(source, /\$\{BASE_URL\}\/news\/\$\{/);
-    assert.doesNotMatch(source, /\$\{BASE_URL\}\/tech\/\$\{/);
+    assert.doesNotMatch(`${source}\n${entries}`, /\$\{(?:BASE_URL|origin)\}\/news\/\$\{/);
+    assert.doesNotMatch(`${source}\n${entries}`, /\$\{(?:BASE_URL|origin)\}\/tech\/\$\{/);
   });
 
   it("uses first-party URLs for sitemap images", () => {
