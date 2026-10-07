@@ -1,9 +1,13 @@
+import { unstable_cache } from "next/cache";
 import { cache } from "react";
+import { PAGE_REVALIDATE_SECONDS } from "@/lib/cache";
 import { prepareGlobalHeadCode } from "@/lib/public-head";
 import { sanitizeVerificationToken } from "@/lib/studio/head-meta";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createPublicClient } from "@/lib/supabase/public";
 import { isSupabaseConfigured } from "@/lib/utils";
+
+export const SITE_SETTINGS_CACHE_TAG = "site-settings";
 
 const HEADER_SCRIPT_LIMIT = 100_000;
 
@@ -62,23 +66,57 @@ function tryAdminClient() {
   }
 }
 
+type SiteSettingsRow = {
+  header_scripts: string;
+  global_head_code: string;
+  google: string | null;
+  bing: string | null;
+};
+
+/**
+ * One service-role read for the public shell. `header_scripts` and
+ * `global_head_code` are not granted to the anon key. Cached for the same
+ * window as public pages so layout renders do not hit PostgREST each time.
+ */
+const readSiteSettingsRow = unstable_cache(
+  async (): Promise<SiteSettingsRow | null> => {
+    const admin = tryAdminClient();
+    if (!admin) return null;
+
+    const { data, error } = await admin
+      .from("site_settings")
+      .select(
+        "header_scripts, global_head_code, google_site_verification, bing_site_verification",
+      )
+      .eq("id", "default")
+      .maybeSingle();
+    if (error || !data) return null;
+
+    return {
+      header_scripts: typeof data.header_scripts === "string" ? data.header_scripts : "",
+      global_head_code: typeof data.global_head_code === "string" ? data.global_head_code : "",
+      google: sanitizeVerificationToken(
+        typeof data.google_site_verification === "string" ? data.google_site_verification : "",
+      ),
+      bing: sanitizeVerificationToken(
+        typeof data.bing_site_verification === "string" ? data.bing_site_verification : "",
+      ),
+    };
+  },
+  ["site-settings-row"],
+  { revalidate: PAGE_REVALIDATE_SECONDS, tags: [SITE_SETTINGS_CACHE_TAG] },
+);
+
+const loadSiteSettingsRow = cache(readSiteSettingsRow);
+
 /**
  * header_scripts is not selected with the anon key.
  * Rendered on public pages only via the admin/service role.
  */
 export const getHeaderScripts = cache(async (): Promise<HeaderScript[]> => {
-  const admin = tryAdminClient();
-  if (!admin) return [];
-
   try {
-    const { data, error } = await admin
-      .from("site_settings")
-      .select("header_scripts")
-      .eq("id", "default")
-      .maybeSingle();
-
-    if (error || !data) return [];
-    const raw = typeof data.header_scripts === "string" ? data.header_scripts : "";
+    const row = await loadSiteSettingsRow();
+    const raw = row?.header_scripts ?? "";
     if (!raw.trim() || raw.length > HEADER_SCRIPT_LIMIT) return [];
     return asHeaderScripts(raw);
   } catch {
@@ -95,18 +133,9 @@ export const getHeaderScripts = cache(async (): Promise<HeaderScript[]> => {
  * expose header_scripts or global_head_code through the anon PostgREST client.
  */
 export const getGlobalHeadCode = cache(async (): Promise<string> => {
-  const admin = tryAdminClient();
-  if (!admin) return "";
-
   try {
-    const { data, error } = await admin
-      .from("site_settings")
-      .select("global_head_code")
-      .eq("id", "default")
-      .maybeSingle();
-    if (error || !data) return "";
-    const raw = typeof data.global_head_code === "string" ? data.global_head_code : "";
-    const prepared = prepareGlobalHeadCode(raw);
+    const row = await loadSiteSettingsRow();
+    const prepared = prepareGlobalHeadCode(row?.global_head_code ?? "");
     return prepared.ok ? prepared.value ?? "" : "";
   } catch {
     return "";
@@ -120,6 +149,14 @@ export type SiteVerification = {
 
 export const getSiteVerification = cache(async (): Promise<SiteVerification> => {
   const empty = { google: null, bing: null };
+
+  try {
+    const row = await loadSiteSettingsRow();
+    if (row) return { google: row.google, bing: row.bing };
+  } catch {
+    /* fall through to the anon read */
+  }
+
   if (!isSupabaseConfigured()) return empty;
 
   try {

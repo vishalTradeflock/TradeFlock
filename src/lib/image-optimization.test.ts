@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { shouldBypassImageOptimizer } from "./images.ts";
 import {
+  CARD_16x9,
+  HERO_600,
   IMAGE_DEVICE_SIZES,
   IMAGE_SIZES,
   RELATED_CARD,
@@ -91,7 +93,7 @@ describe("fixed thumbs no longer use px-only sizes", () => {
   it("uses intrinsic width/height in the rail and related surfaces", () => {
     const middle = readFileSync(new URL("../components/MiddleScroller.tsx", import.meta.url), "utf8");
     const related = readFileSync(new URL("../components/RelatedArticles.tsx", import.meta.url), "utf8");
-    const article = readFileSync(new URL("../app/[slug]/page.tsx", import.meta.url), "utf8");
+    const article = readFileSync(new URL("../app/(public)/[slug]/page.tsx", import.meta.url), "utf8");
     assert.match(middle, /width=\{THUMB_64\.width\}/);
     assert.doesNotMatch(middle, /sizes="64px"/);
     assert.match(related, /width=\{RELATED_CARD\.width\}/);
@@ -99,6 +101,17 @@ describe("fixed thumbs no longer use px-only sizes", () => {
     assert.match(article, /width=\{THUMB_96x64\.width\}/);
     assert.doesNotMatch(article, /sizes="96px"/);
     assert.match(article, /sizes="\(max-width: 768px\) 100vw/);
+  });
+
+  it("keeps listing cards off the 1920 srcset slot", () => {
+    assert.deepEqual(candidateWidths({ width: CARD_16x9.width }), [384, 828]);
+    assert.deepEqual(candidateWidths({ width: HERO_600.width }), [640, 1200]);
+    const latest = readFileSync(new URL("../components/LatestScroller.tsx", import.meta.url), "utf8");
+    const desks = readFileSync(new URL("../components/CategoryFeed.tsx", import.meta.url), "utf8");
+    assert.match(latest, /width=\{CARD_16x9\.width\}/);
+    assert.doesNotMatch(latest, /sizes=/);
+    assert.match(desks, /width=\{CARD_16x9\.width\}/);
+    assert.doesNotMatch(desks, /sizes=/);
   });
 });
 

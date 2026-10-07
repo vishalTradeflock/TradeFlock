@@ -113,8 +113,8 @@ describe("authorship (F, G, H)", () => {
     const text = aiDisclosureText({ slug: "tradeflock-newsroom" });
     assert.match(text, /AI/);
     assert.match(text, /No human reviews it after that step/);
-    assert.match(read("src/app/[slug]/page.tsx"), /data-ai-disclosure/);
-    assert.match(read("src/app/standards/page.tsx"), /no human reviews a news story after the Wire Editor approves it/);
+    assert.match(read("src/app/(public)/[slug]/page.tsx"), /data-ai-disclosure/);
+    assert.match(read("src/app/(public)/standards/page.tsx"), /no human reviews a news story after the Wire Editor approves it/);
   });
 });
 

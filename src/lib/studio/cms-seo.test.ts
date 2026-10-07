@@ -216,7 +216,7 @@ describe("published slug redirect lookup order", () => {
   });
 
   it("article page checks exact redirects before getArticleBySlug", () => {
-    const page = readFileSync(new URL("../../app/[slug]/page.tsx", import.meta.url), "utf8");
+    const page = readFileSync(new URL("../../app/(public)/[slug]/page.tsx", import.meta.url), "utf8");
     const helperStart = page.indexOf("async function loadPublishedArticleOrRedirect");
     const helperEnd = page.indexOf("export async function generateMetadata");
     const helper = page.slice(helperStart, helperEnd);
@@ -340,10 +340,12 @@ describe("global head code", () => {
   });
 
   it("is wired into the root layout with indexable public robots", () => {
-    const layout = readFileSync(new URL("../../app/layout.tsx", import.meta.url), "utf8");
-    assert.doesNotMatch(layout, /SITE_ROBOTS/);
-    assert.doesNotMatch(layout, /TEMPORARY: site-wide noindex/);
-    assert.doesNotMatch(layout, /robots:/);
+    const layout = readFileSync(new URL("../../app/(public)/layout.tsx", import.meta.url), "utf8");
+    const root = readFileSync(new URL("../../app/layout.tsx", import.meta.url), "utf8");
+    assert.doesNotMatch(root, /SITE_ROBOTS/);
+    assert.doesNotMatch(root, /TEMPORARY: site-wide noindex/);
+    assert.doesNotMatch(root, /robots:/);
+    assert.doesNotMatch(root, /headers\(/);
     assert.match(layout, /GlobalHeadCode/);
     assert.match(layout, /shouldInjectGlobalHead/);
     const seo = readFileSync(new URL("../seo.ts", import.meta.url), "utf8");

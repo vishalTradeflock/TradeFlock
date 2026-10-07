@@ -118,4 +118,7 @@ export const TARGETED_NOINDEX_PATHS = [
   "/anne-marie-charest-most-empowering-women-leaders-to-watch-in-2026",
   "/crystal-e-rizzuto-most-empowering-women-leaders-to-watch-in-2026",
   "/gita-poudel-most-empowering-women-leaders-to-watch-in-2026",
+  "/jessica-crum-global-entrepreneurs-to-watch-in-2026",
+  "/prophet-braxton-vaughn-stacks-global-entrepreneurs-to-watch-in-2026",
+  "/richard-r-ramos-global-entrepreneurs-to-watch-in-2026",
 ] as const;
