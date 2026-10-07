@@ -75,14 +75,14 @@ export function authorProfilePath(slug: string | null | undefined): string | nul
 }
 
 export function bylineJobTitle(author: AuthorLike): string | null {
-  if (!bylineDisplayName(author)) return null;
+  if (!author || !bylineDisplayName(author)) return null;
   const title = cleanText(author.title);
   if (!title || containsSuppressedAuthorLabel(title)) return null;
   return title;
 }
 
 export function bylineBio(author: AuthorLike): string | null {
-  if (!bylineDisplayName(author)) return null;
+  if (!author || !bylineDisplayName(author)) return null;
   const bio = cleanText(author.bio);
   if (!bio || containsSuppressedAuthorLabel(bio)) return null;
   return bio;
