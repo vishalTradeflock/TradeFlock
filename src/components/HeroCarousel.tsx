@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import SafeArticleImage from "@/components/SafeArticleImage";
+import { HERO_600 } from "@/lib/image-optimization";
 import { articleCoverSrc } from "@/lib/images";
 import { articlePath, type ArticleWithRelations } from "@/lib/types";
 import { formatPublishedAt } from "@/lib/utils";
@@ -53,12 +54,12 @@ export default function HeroCarousel({
             key={article.id}
             src={imageUrl}
             alt={article.cover_image_alt}
-            fill
+            width={HERO_600.width}
+            height={HERO_600.height}
             priority={safeIndex === 0}
             loading={safeIndex === 0 ? undefined : "lazy"}
-            sizes="(min-width: 1024px) 50vw, 100vw"
             label={article.category.name}
-            className="object-cover transition-opacity group-hover:opacity-90"
+            className="absolute inset-0 h-full w-full object-cover transition-opacity group-hover:opacity-90"
           />
         </div>
         <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#c41e3a]">

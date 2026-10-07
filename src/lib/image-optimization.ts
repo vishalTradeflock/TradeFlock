@@ -33,6 +33,18 @@ export const RELATED_CARD = { width: 340, height: 191 } as const;
 /** GrowthStrategies portrait: 64px default, 80px from sm. */
 export const THUMB_80 = { width: 80, height: 80 } as const;
 
+/**
+ * Desk and Latest cards (~400px, 16:9). Intrinsic 1x/2x snaps to 384 and 828,
+ * not the full device list through 1920.
+ */
+export const CARD_16x9 = { width: 384, height: 216 } as const;
+
+/**
+ * Half-column heroes. 600 snaps to 640 and 1200, so the srcset does not
+ * include the 1920 article-hero slot.
+ */
+export const HERO_600 = { width: 600, height: 375 } as const;
+
 export function candidateWidths(input: { sizes?: string; width?: number }): number[] {
   const allSizes = IMAGE_ALL_SIZES;
   const deviceSizes = IMAGE_DEVICE_SIZES;

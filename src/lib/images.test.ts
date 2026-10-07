@@ -198,8 +198,8 @@ describe("render path", () => {
       new URL("../components/HeroCarousel.tsx", import.meta.url),
       new URL("../components/LatestScroller.tsx", import.meta.url),
       new URL("../components/RelatedArticles.tsx", import.meta.url),
-      new URL("../app/[slug]/page.tsx", import.meta.url),
-      new URL("../app/page.tsx", import.meta.url),
+      new URL("../app/(public)/[slug]/page.tsx", import.meta.url),
+      new URL("../app/(public)/page.tsx", import.meta.url),
     ];
     for (const file of files) {
       const source = readFileSync(file, "utf8");
