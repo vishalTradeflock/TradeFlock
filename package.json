@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test src/lib/agents/lead-filters.test.ts src/lib/sanitize-article-body.test.ts src/lib/agents/wire-hygiene.test.ts src/lib/agents/house-style.test.ts src/lib/agents/rss.test.ts src/lib/images.test.ts src/lib/image-optimization.test.ts src/lib/cover-dedupe.test.ts src/lib/cover-queries.test.ts src/lib/source-photo.test.ts src/lib/success-insights.test.ts src/lib/studio/cms-seo.test.ts src/lib/sitemap-entries.test.ts src/lib/magazine-download.test.ts src/lib/llm-retry.test.ts src/lib/agents/source-article.test.ts src/lib/agents/hold-copy.test.ts src/lib/targeted-noindex.test.ts src/lib/newsletter.test.ts src/lib/newsroom/newsroom.test.ts"
+    "test": "node --experimental-strip-types --test src/lib/agents/lead-filters.test.ts src/lib/sanitize-article-body.test.ts src/lib/agents/wire-hygiene.test.ts src/lib/agents/house-style.test.ts src/lib/agents/rss.test.ts src/lib/images.test.ts src/lib/image-optimization.test.ts src/lib/cover-dedupe.test.ts src/lib/cover-queries.test.ts src/lib/source-photo.test.ts src/lib/success-insights.test.ts src/lib/studio/cms-seo.test.ts src/lib/sitemap-entries.test.ts src/lib/magazine-download.test.ts src/lib/llm-retry.test.ts src/lib/agents/source-article.test.ts src/lib/agents/hold-copy.test.ts src/lib/targeted-noindex.test.ts src/lib/newsletter.test.ts src/lib/newsroom/newsroom.test.ts src/lib/public-read-cache.test.ts"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",

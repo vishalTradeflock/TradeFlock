@@ -1,6 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
+import { SITE_SETTINGS_CACHE_TAG } from "@/lib/site-settings";
 import {
   excerptFromHtml,
   uniqueAuthorSlug,
@@ -590,6 +591,7 @@ export async function saveSiteVerification(
     );
     if (written.error) return { ok: false, error: written.error.message };
 
+    updateTag(SITE_SETTINGS_CACHE_TAG);
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (error) {
@@ -626,6 +628,7 @@ export async function saveGlobalHeadCode(input: {
     );
     if (written.error) return { ok: false, error: written.error.message };
 
+    updateTag(SITE_SETTINGS_CACHE_TAG);
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (error) {
