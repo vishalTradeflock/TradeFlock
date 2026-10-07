@@ -1,4 +1,11 @@
-import { authorStructuredData, isHumanAuthor } from "@/lib/newsroom/authorship";
+import {
+  authorStructuredData,
+  bylineBio,
+  bylineDisplayName,
+  bylineJobTitle,
+  FALLBACK_AUTHOR_ORG_NAME,
+  articleAuthorMetadata,
+} from "@/lib/newsroom/authorship";
 import type { Metadata } from "next";
 import { firstPartyMediaUrl } from "@/lib/media-proxy";
 import { PRODUCTION_ORIGIN, getBaseUrl } from "@/lib/site-url";
@@ -272,12 +279,11 @@ export function articlePageMetadata(article: ArticleWithRelations): Metadata {
   const description = resolveSeoDescription(article.meta_description, article.excerpt);
   const url = newsArticleUrl(article.slug);
   const image = getOgImage(storyShareImage(article));
+  const authorMeta = articleAuthorMetadata(article.author, getCanonicalUrl);
   return {
     title,
     description,
-    authors: article.author.slug
-      ? [{ name: article.author.name, url: getCanonicalUrl(`/author/${article.author.slug}`) }]
-      : [{ name: article.author.name }],
+    authors: [authorMeta],
     alternates: { canonical: url },
     openGraph: {
       title,
@@ -287,7 +293,7 @@ export function articlePageMetadata(article: ArticleWithRelations): Metadata {
       siteName: SITE_NAME,
       publishedTime: article.published_at,
       modifiedTime: article.updated_at ?? article.published_at,
-      authors: [article.author.name],
+      authors: [authorMeta.name],
       images: [image],
     },
     twitter: {
@@ -454,7 +460,6 @@ export function articleStructuredData(
       "@type": "WebPage",
       "@id": canonical,
     },
-    // Persona / newsroom bylines are emitted as an Organization, never a Person.
     author: authorStructuredData(article.author, getCanonicalUrl),
     publisher: publisherRef(),
     image: [share.url],
@@ -549,23 +554,26 @@ export function authorPersonStructuredData(author: {
 }) {
   const url = getCanonicalUrl(`/author/${author.slug}`);
   const image = firstPartyMediaUrl(author.avatar_url) ?? absoluteMediaUrl(author.avatar_url);
+  const personName = bylineDisplayName(author);
+  const jobTitle = bylineJobTitle(author);
+  const bio = bylineBio(author);
+  const displayName = personName ?? FALLBACK_AUTHOR_ORG_NAME;
   return {
     "@context": "https://schema.org",
     "@graph": [
       {
-        // Persona/newsroom profiles are not people: describe them as the newsroom organisation.
-        "@type": isHumanAuthor(author) ? "Person" : "Organization",
+        "@type": personName ? "Person" : "Organization",
         "@id": `${url}#person`,
-        name: author.name,
+        name: displayName,
         url,
-        ...(author.title ? { jobTitle: author.title } : {}),
-        ...(author.bio ? { description: author.bio } : {}),
+        ...(jobTitle ? { jobTitle } : {}),
+        ...(bio ? { description: bio } : {}),
         ...(image ? { image } : {}),
         worksFor: { "@id": organizationId() },
       },
       breadcrumbListStructuredData([
         { name: "Home", path: "/" },
-        { name: author.name, path: `/author/${author.slug}` },
+        { name: displayName, path: `/author/${author.slug}` },
       ]),
     ],
   };

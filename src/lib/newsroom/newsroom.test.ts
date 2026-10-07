@@ -6,7 +6,13 @@ import { describe, it } from "node:test";
 import { checkVerdict, totalPoints, type Scores } from "./scorecard.ts";
 import { buildSignal, clusterSignals, wordCount, SIGNAL_CARD_MAX_WORDS } from "./signals.ts";
 import { can, roleForToken, NEWSROOM_ROLES } from "./roles.ts";
-import { aiDisclosureText, authorStructuredData, isHumanAuthor } from "./authorship.ts";
+import {
+  aiDisclosureText,
+  articleAuthorMetadata,
+  articleBylinePresentation,
+  authorStructuredData,
+  isHumanAuthor,
+} from "./authorship.ts";
 import { wireMode } from "./wire-mode.ts";
 import { toNewsArticleHref, rewriteInternalArticleHrefs } from "../sanitize-article-body.ts";
 
@@ -104,10 +110,97 @@ describe("authorship (F, G, H)", () => {
     assert.equal(isHumanAuthor({ slug: "tradeflock-newsroom" }), false);
     assert.equal(isHumanAuthor({ slug: "tanishka-jain", name: "Tanishka Jain" }), true);
   });
-  it("emits Organization structured data for non-human authors", () => {
-    assert.equal(authorStructuredData({ slug: "elena-vasquez", name: "Elena Vasquez" }, canon)["@type"], "Organization");
-    assert.equal(authorStructuredData(null, canon)["@type"], "Organization");
-    assert.equal(authorStructuredData({ slug: "tanishka-jain", name: "Tanishka Jain" }, canon)["@type"], "Person");
+  it("names the article byline as a Person, including desk personas", () => {
+    const personas: Array<[string, string, string?]> = [
+      ["sophia-brennan", "Sophia Brennan", "Wall Street Correspondent"],
+      ["marcus-chen", "Marcus Chen", "Leadership & Policy Correspondent"],
+      ["elena-vasquez", "Elena Vasquez", "Senior Markets Correspondent"],
+      ["james-whitaker", "James Whitaker", "Technology Editor"],
+      ["priya-nair", "Priya Nair", "Finance Reporter"],
+      ["tanishka-jain", "Tanishka Jain"],
+    ];
+    for (const [slug, name, title] of personas) {
+      const node = authorStructuredData({ slug, name, title, author_type: "persona" }, canon);
+      assert.equal(node["@type"], "Person", slug);
+      assert.equal(node.name, name, slug);
+      assert.equal(node.url, `https://www.tradeflock.net/author/${slug}`, slug);
+      if (title) assert.equal(node.jobTitle, title, slug);
+      else assert.equal(node.jobTitle, undefined, slug);
+      assert.equal(JSON.stringify(node).includes("TradeFlock Newsroom"), false);
+    }
+    const meta = articleAuthorMetadata(
+      { slug: "james-whitaker", name: "James Whitaker", title: "Technology Editor" },
+      canon,
+    );
+    assert.deepEqual(meta, {
+      name: "James Whitaker",
+      url: "https://www.tradeflock.net/author/james-whitaker",
+    });
+  });
+  it("falls back to Organization TradeFlock when the article has no byline author", () => {
+    assert.deepEqual(authorStructuredData(null, canon), {
+      "@type": "Organization",
+      name: "TradeFlock",
+      url: "https://www.tradeflock.net/",
+    });
+    assert.deepEqual(authorStructuredData({ name: "  " }, canon)["@type"], "Organization");
+    const newsroom = authorStructuredData(
+      {
+        slug: "tradeflock-newsroom",
+        name: "TradeFlock Newsroom",
+        title: "AI-assisted newsroom",
+        bio: "AI-assisted reporting by the TradeFlock desks.",
+        author_type: "organization",
+      },
+      canon,
+    );
+    assert.deepEqual(newsroom, {
+      "@type": "Organization",
+      name: "TradeFlock",
+      url: "https://www.tradeflock.net/",
+    });
+    const presented = articleBylinePresentation({
+      slug: "tradeflock-newsroom",
+      name: "TradeFlock Newsroom",
+      title: "AI-assisted newsroom",
+      bio: "AI-assisted reporting by the TradeFlock desks.",
+    });
+    assert.equal(presented.name, "TradeFlock Editorial Desk");
+    assert.equal(presented.title, null);
+    assert.equal(presented.bio, null);
+    assert.equal(presented.profilePath, null);
+    assert.equal(JSON.stringify(presented).includes("TradeFlock Newsroom"), false);
+    assert.equal(JSON.stringify(presented).includes("AI-assisted"), false);
+    assert.deepEqual(articleAuthorMetadata({ slug: "tradeflock-newsroom", name: "TradeFlock Newsroom" }, canon), {
+      name: "TradeFlock",
+    });
+  });
+  it("omits the profile url when the byline has no author slug", () => {
+    assert.deepEqual(authorStructuredData({ name: "Alex Rivera", title: "Reporter" }, canon), {
+      "@type": "Person",
+      name: "Alex Rivera",
+      jobTitle: "Reporter",
+    });
+  });
+  it("article pages do not hardcode a newsroom or AI-assisted byline", () => {
+    for (const file of [
+      "src/app/(public)/[slug]/page.tsx",
+      "src/components/ArticleHeader.tsx",
+      "src/components/ArticleAuthorCard.tsx",
+      "src/components/RelatedArticles.tsx",
+      "src/lib/seo.ts",
+    ]) {
+      const src = read(file);
+      assert.doesNotMatch(src, /TradeFlock Newsroom/, file);
+      assert.doesNotMatch(src, /AI-assisted/, file);
+    }
+    const seo = read("src/lib/seo.ts");
+    assert.match(seo, /author: authorStructuredData\(article\.author, getCanonicalUrl\)/);
+    assert.match(seo, /publisher: publisherRef\(\)/);
+    assert.match(seo, /name: SITE_NAME/);
+    assert.match(seo, /articleAuthorMetadata\(article\.author, getCanonicalUrl\)/);
+    assert.match(read("src/components/ArticleHeader.tsx"), /articleBylinePresentation/);
+    assert.match(read("src/components/ArticleAuthorCard.tsx"), /articleBylinePresentation/);
   });
   it("AI disclosure text stays available but is not rendered on article pages (paused by Vishal)", () => {
     const text = aiDisclosureText({ slug: "tradeflock-newsroom" });
