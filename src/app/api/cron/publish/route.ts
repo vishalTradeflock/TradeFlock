@@ -12,11 +12,8 @@ import {
   SOURCE_ARTICLE_TIMEOUT_MS,
   type SourceSelection,
 } from "@/lib/agents/source-article";
-import {
-  processNewsLead,
-  publishHighestScoringHold,
-  type PipelineResult,
-} from "@/lib/agents/pipeline";
+import { processNewsLead, type PipelineResult } from "@/lib/agents/pipeline";
+import { runSignalDesk, wireMode } from "@/lib/newsroom/signal-desk";
 import {
   isLlmQuotaError,
   isLlmUnavailableError,
@@ -52,13 +49,6 @@ function isAuthorized(request: Request) {
   if (!secret) return false;
   const header = request.headers.get("authorization");
   return header === `Bearer ${secret}`;
-}
-
-function shouldForcePublish(request: Request) {
-  const force = new URL(request.url).searchParams.get("force");
-  const forceParam = force === "true" || force === "1";
-  if (forceParam) return true;
-  return process.env.NODE_ENV === "development" && process.env.VERCEL_ENV !== "production";
 }
 
 function shouldUseTestLead() {
@@ -117,23 +107,6 @@ async function runLead(lead: IncomingLead): Promise<LeadOutcome> {
   return { lead, result };
 }
 
-async function applyForcePublish(outcomes: LeadOutcome[]) {
-  if (outcomes.some((outcome) => outcome.result.published)) return { outcomes, forcePublished: false };
-
-  const forced = await publishHighestScoringHold(outcomes);
-  if (!forced) return { outcomes, forcePublished: false };
-
-  await markLeadProcessed(forced.lead as IncomingLead, "published");
-  return {
-    forcePublished: true,
-    outcomes: outcomes.map((outcome) =>
-      outcome.lead.topic === forced.lead.topic && outcome.lead.rawSource === forced.lead.rawSource
-        ? { lead: outcome.lead, result: forced.result }
-        : outcome,
-    ),
-  };
-}
-
 function sourceReport(
   stats: SourceSelection<IncomingLead>["stats"],
   outcomes: LeadOutcome[],
@@ -167,7 +140,17 @@ async function runPipeline(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const force = shouldForcePublish(request);
+  // Phase 0: the wire is the Signal Desk. Default (and production) mode writes
+  // signal cards only: no writer, no editor, no article rows, no publish.
+  const mode = wireMode();
+  if (mode === "signals") {
+    return NextResponse.json(await runSignalDesk());
+  }
+  // WIRE_MODE=publish is the legacy writer path kept for transition only. It
+  // can no longer publish: approved copy is saved as a draft (see
+  // commitVerdict in pipeline.ts) and the DB editorial gate refuses any
+  // publish without a Wire Editor verdict. There is no force path.
+  const force = false;
 
   if (shouldUseTestLead()) {
     if (await leadWasRecentlySeen(TEST_LEAD)) {
@@ -180,11 +163,7 @@ async function runPipeline(request: Request) {
       });
     }
 
-    let outcome = await runLead(TEST_LEAD);
-    if (force && !outcome.result.published) {
-      const forced = await applyForcePublish([outcome]);
-      outcome = forced.outcomes[0] ?? outcome;
-    }
+    const outcome = await runLead(TEST_LEAD);
 
     return NextResponse.json({
       ok: true,
@@ -197,11 +176,7 @@ async function runPipeline(request: Request) {
   const intake = await collectFreshLeads(leadSourcePoolSize());
   if (intake.leads.length === 0) {
     if (process.env.VERCEL_ENV !== "production" && !(await leadWasRecentlySeen(TEST_LEAD))) {
-      let outcome = await runLead(TEST_LEAD);
-      if (force && !outcome.result.published) {
-        const forced = await applyForcePublish([outcome]);
-        outcome = forced.outcomes[0] ?? outcome;
-      }
+      const outcome = await runLead(TEST_LEAD);
       return NextResponse.json({
         ok: true,
         mode: "rss",
@@ -317,12 +292,6 @@ async function runPipeline(request: Request) {
     console.warn(`[publish] time budget low; deferred ${deferred.length} lead(s) to the next run`);
   }
 
-  let forcePublished = false;
-  if (force && outcomes.length > 0) {
-    const forced = await applyForcePublish(outcomes);
-    forcePublished = forced.forcePublished;
-    outcomes.splice(0, outcomes.length, ...forced.outcomes);
-  }
 
   const results = outcomes.map((outcome) => summarizeResult(outcome.lead, outcome.result));
   const source = sourceReport(selected.stats, outcomes);
@@ -384,7 +353,6 @@ async function runPipeline(request: Request) {
     ok: true,
     mode: "rss",
     force,
-    ...(forcePublished ? { reason: "force_published_highest_score" } : {}),
     ...(quotaExhausted ? { reason: "llm_quota_exhausted" } : {}),
     intake: intakeSummary,
     source,

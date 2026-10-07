@@ -1,0 +1,24 @@
+name: Signal Desk
+
+# Ingests RSS + primary sources (SEC EDGAR 8-K, Federal Reserve) into
+# story_signals. Never writes or publishes articles.
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+jobs:
+  signals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Run Signal Desk
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -m 150 -X GET "https://tradeflock-usa-nine.vercel.app/api/cron/signals" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+          body=$(echo "$response" | sed '$d')
+          status=$(echo "$response" | tail -n 1)
+          echo "Response Body: $body"
+          echo "Status Code: $status"
+          if [ "$status" -ne 200 ]; then exit 1; fi
+          echo "$body" | grep -q '"published":0' || { echo "Signal Desk must never publish"; exit 1; }

@@ -29,6 +29,7 @@ import {
   storyShareImage,
 } from "@/lib/seo";
 import { articlePath, sectionPath, RESERVED_ROOT_SLUGS } from "@/lib/types";
+import { aiDisclosureText } from "@/lib/newsroom/authorship";
 
 export const revalidate = 120;
 export const dynamicParams = true;
@@ -147,6 +148,14 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               dangerouslySetInnerHTML={{ __html: body }}
             />
 
+            {article.magazine_id || article.category.slug === "success-insights" ? null : (
+              <p className="mt-8 border-t border-neutral-200 pt-4 text-xs leading-relaxed text-neutral-500" data-ai-disclosure>
+                {aiDisclosureText(article.author)}{" "}
+                <Link href="/standards" className="underline">
+                  Editorial standards
+                </Link>
+              </p>
+            )}
             <ArticleAuthorCard author={article.author} />
             <ArticleFaqAccordion faqs={article.faqs ?? []} />
           </article>

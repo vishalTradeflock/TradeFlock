@@ -1,4 +1,3 @@
-import { revalidatePath } from "next/cache";
 import { formatFactBrief } from "@/lib/agents/fact-check";
 import { assessWireArticle, keywordSlug, slugShapeFailures, toTitleCase } from "@/lib/agents/house-style";
 import {
@@ -16,7 +15,7 @@ import {
   type RelatedCandidate,
 } from "@/lib/agents/related-articles";
 import { sanitizeCoverUrl } from "@/lib/images";
-import { isCoverUniqueViolation, loadUsedCoverKeys } from "@/lib/cover-picker";
+import { loadUsedCoverKeys } from "@/lib/cover-picker";
 import { allocateArticleSlug, sanitizeSlug } from "@/lib/studio/slug";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -91,8 +90,6 @@ export type ProcessLeadOptions = {
   requireApproved?: boolean;
 };
 
-/** Floor for ?force=1. Hygiene (source link, dating, invented observers, market-brief voice, length) still blocks publish. */
-export const FORCE_PUBLISH_SCORE_MIN = 6;
 
 /**
  * Writer output must fit a 650–850 word HTML article. Gemini thinking tokens
@@ -114,13 +111,16 @@ const SITE_CATEGORY: Record<WriterDesk, string> = {
   retail: "finance",
 };
 
+// Phase 1: no persona bylines. Every wire/desk draft carries the organisation
+// author; the DB gate also refuses persona authors on publish.
+const NEWSROOM_AUTHOR_SLUG = "tradeflock-newsroom";
 const DESK_AUTHOR: Record<WriterDesk, string> = {
-  tech: "james-whitaker",
-  markets: "elena-vasquez",
-  ma: "sophia-brennan",
-  strategy: "marcus-chen",
-  macro: "elena-vasquez",
-  retail: "priya-nair",
+  tech: NEWSROOM_AUTHOR_SLUG,
+  markets: NEWSROOM_AUTHOR_SLUG,
+  ma: NEWSROOM_AUTHOR_SLUG,
+  strategy: NEWSROOM_AUTHOR_SLUG,
+  macro: NEWSROOM_AUTHOR_SLUG,
+  retail: NEWSROOM_AUTHOR_SLUG,
 };
 
 function isEditorVerdict(value: unknown): value is EditorVerdict {
@@ -381,33 +381,6 @@ async function resolveAuthorId(
   return author.id;
 }
 
-function toArticleRow(input: {
-  slug: string;
-  title: string;
-  excerpt: string;
-  body: string;
-  category_id: string;
-  author_id: string;
-  cover_image_url: string;
-}): ArticleInsert {
-  return {
-    slug: input.slug,
-    title: input.title,
-    dek: input.excerpt,
-    excerpt: input.excerpt,
-    body: input.body,
-    cover_image_url: input.cover_image_url,
-    cover_image_alt: input.title,
-    category_id: input.category_id,
-    author_id: input.author_id,
-    is_featured: false,
-    is_breaking: false,
-    view_count: 0,
-    status: "published",
-    published_at: new Date().toISOString(),
-  };
-}
-
 function leadNotes(lead: NewsLead): LeadNotes {
   const notes = parseLeadNotes(lead.rawSource);
   return {
@@ -457,58 +430,6 @@ function mergeNameHolds(failures: string[], html: string, rawSource: string): st
   return extra.length ? [...failures, ...extra] : failures;
 }
 
-class ArticleInsertError extends Error {
-  code?: string;
-  constructor(error: { message: string; code?: string }) {
-    super(error.message);
-    this.name = "ArticleInsertError";
-    this.code = error.code;
-  }
-}
-
-async function insertArticle(insert: ArticleInsert) {
-  const admin = createAdminClient();
-  const withStatus = await admin.from("articles").insert(insert).select("slug").single();
-
-  if (!withStatus.error) {
-    return withStatus.data.slug;
-  }
-
-  const statusUnknown =
-    withStatus.error.message.includes("status") ||
-    withStatus.error.message.includes("schema cache");
-
-  if (!statusUnknown) {
-    throw new ArticleInsertError(withStatus.error);
-  }
-
-  const { status, ...withoutStatus } = insert;
-  void status;
-  const fallback = await admin.from("articles").insert(withoutStatus).select("slug").single();
-  if (fallback.error) {
-    throw new ArticleInsertError(fallback.error);
-  }
-  return fallback.data.slug;
-}
-
-/**
- * Insert; if the DB cover index says another story grabbed the same image in
- * the meantime (concurrent publish), pick another unused cover and retry.
- */
-async function publishArticle(insert: ArticleInsert, repickCover?: () => Promise<string>) {
-  let row = insert;
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await insertArticle(row);
-    } catch (err) {
-      const coverTaken =
-        err instanceof ArticleInsertError && isCoverUniqueViolation({ code: err.code, message: err.message });
-      if (!coverTaken || !repickCover || attempt >= 2) throw err;
-      row = { ...row, cover_image_url: await repickCover() };
-    }
-  }
-}
-
 async function commitVerdict(
   lead: NewsLead,
   desk: WriterDesk,
@@ -517,7 +438,6 @@ async function commitVerdict(
 ): Promise<PipelineResult> {
   const admin = createAdminClient();
   const title = verdict.editedTitle.trim();
-  const excerpt = verdict.excerpt.trim().slice(0, 280);
   const slug = await uniquePublishSlug(admin, verdict.editedSlug, title);
   const notes = leadNotes(lead);
   const [categoryId, authorId, usedCovers] = await Promise.all([
@@ -546,30 +466,21 @@ async function commitVerdict(
     return held;
   }
 
-  await publishArticle(
-    toArticleRow({
-      slug,
-      title,
-      excerpt,
-      body: prepared.body,
-      category_id: categoryId,
-      author_id: authorId,
-      cover_image_url: coverImageUrl,
-    }),
-    async () => pickCover(await loadUsedCoverKeys(admin)),
-  );
-
-  revalidatePath("/");
-  revalidatePath(`/${slug}`);
-  revalidatePath("/[slug]", "page");
-  revalidatePath("/success-insights");
-
+  // Phase 1: the wire never publishes. Even in WIRE_MODE=publish the approved
+  // copy is saved as a draft for the owning desk; it can only go live after a
+  // reporting packet and a Wire Editor PUBLISH verdict (DB editorial gate).
+  void categoryId;
+  void authorId;
+  void coverImageUrl;
+  const reason = "Wire copy saved as draft only: needs a reporting packet and a Wire Editor PUBLISH verdict.";
+  await trySaveHeldDraft(lead, desk, verdict, prepared.body, [reason]);
   return {
-    published: true,
-    slug,
-    title,
+    published: false,
     score: prepared.score,
     desk,
+    title,
+    reason,
+    verdict: { ...verdict, approved: false, editedContent: prepared.body },
   };
 }
 
@@ -826,51 +737,4 @@ export async function processNewsLead(
   }
 
   return { ...(await commitVerdict(lead, desk, verdict, related)), wordCounts };
-}
-
-export async function publishHighestScoringHold(
-  outcomes: { lead: NewsLead; result: PipelineResult }[],
-  floor = FORCE_PUBLISH_SCORE_MIN,
-): Promise<{ lead: NewsLead; result: PipelineResult } | null> {
-  const ranked = outcomes
-    .filter(
-      (
-        outcome,
-      ): outcome is {
-        lead: NewsLead;
-        result: Extract<PipelineResult, { published: false }> & { verdict: EditorVerdict };
-      } =>
-        !outcome.result.published &&
-        Boolean(outcome.result.verdict) &&
-        outcome.result.score >= floor,
-    )
-    .sort((a, b) => b.result.score - a.result.score);
-
-  for (const winner of ranked) {
-    const verdict = winner.result.verdict;
-    const related = await loadRelatedCandidates({
-      topic: winner.lead.topic,
-      category: winner.lead.category,
-    });
-    const prepared = prepareWireBody(
-      winner.lead,
-      verdict.editedTitle.trim(),
-      verdict.editedSlug || keywordSlug(verdict.editedTitle),
-      verdict.editedContent,
-      "",
-      related,
-    );
-    if (prepared.failures.length) continue;
-    const desk = winner.result.desk;
-    const published = await commitVerdict(
-      winner.lead,
-      desk,
-      { ...verdict, editedContent: prepared.body },
-      related,
-    );
-    if (!published.published) continue;
-    return { lead: winner.lead, result: published };
-  }
-
-  return null;
 }

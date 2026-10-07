@@ -195,6 +195,9 @@ export function toNewsArticleHref(href: string) {
 
   try {
     const url = new URL(trimmed, "https://www.tradeflock.net");
+    // Only same-site links are rewritten; external URLs are left untouched.
+    const isRelative = !/^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !trimmed.startsWith("//");
+    if (!isRelative && !new RegExp(`^${SITE_HOSTS}$`, "i").test(url.hostname)) return trimmed;
     const desk = `${url.pathname}`.replace(/\/+$/, "") || "/";
     const match = desk.match(new RegExp(`^\\/(${DESK_SLUGS})\\/([a-z0-9][a-z0-9-]*)$`, "i"));
     if (match?.[2]) return `/${match[2]}`;

@@ -1,3 +1,4 @@
+import { authorStructuredData, isHumanAuthor } from "@/lib/newsroom/authorship";
 import type { Metadata } from "next";
 import { firstPartyMediaUrl } from "@/lib/media-proxy";
 import { PRODUCTION_ORIGIN, getBaseUrl } from "@/lib/site-url";
@@ -453,13 +454,8 @@ export function articleStructuredData(
       "@type": "WebPage",
       "@id": canonical,
     },
-    author: {
-      "@type": "Person",
-      name: article.author?.name?.trim() || "TradeFlock Editorial Desk",
-      ...(article.author?.slug
-        ? { url: getCanonicalUrl(`/author/${article.author.slug}`) }
-        : {}),
-    },
+    // Persona / newsroom bylines are emitted as an Organization, never a Person.
+    author: authorStructuredData(article.author, getCanonicalUrl),
     publisher: publisherRef(),
     image: [share.url],
     isPartOf: { "@id": websiteId() },
@@ -557,7 +553,8 @@ export function authorPersonStructuredData(author: {
     "@context": "https://schema.org",
     "@graph": [
       {
-        "@type": "Person",
+        // Persona/newsroom profiles are not people: describe them as the newsroom organisation.
+        "@type": isHumanAuthor(author) ? "Person" : "Organization",
         "@id": `${url}#person`,
         name: author.name,
         url,
