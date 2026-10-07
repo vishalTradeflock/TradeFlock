@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { RELATED_CARD, RELATED_CARD_SIZES, RELATED_CARD_WIDTHS } from "@/lib/image-optimization";
 import { articleCoverSrc } from "@/lib/images";
+import { articleBylinePresentation } from "@/lib/newsroom/authorship";
 import type { ArticleWithRelations } from "@/lib/types";
 import { articlePath } from "@/lib/types";
 import { formatShortDate } from "@/lib/utils";
@@ -116,7 +117,7 @@ export function RelatedArticles({
               <p className="mt-1.5 text-[11px] text-neutral-500">
                 {formatShortDate(article.published_at)}
                 <span className="mx-1.5">·</span>
-                {article.author.name}
+                {articleBylinePresentation(article.author).name}
               </p>
             </Link>
           );

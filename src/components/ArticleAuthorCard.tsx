@@ -1,9 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { Author } from "@/lib/types";
-import { authorPath } from "@/lib/authors";
-
-const DESK_NAME = "TradeFlock Editorial Desk";
+import { articleBylinePresentation } from "@/lib/newsroom/authorship";
 
 function initials(name: string) {
   const parts = name.split(/\s+/).filter(Boolean);
@@ -12,9 +10,10 @@ function initials(name: string) {
 }
 
 export function ArticleAuthorCard({ author }: { author: Author | null | undefined }) {
-  const name = author?.name?.trim() || DESK_NAME;
-  const designation = author?.title?.trim() || "";
-  const bio = author?.bio?.trim() || "";
+  const byline = articleBylinePresentation(author);
+  const name = byline.name;
+  const designation = byline.title ?? "";
+  const bio = byline.bio ?? "";
   const photo = author?.avatar_url?.trim() || "";
 
   return (
@@ -37,9 +36,9 @@ export function ArticleAuthorCard({ author }: { author: Author | null | undefine
         </span>
       )}
       <div className="min-w-0">
-        {author?.slug ? (
+        {byline.profilePath ? (
           <h2 className="font-serif text-lg font-bold text-neutral-900">
-            <Link href={authorPath(author.slug)} className="hover:text-[#c41e3a]">
+            <Link href={byline.profilePath} className="hover:text-[#c41e3a]">
               {name}
             </Link>
           </h2>

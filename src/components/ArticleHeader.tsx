@@ -1,11 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArticleBylineActions } from "@/components/ArticleBylineActions";
-import { authorPath } from "@/lib/authors";
 import type { Author } from "@/lib/types";
+import { articleBylinePresentation } from "@/lib/newsroom/authorship";
 import { formatPublishedAt } from "@/lib/utils";
-
-const DESK_NAME = "TradeFlock Editorial Desk";
 
 function initials(name: string) {
   const parts = name.split(/\s+/).filter(Boolean);
@@ -22,8 +20,9 @@ export function ArticleHeader({
   publishedAt: string;
   shareTitle: string;
 }) {
-  const name = author?.name?.trim() || DESK_NAME;
-  const designation = author?.title?.trim() || "";
+  const byline = articleBylinePresentation(author);
+  const name = byline.name;
+  const designation = byline.title ?? "";
   const photo = author?.avatar_url?.trim() || "";
 
   return (
@@ -48,8 +47,8 @@ export function ArticleHeader({
         )}
         <div className="min-w-0">
           <p className="font-semibold text-neutral-950">
-            {author?.slug ? (
-              <Link href={authorPath(author.slug)} className="hover:text-[#c41e3a]">
+            {byline.profilePath ? (
+              <Link href={byline.profilePath} className="hover:text-[#c41e3a]">
                 {name}
               </Link>
             ) : (
