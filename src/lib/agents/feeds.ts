@@ -49,6 +49,14 @@ export const DEFAULT_NEWS_FEEDS: readonly NewsFeed[] = [
     desk: "macro",
   },
   {
+    // Phase 1 primary source: current 8-K filings (Signal Desk only; filings
+    // become signal cards for a desk, never articles by themselves).
+    name: "SEC EDGAR 8-K",
+    url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&company=&dateb=&owner=include&start=0&count=40&output=atom",
+    desk: "markets",
+    optional: true,
+  },
+  {
     name: "SEC Press Releases",
     url: "https://www.sec.gov/news/pressreleases.rss",
     desk: "markets",

@@ -15,7 +15,7 @@ export const revalidate = 120;
 const VALUES = [
   {
     title: "Accuracy first",
-    body: "Facts, figures, and attributions are checked against independent research and named sources before a story leaves the desk.",
+    body: "News stories are reported from the primary sources they cite and checked by the Wire Editor, an AI editing assistant, before they publish. Our standards page explains how AI is used.",
   },
   {
     title: "Useful, not ornamental",

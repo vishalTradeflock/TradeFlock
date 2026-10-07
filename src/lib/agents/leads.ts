@@ -11,6 +11,8 @@ import type { NewsLead } from "@/lib/agents/pipeline";
 import { resolveWriterDesk, type WriterDesk } from "@/lib/agents/prompts";
 import { parseFeedItems } from "@/lib/agents/rss";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { newsroomDb } from "@/lib/newsroom/db";
+import { classifyEvent, clusterKeyFor, extractEntities } from "@/lib/newsroom/signals";
 
 const FEED_TIMEOUT_MS = 12_000;
 const SUMMARY_LIMIT = 700;
@@ -69,6 +71,8 @@ type RecentTopic = {
 };
 
 type TakenKeys = {
+  /** entity|event_type keys with an open story_claims owner (Phase 1). */
+  claimedClusters?: Set<string>;
   titleKeys: Set<string>;
   urls: Set<string>;
   slugs: string[];
@@ -301,10 +305,39 @@ async function loadTakenKeys(sinceIso: string): Promise<TakenKeys> {
     }
   }
 
-  return { titleKeys, urls, slugs, recentTopics };
+  // Phase 1: signals already on the board and open desk claims also count as
+  // taken, so the same event is not re-surfaced while a desk owns it.
+  const claimedClusters = new Set<string>();
+  try {
+    const db = newsroomDb();
+    const [signals, claims] = await Promise.all([
+      db.from("story_signals").select("title, title_key, normalized_url, created_at").gte("created_at", sinceIso).limit(1000),
+      db.from("story_claims").select("entity, event_type").in("claim_status", ["open", "packet_filed"]).limit(1000),
+    ]);
+    for (const row of signals.data ?? []) {
+      if (row.title_key) titleKeys.add(row.title_key);
+      if (row.normalized_url) urls.add(row.normalized_url);
+      const at = Date.parse(row.created_at);
+      if (row.title && Number.isFinite(at)) recentTopics.push({ title: row.title, at });
+    }
+    for (const row of claims.data ?? []) {
+      claimedClusters.add(clusterKeyFor(row.entity, row.event_type, ""));
+    }
+  } catch (err) {
+    // Tables not migrated yet: fall back to article/processed_leads dedupe.
+    console.warn(`[leads] newsroom dedupe skipped: ${err instanceof Error ? err.message : err}`);
+  }
+
+  return { titleKeys, urls, slugs, recentTopics, claimedClusters };
 }
 
 function isTaken(candidate: Candidate, taken: TakenKeys): boolean {
+  if (taken.claimedClusters?.size) {
+    const text = `${candidate.title}. ${candidate.summary}`;
+    const entity = extractEntities(text)[0] ?? null;
+    const key = clusterKeyFor(entity, classifyEvent(text), candidate.titleKey);
+    if (taken.claimedClusters.has(key)) return true;
+  }
   if (taken.titleKeys.has(candidate.titleKey)) return true;
   if (taken.urls.has(candidate.normalizedUrl)) return true;
 
