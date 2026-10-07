@@ -109,11 +109,11 @@ describe("authorship (F, G, H)", () => {
     assert.equal(authorStructuredData(null, canon)["@type"], "Organization");
     assert.equal(authorStructuredData({ slug: "tanishka-jain", name: "Tanishka Jain" }, canon)["@type"], "Person");
   });
-  it("AI disclosure names the Wire Editor as an AI and the final gate", () => {
+  it("AI disclosure text stays available but is not rendered on article pages (paused by Vishal)", () => {
     const text = aiDisclosureText({ slug: "tradeflock-newsroom" });
     assert.match(text, /AI/);
     assert.match(text, /No human reviews it after that step/);
-    assert.match(read("src/app/(public)/[slug]/page.tsx"), /data-ai-disclosure/);
+    assert.doesNotMatch(read("src/app/(public)/[slug]/page.tsx"), /data-ai-disclosure|aiDisclosureText/);
     assert.match(read("src/app/(public)/standards/page.tsx"), /no human reviews a news story after the Wire Editor approves it/);
   });
 });
