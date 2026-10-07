@@ -1,83 +1,99 @@
 import type { MetadataRoute } from "next";
 import { SEED_ARTICLES } from "@/lib/data/seed";
-import { getMagazines } from "@/lib/magazines";
-import { sitemapNewsPath } from "@/lib/sitemap-urls";
+import { SEED_MAGAZINES } from "@/lib/data/seed-magazines";
+import {
+  buildSitemap,
+  isUndefinedColumn,
+  SITEMAP_MAX_URLS,
+  sourceOrFallback,
+  type SitemapArticleRow,
+  type SitemapMagazineRow,
+} from "@/lib/sitemap-entries";
 import { PRODUCTION_ORIGIN } from "@/lib/site-url";
 import { createPublicClient } from "@/lib/supabase/public";
 import { isSupabaseConfigured } from "@/lib/utils";
 
 export const revalidate = 86400;
+/** Headroom for a slow article page if the platform default is only a few seconds. */
+export const maxDuration = 60;
 
 const BASE_URL = PRODUCTION_ORIGIN;
 const PAGE_SIZE = 1000;
-/** Leave headroom under the 50,000 URL sitemap cap so this can split later. */
-const MAX_URLS = 45_000;
+/** One PostgREST call. Parallel pages share this budget; a hang must not outlive the function. */
+const SITEMAP_QUERY_TIMEOUT_MS = 8_000;
+const PAGE_BATCH = 3;
 
-const DAILY_PATHS = [
-  "/",
-  "/tech",
-  "/markets",
-  "/leadership",
-  "/finance",
-  "/success-insights",
-] as const;
+type SelectMode = "full" | "published" | "slug";
 
-const WEEKLY_PATHS = ["/magazine", "/magazine/all"] as const;
-const MONTHLY_PATHS = ["/about", "/contact"] as const;
-
-type SitemapRow = {
-  slug: string;
-  updated_at?: string | null;
-  published_at?: string | null;
+type PageResult = {
+  rows: SitemapArticleRow[];
+  error: { code?: string; message?: string } | null;
 };
 
-function absoluteUrl(path: string) {
-  if (!path || path === "/") return BASE_URL;
-  const pathname = path.startsWith("/") ? path : `/${path}`;
-  return `${BASE_URL}${pathname}`;
+function logSitemapFailure(source: string, error: unknown) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
+          typeof error.message === "string"
+        ? error.message
+        : "request failed";
+  console.error(`[sitemap] ${source} unavailable (${message})`);
 }
 
-function toIso(value?: string | Date | null) {
-  if (!value) return new Date().toISOString();
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+function seedArticles(): SitemapArticleRow[] {
+  return SEED_ARTICLES.map((article) => ({
+    slug: article.slug,
+    updated_at: article.published_at,
+    published_at: article.published_at,
+  }));
 }
 
-function staticPages(): MetadataRoute.Sitemap {
-  const nowIso = toIso(new Date());
-  return [
-    ...DAILY_PATHS.map((path) => ({
-      url: absoluteUrl(path),
-      lastModified: nowIso,
-      changeFrequency: "daily" as const,
-      priority: path === "/" ? 1.0 : 0.8,
-    })),
-    ...WEEKLY_PATHS.map((path) => ({
-      url: absoluteUrl(path),
-      lastModified: nowIso,
-      changeFrequency: "weekly" as const,
-      priority: 0.8,
-    })),
-    ...MONTHLY_PATHS.map((path) => ({
-      url: absoluteUrl(path),
-      lastModified: nowIso,
-      changeFrequency: "monthly" as const,
-      priority: 0.4,
-    })),
-  ];
+function seedMagazines(): SitemapMagazineRow[] {
+  return SEED_MAGAZINES.filter((magazine) => magazine.status !== "draft").map((magazine) => ({
+    slug: magazine.slug,
+    published_at: magazine.published_at,
+    status: magazine.status,
+  }));
 }
 
-async function paginatePublishedArticles(): Promise<SitemapRow[]> {
-  const supabase = createPublicClient();
-  const rows: SitemapRow[] = [];
-  let from = 0;
-  let selectMode: "full" | "published" | "slug" = "full";
+function articleRows(
+  data:
+    | {
+        slug: string | null;
+        updated_at?: string | null;
+        published_at?: string | null;
+      }[]
+    | null,
+): SitemapArticleRow[] {
+  const rows: SitemapArticleRow[] = [];
+  for (const row of data ?? []) {
+    if (typeof row.slug !== "string" || !row.slug) continue;
+    rows.push({
+      slug: row.slug,
+      updated_at: row.updated_at,
+      published_at: row.published_at,
+    });
+  }
+  return rows;
+}
 
-  while (from < MAX_URLS) {
-    const rangeEnd = from + PAGE_SIZE - 1;
-    let page: SitemapRow[] = [];
+function downgradeSelect(mode: SelectMode): SelectMode | null {
+  if (mode === "full") return "published";
+  if (mode === "published") return "slug";
+  return null;
+}
 
-    if (selectMode === "full") {
+async function fetchArticlePage(
+  supabase: ReturnType<typeof createPublicClient>,
+  mode: SelectMode,
+  from: number,
+): Promise<PageResult> {
+  const rangeEnd = from + PAGE_SIZE - 1;
+  try {
+    if (mode === "full") {
       const { data, error } = await supabase
         .from("articles")
         .select("slug, updated_at, published_at")
@@ -85,16 +101,10 @@ async function paginatePublishedArticles(): Promise<SitemapRow[]> {
         .not("slug", "is", null)
         .order("published_at", { ascending: false })
         .range(from, rangeEnd);
-      if (error) {
-        selectMode = "published";
-        continue;
-      }
-      page = (data ?? []).map((row) => ({
-        slug: row.slug,
-        updated_at: row.updated_at,
-        published_at: row.published_at,
-      }));
-    } else if (selectMode === "published") {
+      if (error) return { rows: [], error };
+      return { rows: articleRows(data), error: null };
+    }
+    if (mode === "published") {
       const { data, error } = await supabase
         .from("articles")
         .select("slug, published_at")
@@ -102,78 +112,130 @@ async function paginatePublishedArticles(): Promise<SitemapRow[]> {
         .not("slug", "is", null)
         .order("published_at", { ascending: false })
         .range(from, rangeEnd);
-      if (error) {
-        selectMode = "slug";
-        continue;
-      }
-      page = (data ?? []).map((row) => ({
-        slug: row.slug,
-        published_at: row.published_at,
-      }));
-    } else {
-      const { data, error } = await supabase
-        .from("articles")
-        .select("slug")
-        .eq("status", "published")
-        .not("slug", "is", null)
-        .range(from, rangeEnd);
-      if (error || !data) break;
-      page = data.map((row) => ({ slug: row.slug }));
+      if (error) return { rows: [], error };
+      return { rows: articleRows(data), error: null };
     }
-
-    if (!page.length) break;
-    for (const row of page) {
-      if (row.slug) rows.push(row);
-    }
-    if (page.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
+    const { data, error } = await supabase
+      .from("articles")
+      .select("slug")
+      .eq("status", "published")
+      .not("slug", "is", null)
+      .range(from, rangeEnd);
+    if (error) return { rows: [], error };
+    return { rows: articleRows(data), error: null };
+  } catch (error) {
+    return {
+      rows: [],
+      error: { message: error instanceof Error ? error.message : "article query failed" },
+    };
   }
-
-  return rows;
 }
 
-async function publishedArticles(): Promise<SitemapRow[]> {
-  if (!isSupabaseConfigured()) {
-    return SEED_ARTICLES.map((article) => ({
-      slug: article.slug,
-      updated_at: article.published_at,
-      published_at: article.published_at,
-    }));
+/**
+ * Pages of published articles. A transport failure keeps rows already loaded.
+ * Only a missing column downgrades the select; timeouts do not fan out into
+ * extra queries that can run past the function limit.
+ */
+async function paginatePublishedArticles(): Promise<{ rows: SitemapArticleRow[]; failed: boolean }> {
+  const supabase = createPublicClient({ timeoutMs: SITEMAP_QUERY_TIMEOUT_MS });
+  const rows: SitemapArticleRow[] = [];
+  let from = 0;
+  let selectMode: SelectMode = "full";
+
+  while (from < SITEMAP_MAX_URLS) {
+    const starts: number[] = [];
+    for (let index = 0; index < PAGE_BATCH && from + index * PAGE_SIZE < SITEMAP_MAX_URLS; index += 1) {
+      starts.push(from + index * PAGE_SIZE);
+    }
+    const pages = await Promise.all(
+      starts.map((start) => fetchArticlePage(supabase, selectMode, start)),
+    );
+    if (pages.some((page) => page.error && isUndefinedColumn(page.error))) {
+      const next = downgradeSelect(selectMode);
+      if (!next) return { rows, failed: true };
+      selectMode = next;
+      continue;
+    }
+
+    for (const page of pages) {
+      if (page.error) return { rows, failed: true };
+      rows.push(...page.rows);
+      if (page.rows.length < PAGE_SIZE) return { rows, failed: false };
+    }
+    from += starts.length * PAGE_SIZE;
   }
 
+  return { rows, failed: false };
+}
+
+async function publishedArticles(): Promise<SitemapArticleRow[]> {
+  if (!isSupabaseConfigured()) return seedArticles();
   try {
-    return await paginatePublishedArticles();
-  } catch {
-    return [];
+    const { rows, failed } = await paginatePublishedArticles();
+    if (failed && rows.length === 0) return seedArticles();
+    if (failed) logSitemapFailure("articles", { message: "partial article page" });
+    return rows;
+  } catch (error) {
+    logSitemapFailure("articles", error);
+    return seedArticles();
+  }
+}
+
+async function publishedMagazines(): Promise<SitemapMagazineRow[]> {
+  if (!isSupabaseConfigured()) return seedMagazines();
+  try {
+    const supabase = createPublicClient({ timeoutMs: SITEMAP_QUERY_TIMEOUT_MS });
+    const full = await supabase
+      .from("magazines")
+      .select("slug, published_at, status")
+      .order("published_at", { ascending: false })
+      .limit(1000);
+    if (!full.error) {
+      return (full.data ?? []).map((row) => ({
+        slug: row.slug,
+        published_at: row.published_at,
+        status: row.status,
+      }));
+    }
+    if (!isUndefinedColumn(full.error)) {
+      logSitemapFailure("magazines", full.error);
+      return seedMagazines();
+    }
+
+    const narrow = await supabase
+      .from("magazines")
+      .select("slug, published_at")
+      .order("published_at", { ascending: false })
+      .limit(1000);
+    if (narrow.error) {
+      logSitemapFailure("magazines", narrow.error);
+      return seedMagazines();
+    }
+    return (narrow.data ?? []).map((row) => ({
+      slug: row.slug,
+      published_at: row.published_at,
+    }));
+  } catch (error) {
+    logSitemapFailure("magazines", error);
+    return seedMagazines();
   }
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [articles, magazines] = await Promise.all([
-    publishedArticles(),
-    getMagazines(),
-  ]);
-
-  const articleEntries: MetadataRoute.Sitemap = [];
-  for (const article of articles) {
-    const path = sitemapNewsPath(article.slug);
-    if (!path) continue;
-    articleEntries.push({
-      url: `${BASE_URL}/${article.slug}`,
-      lastModified: toIso(article.updated_at || article.published_at),
-      changeFrequency: "weekly",
-      priority: 0.7,
-    });
+  try {
+    const [articlesResult, magazinesResult] = await Promise.allSettled([
+      publishedArticles(),
+      publishedMagazines(),
+    ]);
+    if (articlesResult.status === "rejected") logSitemapFailure("articles", articlesResult.reason);
+    if (magazinesResult.status === "rejected") logSitemapFailure("magazines", magazinesResult.reason);
+    return buildSitemap(
+      sourceOrFallback(articlesResult, seedArticles()),
+      sourceOrFallback(magazinesResult, seedMagazines()),
+      BASE_URL,
+    );
+  } catch (error) {
+    logSitemapFailure("route", error);
+    return buildSitemap(seedArticles(), seedMagazines(), BASE_URL);
   }
-
-  const magazineEntries: MetadataRoute.Sitemap = magazines
-    .filter((magazine) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(magazine.slug))
-    .map((magazine) => ({
-      url: `${BASE_URL}/magazine/${magazine.slug}`,
-      lastModified: toIso(magazine.published_at),
-      changeFrequency: "weekly" as const,
-      priority: 0.7,
-    }));
-
-  return [...staticPages(), ...articleEntries, ...magazineEntries].slice(0, MAX_URLS);
 }
