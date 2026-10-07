@@ -1,0 +1,28 @@
+name: Chief of Staff Triage
+
+# Triage story_signals into desk claims ~3x a day: 08:00, 12:30, 16:30
+# America/New_York (cron is UTC and set for EDT; runs an hour earlier in EST).
+# Never writes or publishes articles.
+on:
+  schedule:
+    - cron: "0 12 * * *"
+    - cron: "30 16 * * *"
+    - cron: "30 20 * * *"
+  workflow_dispatch:
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Run triage
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -m 150 -X GET "https://tradeflock-usa-nine.vercel.app/api/cron/triage" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+          body=$(echo "$response" | sed '$d')
+          status=$(echo "$response" | tail -n 1)
+          echo "Response Body: $body"
+          echo "Status Code: $status"
+          if [ "$status" -ne 200 ]; then exit 1; fi
+          echo "$body" | grep -q '"published":0' || { echo "Triage must never publish"; exit 1; }
+          echo "$body" | grep -q '"articlesCreated":0' || { echo "Triage must never create articles"; exit 1; }

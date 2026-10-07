@@ -64,7 +64,10 @@ export async function handleGet(request: Request, resource: string) {
   );
   const status = url.searchParams.get("status");
   if (status) query = query.eq(resource === "claims" ? "claim_status" : resource === "verdicts" ? "decision" : "status", status);
-  const desk = url.searchParams.get("desk");
+  // Desk notification: GET /api/newsroom/claims?desk=mine&status=open with a desk token.
+  const deskParam = url.searchParams.get("desk");
+  const desk = deskParam === "mine" ? deskForRole(auth.role) : deskParam;
+  if (deskParam === "mine" && !desk) return json(400, { error: "desk=mine needs a desk or features token" });
   if (desk && resource !== "signals") query = query.eq("desk", desk);
   const { data, error } = await query;
   if (error) return json(500, { error: error.message });
