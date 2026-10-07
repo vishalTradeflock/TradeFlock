@@ -1,6 +1,11 @@
 import { cache } from "react";
 import { exactRequestedArticleSlug } from "@/lib/article-slug-request";
-import { BIG_TAKE_LIMIT, HOME_ARTICLE_LIMIT } from "@/lib/cache";
+import {
+  BIG_TAKE_LIMIT,
+  editorialQueryLimit,
+  HOME_ARTICLE_LIMIT,
+  publishedAtCutoff,
+} from "@/lib/cache";
 import { SEED_ARTICLES } from "@/lib/data/seed";
 import { assignDistinctCovers, articleCoverSrc, portraitImageUrl, sanitizeCoverUrl } from "@/lib/images";
 import { parseArticleFaqs } from "@/lib/seo";
@@ -249,7 +254,7 @@ async function queryList(options: ListQuery): Promise<ArticleWithRelations[] | n
       .from("articles")
       .select(select)
       .eq("status", "published")
-      .lte("published_at", new Date().toISOString())
+      .lte("published_at", publishedAtCutoff())
       .order(order, { ascending: false })
       .limit(limit);
 
@@ -309,10 +314,6 @@ function isSuccessInsightsDesk(slugOrName?: string) {
   const raw = slugOrName?.trim().toLowerCase() ?? "";
   if (!raw) return false;
   return raw === SUCCESS_INSIGHTS_SLUG || raw === SUCCESS_INSIGHTS_NAME.toLowerCase();
-}
-
-function editorialQueryLimit(limit: number) {
-  return Math.min(Math.max(limit * 2, limit + 80), 400);
 }
 
 const getSuccessInsightsCategoryIds = cache(async () => {
@@ -477,7 +478,7 @@ export const getArticlesLinkedToMagazine = cache(async (magazine: {
 
   try {
     const supabase = createPublicClient();
-    const rows = await articlesLinkedByMagazineId(supabase, magazineId, new Date().toISOString());
+    const rows = await articlesLinkedByMagazineId(supabase, magazineId, publishedAtCutoff());
     return sortMagazineHonorees(mapMagazineArticles(rows));
   } catch {
     return [];
@@ -498,7 +499,7 @@ export const getArticlesByMagazineId = cache(async (magazine: {
 
   try {
     const supabase = createPublicClient();
-    const now = new Date().toISOString();
+    const now = publishedAtCutoff();
     const byId = new Map<string, unknown>();
 
     const remember = (rows: unknown[] | null | undefined) => {
@@ -766,7 +767,7 @@ export async function getArticleSlugs() {
       .from("articles")
       .select("slug")
       .eq("status", "published")
-      .lte("published_at", new Date().toISOString())
+      .lte("published_at", publishedAtCutoff())
       .order("published_at", { ascending: false })
       .limit(LIST_LIMIT);
 
@@ -784,7 +785,7 @@ async function fetchArticleBySlugFromSupabase(cleanSlug: string) {
 
   try {
     const supabase = createPublicClient();
-    const now = new Date().toISOString();
+    const now = publishedAtCutoff();
 
     const exact = await supabase
       .from("articles")
@@ -918,7 +919,7 @@ export const getSuccessInsightsArchive = cache(async () => {
 
   try {
     const supabase = createPublicClient();
-    const now = new Date().toISOString();
+    const now = publishedAtCutoff();
     const { data, error } = await supabase
       .from("articles")
       .select(ARCHIVE_SELECT)
@@ -999,11 +1000,10 @@ export function toArticleListCard(article: ArticleWithRelations): ArticleListCar
 
 export const getRelatedArticles = cache(async (article: ArticleWithRelations, limit = 9) => {
   const excludeSuccessInsights = !isSuccessInsightsArticle(article);
-  const fetchLimit = excludeSuccessInsights ? editorialQueryLimit(limit) : limit;
+  const fetchLimit = excludeSuccessInsights ? editorialQueryLimit(limit) : limit + 1;
   const sameDeskRaw =
     (await queryList({
       categoryId: article.category_id,
-      excludeId: article.id,
       excludeSuccessInsights,
       limit: fetchLimit,
     })) ??
@@ -1014,13 +1014,12 @@ export const getRelatedArticles = cache(async (article: ArticleWithRelations, li
       limit: fetchLimit,
     });
   const sameDesk = excludeSuccessInsights ? withoutSuccessInsights(sameDeskRaw) : sameDeskRaw;
-  const same = sameDesk.filter((row) => row.slug !== article.slug);
+  const same = sameDesk.filter((row) => row.id !== article.id && row.slug !== article.slug);
 
   if (same.length >= 3) return withListCovers(same.slice(0, limit));
 
   const fillerRaw =
     (await queryList({
-      excludeId: article.id,
       excludeSuccessInsights,
       limit: fetchLimit,
     })) ??
@@ -1033,7 +1032,10 @@ export const getRelatedArticles = cache(async (article: ArticleWithRelations, li
   const merged = [
     ...same,
     ...filler.filter(
-      (item) => item.slug !== article.slug && !same.some((desk) => desk.id === item.id),
+      (item) =>
+        item.id !== article.id &&
+        item.slug !== article.slug &&
+        !same.some((desk) => desk.id === item.id),
     ),
   ].slice(0, limit);
   return withListCovers(merged);
