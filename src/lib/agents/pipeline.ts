@@ -111,16 +111,14 @@ const SITE_CATEGORY: Record<WriterDesk, string> = {
   retail: "finance",
 };
 
-// Phase 1: no persona bylines. Every wire/desk draft carries the organisation
-// author; the DB gate also refuses persona authors on publish.
-const NEWSROOM_AUTHOR_SLUG = "tradeflock-newsroom";
+// Desk bylines: the original desk correspondents (restored at Vishal's request).
 const DESK_AUTHOR: Record<WriterDesk, string> = {
-  tech: NEWSROOM_AUTHOR_SLUG,
-  markets: NEWSROOM_AUTHOR_SLUG,
-  ma: NEWSROOM_AUTHOR_SLUG,
-  strategy: NEWSROOM_AUTHOR_SLUG,
-  macro: NEWSROOM_AUTHOR_SLUG,
-  retail: NEWSROOM_AUTHOR_SLUG,
+  tech: "james-whitaker",
+  markets: "elena-vasquez",
+  ma: "sophia-brennan",
+  strategy: "marcus-chen",
+  macro: "elena-vasquez",
+  retail: "priya-nair",
 };
 
 function isEditorVerdict(value: unknown): value is EditorVerdict {
