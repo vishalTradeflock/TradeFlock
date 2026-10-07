@@ -3,6 +3,7 @@
 import Image, { type ImageProps } from "next/image";
 import { useState, type SyntheticEvent } from "react";
 import { resolveCoverImage, shouldBypassImageOptimizer } from "@/lib/images";
+import { coverSrcSet } from "@/lib/responsive-cover";
 import { cn } from "@/lib/utils";
 
 type SafeArticleImageProps = Omit<ImageProps, "src" | "alt"> & {
@@ -10,6 +11,11 @@ type SafeArticleImageProps = Omit<ImageProps, "src" | "alt"> & {
   alt: string;
   /** Desk / category shown on the neutral card when the story has no usable cover. */
   label?: string | null;
+  /**
+   * Widths to request from a host that can resize (Unsplash, CNBC, TechCrunch).
+   * Omitted hosts keep the stored URL. Not sent to next/image.
+   */
+  widths?: readonly number[];
 };
 
 /**
@@ -61,9 +67,13 @@ export default function SafeArticleImage({
   onError,
   fill,
   sizes,
+  widths,
   ...props
 }: SafeArticleImageProps) {
   const resolved = resolveCoverImage(src);
+  const displayWidth = typeof props.width === "number" ? props.width : undefined;
+  const responsive =
+    resolved && widths?.length ? coverSrcSet(resolved, widths, displayWidth) : null;
   const sourceKey = `${resolved ?? ""}\0${unoptimized ? 1 : 0}`;
   const [stage, setStage] = useState<Stage>(() => initialStage(resolved, unoptimized));
   const [seenKey, setSeenKey] = useState(sourceKey);
@@ -91,6 +101,34 @@ export default function SafeArticleImage({
     return <CoverPlaceholder label={label} />;
   }
 
+  if ((stage === "optimized" && responsive?.srcSet) || priority) {
+    return (
+      // Source CDN srcset. Vercel image optimization is over quota (402), so
+      // next/image would either fail or send the full original.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        key="srcset"
+        ref={catchEarlyFailure}
+        src={responsive?.src ?? resolved}
+        srcSet={responsive?.srcSet}
+        sizes={sizes}
+        alt={alt}
+        width={fill ? undefined : displayWidth}
+        height={fill ? undefined : typeof props.height === "number" ? props.height : undefined}
+        fetchPriority={priority ? "high" : undefined}
+        decoding={priority ? "auto" : "async"}
+        loading={priority ? "eager" : loading ?? "lazy"}
+        className={cn(
+          fill || displayWidth
+            ? "absolute inset-0 h-full w-full object-cover"
+            : "h-full w-full object-cover",
+          className,
+        )}
+        onError={handleError}
+      />
+    );
+  }
+
   if (stage === "native") {
     return (
       // Native img so 404s always fire onError (Next/Image can swallow optimizer failures).
@@ -100,6 +138,8 @@ export default function SafeArticleImage({
         ref={catchEarlyFailure}
         src={resolved}
         alt={alt}
+        fetchPriority={priority ? "high" : undefined}
+        decoding={priority ? "auto" : "async"}
         loading={priority ? "eager" : loading ?? "lazy"}
         className={cn(
           fill

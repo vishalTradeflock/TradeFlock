@@ -3,7 +3,14 @@ import Header from "@/components/Header";
 import { JsonLd } from "@/components/JsonLd";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { getCategoryDesk } from "@/lib/articles";
-import { CARD_16x9, HERO_600 } from "@/lib/image-optimization";
+import {
+  CARD_16x9,
+  CATEGORY_FEATURED_SIZES,
+  CATEGORY_FEATURED_WIDTHS,
+  CATEGORY_GRID_SIZES,
+  CATEGORY_GRID_WIDTHS,
+  HERO_600,
+} from "@/lib/image-optimization";
 import { HOME_ARTICLE_LIMIT } from "@/lib/cache";
 import { categoryStructuredData } from "@/lib/seo";
 import { articlePath } from "@/lib/types";
@@ -69,6 +76,8 @@ export default async function CategoryFeed({
                   alt={featured.cover_image_alt}
                   width={HERO_600.width}
                   height={HERO_600.height}
+                  sizes={CATEGORY_FEATURED_SIZES}
+                  widths={CATEGORY_FEATURED_WIDTHS}
                   priority
                   label={featured.category.name}
                   className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
@@ -111,6 +120,8 @@ export default async function CategoryFeed({
                           alt={article.cover_image_alt}
                           width={CARD_16x9.width}
                           height={CARD_16x9.height}
+                          sizes={CATEGORY_GRID_SIZES}
+                          widths={CATEGORY_GRID_WIDTHS}
                           loading="lazy"
                           label={article.category?.name}
                           className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"

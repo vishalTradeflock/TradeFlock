@@ -45,6 +45,52 @@ export const CARD_16x9 = { width: 384, height: 216 } as const;
  */
 export const HERO_600 = { width: 600, height: 375 } as const;
 
+/**
+ * Slot widths inside the 1240px frame (`px-4`, so the content box is
+ * `min(100vw - 2rem, 1240px)`). These are CSS sizes, not optimizer widths.
+ * Source srcsets stay on a short list so a phone can take 384 and a desktop
+ * card can take 828 without advertising 1920 for every card.
+ */
+export const LATEST_CARD_SIZES =
+  "(max-width: 767px) calc(100vw - 2rem), calc((min(100vw - 2rem, 1240px) - 3rem) / 3)";
+export const LATEST_CARD_WIDTHS = [384, 640, 828] as const;
+
+export const SPOTLIGHT_CARD_SIZES =
+  "(max-width: 639px) calc(100vw - 2rem), calc((min(100vw - 2rem, 1240px) - 3rem) / 3)";
+
+export const CATEGORY_GRID_SIZES =
+  "(max-width: 767px) calc(100vw - 2rem), (max-width: 1023px) calc((100vw - 4rem) / 2), calc((min(100vw - 2rem, 1240px) - 4rem) / 3)";
+export const CATEGORY_GRID_WIDTHS = [384, 640, 828] as const;
+
+export const HOME_HERO_SIZES =
+  "(max-width: 1023px) calc(100vw - 2rem), calc(min(100vw - 2rem, 1240px) / 2 - 1.5rem)";
+export const HOME_HERO_WIDTHS = [640, 828, 1200] as const;
+
+export const DEEP_DIVE_SIZES =
+  "(max-width: 639px) calc(100vw - 2rem), (max-width: 1023px) calc((100vw - 3.25rem) / 2), calc((min(100vw - 2rem, 1240px) / 2 - 2.75rem) / 2)";
+export const DEEP_DIVE_WIDTHS = [384, 640, 828] as const;
+
+export const CATEGORY_FEATURED_SIZES =
+  "(max-width: 1023px) calc(100vw - 2rem), calc(min(100vw - 2rem, 1240px) * 7 / 12)";
+export const CATEGORY_FEATURED_WIDTHS = [640, 828, 1200, 1600] as const;
+
+export const INSIGHTS_HERO_SIZES = "(max-width: 1023px) calc(100vw - 4rem), 640px";
+export const INSIGHTS_HERO_WIDTHS = [640, 828, 1200] as const;
+
+export const THUMB_64_SIZES = "64px";
+export const THUMB_64_WIDTHS = [64, 128] as const;
+
+export const THUMB_96_SIZES = "96px";
+export const THUMB_96_WIDTHS = [96, 192] as const;
+
+export const RELATED_CARD_SIZES =
+  "(max-width: 639px) min(17.5rem, calc(100vw - 2rem)), 21.25rem";
+export const RELATED_CARD_WIDTHS = [384, 680] as const;
+
+export const ARTICLE_HERO_SIZES =
+  "(max-width: 768px) 100vw, (max-width: 1200px) 70vw, 850px";
+export const ARTICLE_HERO_WIDTHS = [828, 1200, 1600, 1920] as const;
+
 export function candidateWidths(input: { sizes?: string; width?: number }): number[] {
   const allSizes = IMAGE_ALL_SIZES;
   const deviceSizes = IMAGE_DEVICE_SIZES;
