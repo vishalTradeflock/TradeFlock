@@ -16,7 +16,7 @@ const SECTIONS: { title: string; body: string[] }[] = [
     title: "AI is part of this newsroom",
     body: [
       "TradeFlock USA news coverage is produced with AI assistance. AI assistants find story leads, research primary sources, organize facts, draft copy and run editorial checks. We do not hide this, and we label it on every news article.",
-      "Stories bylined “TradeFlock Newsroom” are produced by our AI-assisted desks. We do not invent journalists, interviews, quotes or first-hand reporting.",
+      "Desk stories carry the correspondent byline for that desk. Those names are editorial personas for our AI-assisted desks. We do not invent interviews, quotes or first-hand reporting.",
     ],
   },
   {

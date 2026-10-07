@@ -157,15 +157,32 @@ describe("no force-publish path (E)", () => {
     const src = read("src/lib/agents/pipeline.ts");
     assert.doesNotMatch(src, /status: "published"/);
   });
+  it("desk drafts use the original persona authors", () => {
+    const src = read("src/lib/agents/pipeline.ts");
+    assert.match(src, /tech:\s*"james-whitaker"/);
+    assert.match(src, /markets:\s*"elena-vasquez"/);
+    assert.match(src, /ma:\s*"sophia-brennan"/);
+    assert.match(src, /strategy:\s*"marcus-chen"/);
+    assert.match(src, /macro:\s*"elena-vasquez"/);
+    assert.match(src, /retail:\s*"priya-nair"/);
+    assert.doesNotMatch(src, /tradeflock-newsroom/);
+  });
 });
 
 describe("migrations (C, D, J)", () => {
   const gate = read("supabase/migrations/20261007_newsroom_phase1_gate.sql");
   const tables = read("supabase/migrations/20261007_newsroom_phase1_tables.sql");
+  const personaBylines = read("supabase/migrations/20261008_allow_persona_bylines.sql");
   it("gate names every exemption and the cap", () => {
     for (const e of ["'magazine'", "'success_insights'", "'legacy'", "'studio_draft'"]) assert.ok(gate.includes(e), e);
     assert.match(gate, /daily_cap constant integer := 8/);
     assert.match(gate, /America\/New_York/);
+  });
+  it("the later gate allows persona bylines and keeps the cap", () => {
+    assert.match(personaBylines, /Persona bylines allowed/);
+    assert.doesNotMatch(personaBylines, /uses a persona byline/);
+    assert.match(personaBylines, /daily_cap constant integer := 8/);
+    assert.match(personaBylines, /America\/New_York/);
   });
   it("verdict table enforces the PUBLISH bar and HF9 -> REVISE", () => {
     assert.match(tables, /editorial_verdicts_publish_bar/);
