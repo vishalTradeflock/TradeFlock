@@ -16,7 +16,7 @@ import {
   THUMB_96x64,
   candidateWidths,
 } from "./image-optimization.ts";
-import { coverSrcSet } from "./responsive-cover.ts";
+import { canonicalCoverSrc, coverSrcSet, ogImageSource, resizedCoverUrl } from "./responsive-cover.ts";
 
 const NEXT_CONFIG = readFileSync(new URL("../../next.config.ts", import.meta.url), "utf8");
 
@@ -205,6 +205,165 @@ describe("source srcset while the optimizer is over quota", () => {
     assert.match(out.srcSet ?? "", / 640w/);
     assert.equal((out.srcSet ?? "").includes("828"), false);
     assert.equal((out.srcSet ?? "").includes("1920"), false);
+  });
+});
+
+describe("Supabase and Wikimedia source resizing", () => {
+  const fuel =
+    "https://upload.wikimedia.org/wikipedia/commons/6/62/Apollo_Fuel_Cell_Number_1_%286278224744%29.jpg";
+  const ultra =
+    "https://nexxoekytzvsqoadazjm.supabase.co/storage/v1/object/public/article-media/newsroom/desk-ma/ultragenyx-prv-sale-210m-chuttersnap-pgfWIStWIfs.jpg";
+
+  it("builds Supabase render URLs with contain and quality 75", () => {
+    const out = coverSrcSet(ultra, LATEST_CARD_WIDTHS, 384);
+    const chosen = new URL(out.src);
+    assert.equal(
+      chosen.pathname,
+      "/storage/v1/render/image/public/article-media/newsroom/desk-ma/ultragenyx-prv-sale-210m-chuttersnap-pgfWIStWIfs.jpg",
+    );
+    assert.equal(chosen.searchParams.get("width"), "384");
+    assert.equal(chosen.searchParams.get("quality"), "75");
+    assert.equal(chosen.searchParams.get("resize"), "contain");
+    assert.equal(chosen.searchParams.get("height"), null);
+    assert.match(out.srcSet ?? "", /width=384[^\s]* 384w/);
+    assert.match(out.srcSet ?? "", /width=640[^\s]* 640w/);
+    assert.match(out.srcSet ?? "", /width=828[^\s]* 828w/);
+    assert.equal((out.srcSet ?? "").includes("width=1920"), false);
+  });
+
+  it("keeps a Supabase crop and does not upscale past the rendered width", () => {
+    const cropped = coverSrcSet(
+      "https://abcd.supabase.co/storage/v1/render/image/public/bucket/pic.jpg?width=1600&height=900&resize=cover&format=origin",
+      [384, 800],
+      384,
+    );
+    const chosen = new URL(cropped.src);
+    assert.equal(chosen.searchParams.get("width"), "384");
+    assert.equal(chosen.searchParams.get("height"), "216");
+    assert.equal(chosen.searchParams.get("resize"), "cover");
+    assert.equal(chosen.searchParams.get("quality"), "75");
+    assert.equal(chosen.searchParams.get("format"), "origin");
+
+    const capped = coverSrcSet(
+      "https://abcd.supabase.co/storage/v1/render/image/public/bucket/pic.jpg?width=640&quality=80",
+      [384, 640, 1200],
+      384,
+    );
+    assert.match(capped.srcSet ?? "", /width=384/);
+    assert.match(capped.srcSet ?? "", /width=640/);
+    assert.equal((capped.srcSet ?? "").includes("1200"), false);
+
+    const signed =
+      "https://abcd.supabase.co/storage/v1/object/sign/bucket/pic.jpg?token=abc";
+    assert.equal(coverSrcSet(signed, [384, 640], 384).src, signed);
+  });
+
+  it("snaps Wikimedia thumbs to allowed widths and keeps the encoded filename", () => {
+    const out = coverSrcSet(fuel, LATEST_CARD_WIDTHS, 384);
+    assert.match(
+      out.src,
+      /\/wikipedia\/commons\/thumb\/6\/62\/Apollo_Fuel_Cell_Number_1_%286278224744%29\.jpg\/330px-Apollo_Fuel_Cell_Number_1_%286278224744%29\.jpg$/,
+    );
+    assert.match(out.srcSet ?? "", /330px-Apollo_Fuel_Cell_Number_1_%286278224744%29\.jpg 330w/);
+    assert.match(out.srcSet ?? "", /500px-Apollo_Fuel_Cell_Number_1_%286278224744%29\.jpg 500w/);
+    assert.equal((out.srcSet ?? "").includes("384"), false);
+    assert.equal((out.srcSet ?? "").includes("640"), false);
+    assert.equal((out.srcSet ?? "").includes("828"), false);
+    assert.equal((out.srcSet ?? "").split(", ").length, 2);
+  });
+
+  it("does not request a Wikimedia thumb wider than the one already named", () => {
+    const thumb =
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Apollo_Fuel_Cell_Number_1_%286278224744%29.jpg/500px-Apollo_Fuel_Cell_Number_1_%286278224744%29.jpg";
+    const out = coverSrcSet(thumb, [384, 828, 1920], 384);
+    assert.match(out.srcSet ?? "", /330px-/);
+    assert.match(out.srcSet ?? "", /500px-/);
+    assert.equal((out.srcSet ?? "").includes("960"), false);
+    assert.equal((out.srcSet ?? "").includes("1280"), false);
+    assert.equal((out.srcSet ?? "").includes("1920"), false);
+  });
+
+  it("adds a png suffix for SVG and TIFF thumbs and skips other types", () => {
+    const svg = coverSrcSet(
+      "https://upload.wikimedia.org/wikipedia/commons/4/4a/Commons-logo.svg",
+      [64, 128],
+      64,
+    );
+    assert.match(svg.src, /\/thumb\/4\/4a\/Commons-logo\.svg\/60px-Commons-logo\.svg\.png$/);
+    assert.match(svg.srcSet ?? "", /120px-Commons-logo\.svg\.png 120w/);
+
+    const tiff = coverSrcSet(
+      "https://upload.wikimedia.org/wikipedia/commons/d/d8/Example.tiff",
+      [100, 200],
+      100,
+    );
+    assert.match(tiff.srcSet ?? "", /60px-Example\.tiff\.png 60w/);
+    assert.match(tiff.srcSet ?? "", /120px-Example\.tiff\.png 120w/);
+
+    const pdf = "https://upload.wikimedia.org/wikipedia/commons/a/ab/Paper.pdf";
+    const skipped = coverSrcSet(pdf, [384, 640], 384);
+    assert.equal(skipped.src, pdf);
+    assert.equal(skipped.srcSet, undefined);
+
+    const otherWiki = "https://upload.wikimedia.org/wikipedia/en/a/ab/Logo.jpg";
+    assert.equal(coverSrcSet(otherWiki, [384, 640], 384).src, otherWiki);
+  });
+
+  it("rewrites www.tradeflock.us wp-content covers onto www.tradeflockusa.com", () => {
+    const src = "https://www.tradeflock.us/wp-content/uploads/2026/07/Yann-A.-Meunier-MD.webp?ver=2";
+    assert.equal(
+      canonicalCoverSrc(src),
+      "https://www.tradeflockusa.com/wp-content/uploads/2026/07/Yann-A.-Meunier-MD.webp?ver=2",
+    );
+    const out = coverSrcSet(src, [64, 128], 64);
+    assert.equal(out.src, canonicalCoverSrc(src));
+    assert.equal(out.srcSet, undefined);
+
+    const article = "https://www.tradeflock.us/some-story";
+    assert.equal(canonicalCoverSrc(article), article);
+    const apex = "https://tradeflock.us/wp-content/uploads/a.jpg";
+    assert.equal(canonicalCoverSrc(apex), apex);
+  });
+
+  it("points og:image sources at about 1200w and leaves other hosts on the original", () => {
+    const fuelOg = ogImageSource(fuel);
+    assert.match(fuelOg, /\/960px-Apollo_Fuel_Cell_Number_1_%286278224744%29\.jpg$/);
+    assert.equal(resizedCoverUrl(fuel, 1200), fuelOg);
+
+    const ultraOg = new URL(ogImageSource(ultra));
+    assert.equal(ultraOg.searchParams.get("width"), "1200");
+    assert.equal(ultraOg.searchParams.get("quality"), "75");
+    assert.equal(ultraOg.searchParams.get("resize"), "contain");
+
+    const prn = "https://mmx.prnewswire.com/media/MS1136461/Aurora.jpg?p=original";
+    assert.equal(ogImageSource(prn), prn);
+    assert.equal(resizedCoverUrl(prn, 1200), null);
+
+    const alreadySmall = "https://images.unsplash.com/photo-abc?auto=format&w=640&q=80";
+    assert.equal(ogImageSource(alreadySmall), alreadySmall);
+
+    const wide = ogImageSource("https://images.unsplash.com/photo-abc?auto=format&fit=crop&w=1600&h=1000&q=80");
+    const wideUrl = new URL(wide);
+    assert.equal(wideUrl.searchParams.get("w"), "1200");
+    assert.equal(wideUrl.searchParams.get("h"), "750");
+    assert.equal(wideUrl.searchParams.get("q"), "80");
+
+    const wordpress = "https://www.tradeflock.us/wp-content/uploads/2026/09/Prophet.webp";
+    assert.equal(
+      ogImageSource(wordpress),
+      "https://www.tradeflockusa.com/wp-content/uploads/2026/09/Prophet.webp",
+    );
+  });
+
+  it("wires the og:image helper without changing sitemap image URLs", () => {
+    const seo = readFileSync(new URL("./seo.ts", import.meta.url), "utf8");
+    const route = readFileSync(new URL("../app/media/proxy/route.ts", import.meta.url), "utf8");
+    const sitemap = readFileSync(new URL("./sitemap-urls.ts", import.meta.url), "utf8");
+    assert.match(seo, /ogImageSource\(image\.url\)/);
+    assert.match(route, /resizedCoverUrl\(original\.toString\(\), OG_COVER_WIDTH\)/);
+    assert.match(route, /MEDIA_PROXY_MAX_BYTES/);
+    assert.doesNotMatch(sitemap, /ogImageSource|resizedCoverUrl|canonicalCoverSrc/);
+    assert.match(NEXT_CONFIG, /unoptimized:\s*true/);
   });
 });
 

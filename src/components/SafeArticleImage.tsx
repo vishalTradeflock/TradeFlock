@@ -3,7 +3,7 @@
 import Image, { type ImageProps } from "next/image";
 import { useState, type SyntheticEvent } from "react";
 import { resolveCoverImage, shouldBypassImageOptimizer } from "@/lib/images";
-import { coverSrcSet } from "@/lib/responsive-cover";
+import { canonicalCoverSrc, coverSrcSet } from "@/lib/responsive-cover";
 import { cn } from "@/lib/utils";
 
 type SafeArticleImageProps = Omit<ImageProps, "src" | "alt"> & {
@@ -12,8 +12,8 @@ type SafeArticleImageProps = Omit<ImageProps, "src" | "alt"> & {
   /** Desk / category shown on the neutral card when the story has no usable cover. */
   label?: string | null;
   /**
-   * Widths to request from a host that can resize (Unsplash, CNBC, TechCrunch).
-   * Omitted hosts keep the stored URL. Not sent to next/image.
+   * Widths to request from a host that can resize (Unsplash, CNBC, TechCrunch,
+   * Supabase, Wikimedia). Omitted hosts keep the stored URL. Not sent to next/image.
    */
   widths?: readonly number[];
 };
@@ -70,7 +70,8 @@ export default function SafeArticleImage({
   widths,
   ...props
 }: SafeArticleImageProps) {
-  const resolved = resolveCoverImage(src);
+  const resolvedRaw = resolveCoverImage(src);
+  const resolved = resolvedRaw ? canonicalCoverSrc(resolvedRaw) : null;
   const displayWidth = typeof props.width === "number" ? props.width : undefined;
   const responsive =
     resolved && widths?.length ? coverSrcSet(resolved, widths, displayWidth) : null;

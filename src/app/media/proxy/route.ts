@@ -9,6 +9,7 @@ import {
   isBlockedIp,
   parseExternalImageUrl,
 } from "@/lib/media-proxy";
+import { OG_COVER_WIDTH, resizedCoverUrl } from "@/lib/responsive-cover";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,36 +84,73 @@ function reject(status: number) {
   });
 }
 
+type Loaded =
+  | { ok: true; buffer: ArrayBuffer; contentType: string }
+  | { ok: false; status: number; tooBig?: boolean };
+
+async function loadImage(start: URL): Promise<Loaded> {
+  const result = await fetchImage(start);
+  if ("error" in result) return { ok: false, status: 400 };
+  const { response } = result;
+  if (!response.ok) return { ok: false, status: 404 };
+
+  const contentType = response.headers.get("content-type");
+  if (!isAllowedImageContentType(contentType)) return { ok: false, status: 415 };
+
+  const declared = Number(response.headers.get("content-length") ?? "0");
+  if (declared > MEDIA_PROXY_MAX_BYTES) {
+    await response.body?.cancel().catch(() => undefined);
+    return { ok: false, status: 413, tooBig: true };
+  }
+
+  const buffer = await response.arrayBuffer();
+  if (buffer.byteLength === 0 || buffer.byteLength > MEDIA_PROXY_MAX_BYTES) {
+    return { ok: false, status: 413, tooBig: true };
+  }
+
+  return {
+    ok: true,
+    buffer,
+    contentType: (contentType ?? "image/jpeg").split(";")[0] ?? "image/jpeg",
+  };
+}
+
+function imageResponse(buffer: ArrayBuffer, contentType: string) {
+  const headers = new Headers();
+  headers.set("Content-Type", contentType);
+  headers.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Content-Length", String(buffer.byteLength));
+  for (const name of HOP_BY_HOP) headers.delete(name);
+  return new NextResponse(buffer, { status: 200, headers });
+}
+
+/** ~1200w source variant when this host can shrink an oversized original. */
+function smallerProxySource(original: URL): URL | null {
+  const next = resizedCoverUrl(original.toString(), OG_COVER_WIDTH);
+  if (!next) return null;
+  const parsed = parseExternalImageUrl(next);
+  if (!parsed || parsed.href === original.href) return null;
+  return parsed;
+}
+
 export async function GET(request: NextRequest) {
   const raw = request.nextUrl.searchParams.get("src") ?? "";
   const target = parseExternalImageUrl(raw);
   if (!target) return reject(400);
 
   try {
-    const result = await fetchImage(target);
-    if ("error" in result) return reject(400);
-    const { response } = result;
-    if (!response.ok) return reject(404);
-
-    const contentType = response.headers.get("content-type");
-    if (!isAllowedImageContentType(contentType)) return reject(415);
-
-    const declared = Number(response.headers.get("content-length") ?? "0");
-    if (declared > MEDIA_PROXY_MAX_BYTES) return reject(413);
-
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength === 0 || buffer.byteLength > MEDIA_PROXY_MAX_BYTES) {
+    const first = await loadImage(target);
+    if (first.ok) return imageResponse(first.buffer, first.contentType);
+    if (first.tooBig) {
+      const smaller = smallerProxySource(target);
+      if (smaller) {
+        const second = await loadImage(smaller);
+        if (second.ok) return imageResponse(second.buffer, second.contentType);
+      }
       return reject(413);
     }
-
-    const headers = new Headers();
-    headers.set("Content-Type", (contentType ?? "application/octet-stream").split(";")[0] ?? "image/jpeg");
-    headers.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
-    headers.set("X-Content-Type-Options", "nosniff");
-    headers.set("Content-Length", String(buffer.byteLength));
-    for (const name of HOP_BY_HOP) headers.delete(name);
-
-    return new NextResponse(buffer, { status: 200, headers });
+    return reject(first.status);
   } catch {
     return reject(502);
   }

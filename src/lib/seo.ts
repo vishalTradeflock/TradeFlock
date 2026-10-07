@@ -8,6 +8,7 @@ import {
 } from "@/lib/newsroom/authorship";
 import type { Metadata } from "next";
 import { firstPartyMediaUrl } from "@/lib/media-proxy";
+import { ogImageSource } from "@/lib/responsive-cover";
 import { PRODUCTION_ORIGIN, getBaseUrl } from "@/lib/site-url";
 import { faqAnswerPlainText } from "@/lib/studio/faqs";
 import { publicStoryPath, resolveSeoDescription, resolveSeoTitle } from "@/lib/studio/seo";
@@ -176,7 +177,8 @@ export function absoluteMediaUrl(value: string | null | undefined): string | nul
 }
 
 export function getOgImage(image?: ShareImage | null): ShareImage {
-  const url = image?.url ? firstPartyMediaUrl(image.url) : null;
+  const source = image?.url ? ogImageSource(image.url) : null;
+  const url = source ? firstPartyMediaUrl(source) : null;
   if (url) {
     return { url, alt: image?.alt?.trim() || SITE_NAME };
   }
