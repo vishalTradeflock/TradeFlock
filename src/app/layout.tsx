@@ -1,15 +1,11 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import Script from "next/script";
 import { Playfair_Display, Source_Sans_3 } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
-import { GlobalHeadCode } from "@/components/GlobalHeadCode";
-import { GlobalHeadScripts } from "@/components/GlobalHeadScripts";
 import { JsonLd } from "@/components/JsonLd";
 import SiteFooter from "@/components/SiteFooter";
-import { shouldInjectGlobalHead } from "@/lib/public-head";
-import { getGlobalHeadCode, getHeaderScripts, getSiteVerification } from "@/lib/site-settings";
+import { getSiteVerification } from "@/lib/site-settings";
 import { siteStructuredData } from "@/lib/seo";
 import { getBaseUrl } from "@/lib/site-url";
 import "./globals.css";
@@ -43,20 +39,12 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const headerList = await headers();
-  const injectPublicHead = shouldInjectGlobalHead(headerList.get("x-tradeflock-path"));
-  const [headerScripts, globalHeadCode] = await Promise.all([
-    injectPublicHead ? getHeaderScripts() : Promise.resolve([]),
-    injectPublicHead ? getGlobalHeadCode() : Promise.resolve(""),
-  ]);
-
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
       className={`${playfair.variable} ${sourceSans.variable} h-full antialiased`}
     >
-      <head>{injectPublicHead ? <GlobalHeadCode html={globalHeadCode} /> : null}</head>
       <body className="flex min-h-full flex-col bg-white font-sans text-neutral-900">
         <Script
           strategy="afterInteractive"
@@ -70,7 +58,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           }}
         />
         <JsonLd data={siteStructuredData()} />
-        {injectPublicHead ? <GlobalHeadScripts scripts={headerScripts} /> : null}
         {children}
         <SiteFooter />
         <SpeedInsights />

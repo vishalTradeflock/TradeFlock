@@ -3,6 +3,7 @@ import Header from "@/components/Header";
 import { JsonLd } from "@/components/JsonLd";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { getCategoryDesk } from "@/lib/articles";
+import { CARD_16x9, HERO_600 } from "@/lib/image-optimization";
 import { HOME_ARTICLE_LIMIT } from "@/lib/cache";
 import { categoryStructuredData } from "@/lib/seo";
 import { articlePath } from "@/lib/types";
@@ -66,11 +67,11 @@ export default async function CategoryFeed({
                 <SafeArticleImage
                   src={featured.cover_image_url}
                   alt={featured.cover_image_alt}
-                  fill
+                  width={HERO_600.width}
+                  height={HERO_600.height}
                   priority
-                  sizes="(min-width: 1024px) 55vw, 100vw"
                   label={featured.category.name}
-                  className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                 />
               </Link>
               <div className="lg:col-span-5">
@@ -108,11 +109,11 @@ export default async function CategoryFeed({
                         <SafeArticleImage
                           src={article.cover_image_url}
                           alt={article.cover_image_alt}
-                          fill
-                          sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                          width={CARD_16x9.width}
+                          height={CARD_16x9.height}
                           loading="lazy"
                           label={article.category?.name}
-                          className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                         />
                       </div>
                       <h3 className="mt-3 font-serif text-lg font-bold leading-snug tracking-tight transition group-hover:text-[#c41e3a]">

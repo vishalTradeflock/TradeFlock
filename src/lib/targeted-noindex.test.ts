@@ -135,7 +135,7 @@ describe("targeted noindex from Index status.pdf", () => {
   it("removes the temporary sitewide noindex switch", () => {
     const layout = read("../app/layout.tsx");
     const config = read("../../next.config.ts");
-    const home = read("../app/page.tsx");
+    const home = read("../app/(public)/page.tsx");
 
     assert.doesNotMatch(layout, /sitewideNoindexMetadata/);
     assert.doesNotMatch(layout, /TEMPORARY_SITEWIDE_NOINDEX/);
