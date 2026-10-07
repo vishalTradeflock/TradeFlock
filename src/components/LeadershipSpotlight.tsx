@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import { CARD_16x9 } from "@/lib/image-optimization";
+import { CARD_16x9, LATEST_CARD_WIDTHS, SPOTLIGHT_CARD_SIZES } from "@/lib/image-optimization";
 import { articlePath, type ArticleListCard } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +70,8 @@ export default function LeadershipSpotlight({
                 alt={article.cover_image_alt}
                 width={CARD_16x9.width}
                 height={CARD_16x9.height}
+                sizes={SPOTLIGHT_CARD_SIZES}
+                widths={LATEST_CARD_WIDTHS}
                 loading="lazy"
                 label={article.categoryName}
                 className="absolute inset-0 h-full w-full object-cover"

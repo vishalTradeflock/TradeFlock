@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import { RELATED_CARD } from "@/lib/image-optimization";
+import { RELATED_CARD, RELATED_CARD_SIZES, RELATED_CARD_WIDTHS } from "@/lib/image-optimization";
 import { articleCoverSrc } from "@/lib/images";
 import type { ArticleWithRelations } from "@/lib/types";
 import { articlePath } from "@/lib/types";
@@ -100,6 +100,8 @@ export function RelatedArticles({
                   alt={article.cover_image_alt}
                   width={RELATED_CARD.width}
                   height={RELATED_CARD.height}
+                  sizes={RELATED_CARD_SIZES}
+                  widths={RELATED_CARD_WIDTHS}
                   loading="lazy"
                   label={article.category.name}
                   className="h-full w-full rounded-lg object-cover"

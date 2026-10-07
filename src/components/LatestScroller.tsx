@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import { CARD_16x9 } from "@/lib/image-optimization";
+import { CARD_16x9, LATEST_CARD_SIZES, LATEST_CARD_WIDTHS } from "@/lib/image-optimization";
 import { articleCoverSrc } from "@/lib/images";
 import { articlePath, type ArticleWithRelations } from "@/lib/types";
 import { cn, formatShortDate } from "@/lib/utils";
@@ -103,6 +103,9 @@ function LatestCard({ article }: { article: ArticleWithRelations }) {
           alt={article.cover_image_alt}
           width={CARD_16x9.width}
           height={CARD_16x9.height}
+          sizes={LATEST_CARD_SIZES}
+          widths={LATEST_CARD_WIDTHS}
+          loading="lazy"
           label={article.category.name}
           className="absolute inset-0 h-full w-full object-cover"
         />

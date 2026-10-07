@@ -6,6 +6,7 @@ import LatestScroller from "@/components/LatestScroller";
 import MiddleScroller from "@/components/MiddleScroller";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { LATEST_SCROLLER_LIMIT } from "@/lib/cache";
+import { DEEP_DIVE_SIZES, DEEP_DIVE_WIDTHS } from "@/lib/image-optimization";
 import { getCategoryDesk, getHomeLayout, getSuccessInsightsArticles } from "@/lib/articles";
 import { publicPageMetadata } from "@/lib/seo";
 import { isSuccessInsightsArticle, successInsightsOnly } from "@/lib/success-insights";
@@ -130,11 +131,13 @@ export default async function Home() {
                       <SafeArticleImage
                         src={article.cover_image_url}
                         alt={article.cover_image_alt}
-                        fill
-                        sizes="(min-width: 640px) 25vw, 100vw"
+                        width={384}
+                        height={240}
+                        sizes={DEEP_DIVE_SIZES}
+                        widths={DEEP_DIVE_WIDTHS}
                         loading="lazy"
-                        unoptimized
                         label={article.category.name}
+                        className="absolute inset-0 h-full w-full object-cover"
                       />
                     </div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#c41e3a]">

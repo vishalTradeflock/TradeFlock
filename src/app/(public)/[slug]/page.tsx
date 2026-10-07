@@ -20,7 +20,13 @@ import {
   resolvePublishedSlugRedirect,
 } from "@/lib/articles";
 import { sanitizeArticleBody } from "@/lib/sanitize-article-body";
-import { THUMB_96x64 } from "@/lib/image-optimization";
+import {
+  ARTICLE_HERO_SIZES,
+  ARTICLE_HERO_WIDTHS,
+  THUMB_96_SIZES,
+  THUMB_96_WIDTHS,
+  THUMB_96x64,
+} from "@/lib/image-optimization";
 import { articleCoverSrc } from "@/lib/images";
 import {
   articlePageMetadata,
@@ -131,7 +137,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                   alt={article.featured_image_alt?.trim() || article.cover_image_alt || article.title}
                   fill
                   priority
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 70vw, 850px"
+                  sizes={ARTICLE_HERO_SIZES}
+                  widths={ARTICLE_HERO_WIDTHS}
                   label={article.category.name}
                   className="object-cover transition-transform duration-500 hover:scale-[1.01]"
                 />
@@ -174,6 +181,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                         alt={item.cover_image_alt}
                         width={THUMB_96x64.width}
                         height={THUMB_96x64.height}
+                        sizes={THUMB_96_SIZES}
+                        widths={THUMB_96_WIDTHS}
                         loading="lazy"
                         label={item.category.name}
                         className="h-full w-full"

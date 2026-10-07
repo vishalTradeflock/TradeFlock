@@ -1,6 +1,6 @@
 import Link from "next/link";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import { THUMB_64 } from "@/lib/image-optimization";
+import { THUMB_64, THUMB_64_SIZES, THUMB_64_WIDTHS } from "@/lib/image-optimization";
 import { SUCCESS_INSIGHTS_NAME } from "@/lib/success-insights";
 import { articlePath, type ArticleWithRelations } from "@/lib/types";
 import { formatShortDate } from "@/lib/utils";
@@ -68,6 +68,8 @@ function RailCard({ article }: { article: ArticleWithRelations }) {
           alt={article.cover_image_alt}
           width={THUMB_64.width}
           height={THUMB_64.height}
+          sizes={THUMB_64_SIZES}
+          widths={THUMB_64_WIDTHS}
           className="h-full w-full object-cover"
           loading="lazy"
           label={article.category.name}

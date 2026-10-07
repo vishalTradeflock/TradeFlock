@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import SafeArticleImage from "@/components/SafeArticleImage";
-import { HERO_600 } from "@/lib/image-optimization";
+import { HERO_600, INSIGHTS_HERO_SIZES, INSIGHTS_HERO_WIDTHS } from "@/lib/image-optimization";
 import { articlePath, type ArticleListCard } from "@/lib/types";
 import { cn, formatPublishedAt } from "@/lib/utils";
 
@@ -63,6 +63,8 @@ export default function FeaturedInsightsSlider({
             alt={item.cover_image_alt}
             width={HERO_600.width}
             height={HERO_600.height}
+            sizes={INSIGHTS_HERO_SIZES}
+            widths={INSIGHTS_HERO_WIDTHS}
             priority={safeIndex === 0}
             loading={safeIndex === 0 ? undefined : "lazy"}
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
