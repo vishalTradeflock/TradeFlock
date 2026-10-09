@@ -88,6 +88,7 @@ describe("sitemap route isolation", () => {
     assert.match(source, /Promise\.allSettled/);
     assert.doesNotMatch(source, /getMagazines/);
     assert.match(source, /export const maxDuration = 60/);
+    assert.match(source, /export const revalidate = 900;/);
     assert.match(source, /timeoutMs: SITEMAP_QUERY_TIMEOUT_MS/);
     assert.match(source, /const BASE_URL = PRODUCTION_ORIGIN/);
     assert.doesNotMatch(source, /\$\{BASE_URL\}\/news\/\$\{/);
