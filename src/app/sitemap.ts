@@ -13,7 +13,8 @@ import { PRODUCTION_ORIGIN } from "@/lib/site-url";
 import { createPublicClient } from "@/lib/supabase/public";
 import { isSupabaseConfigured } from "@/lib/utils";
 
-export const revalidate = 86400;
+/** Regenerate at most every 15 minutes so newly published stories reach the sitemap. */
+export const revalidate = 900;
 /** Headroom for a slow article page if the platform default is only a few seconds. */
 export const maxDuration = 60;
 
