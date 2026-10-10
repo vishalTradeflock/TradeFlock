@@ -1,6 +1,6 @@
 name: Cover Backfill (one image per story)
 
-# Manual dispatch, plus an hourly run at :23 UTC. The route already has the
+# Manual dispatch, plus a daily run at 06:23 UTC (hourly runs used ~290 MB/day of Supabase egress). The route already has the
 # Supabase service-role and Unsplash env; this workflow only needs the existing
 # CRON_SECRET repo secret. Dispatch is a dry run unless "apply" is ticked.
 # Scheduled runs apply, 100 stories, one round. Inputs are empty on schedule,
@@ -10,7 +10,7 @@ name: Cover Backfill (one image per story)
 # is a single cheap no-op call.
 on:
   schedule:
-    - cron: "23 * * * *"
+    - cron: "23 6 * * *"
   workflow_dispatch:
     inputs:
       apply:
