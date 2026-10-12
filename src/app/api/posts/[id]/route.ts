@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { revalidatePublishedSitemap } from "@/lib/sitemap-cache";
 import { NextResponse } from "next/server";
 import { canDeleteArticle } from "@/lib/studio/access";
 import { getStudioSession } from "@/lib/studio/session";
@@ -43,6 +44,7 @@ export async function DELETE(
   if (article.status === "published") {
     revalidatePath("/", "layout");
     revalidatePath(`/${article.slug}`);
+    revalidatePublishedSitemap();
   }
 
   return NextResponse.json({ ok: true, id: article.id });

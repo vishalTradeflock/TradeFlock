@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { revalidatePublishedSitemap } from "@/lib/sitemap-cache";
 import { fetchLegacyHonorees } from "@/lib/legacy-honorees";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
@@ -176,6 +177,7 @@ export async function syncMagazineFromLegacy(slug: string): Promise<SyncMagazine
 
   revalidatePath(`/magazine/${magazine.slug}`);
   revalidatePath(`/magazine/${magazine.slug}/read`);
+  revalidatePublishedSitemap();
 
   return {
     ok: true,

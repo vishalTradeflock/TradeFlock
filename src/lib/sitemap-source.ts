@@ -1,4 +1,3 @@
-import type { MetadataRoute } from "next";
 import { SEED_ARTICLES } from "@/lib/data/seed";
 import { SEED_MAGAZINES } from "@/lib/data/seed-magazines";
 import {
@@ -12,11 +11,6 @@ import {
 import { PRODUCTION_ORIGIN } from "@/lib/site-url";
 import { createPublicClient } from "@/lib/supabase/public";
 import { isSupabaseConfigured } from "@/lib/utils";
-
-/** Regenerate at most every 15 minutes so newly published stories reach the sitemap. */
-export const revalidate = 900;
-/** Headroom for a slow article page if the platform default is only a few seconds. */
-export const maxDuration = 60;
 
 const BASE_URL = PRODUCTION_ORIGIN;
 const PAGE_SIZE = 1000;
@@ -138,7 +132,10 @@ async function fetchArticlePage(
  * extra queries that can run past the function limit.
  */
 async function paginatePublishedArticles(): Promise<{ rows: SitemapArticleRow[]; failed: boolean }> {
-  const supabase = createPublicClient({ timeoutMs: SITEMAP_QUERY_TIMEOUT_MS });
+  const supabase = createPublicClient({
+    timeoutMs: SITEMAP_QUERY_TIMEOUT_MS,
+    cache: "sitemap",
+  });
   const rows: SitemapArticleRow[] = [];
   let from = 0;
   let selectMode: SelectMode = "full";
@@ -185,7 +182,10 @@ async function publishedArticles(): Promise<SitemapArticleRow[]> {
 async function publishedMagazines(): Promise<SitemapMagazineRow[]> {
   if (!isSupabaseConfigured()) return seedMagazines();
   try {
-    const supabase = createPublicClient({ timeoutMs: SITEMAP_QUERY_TIMEOUT_MS });
+    const supabase = createPublicClient({
+      timeoutMs: SITEMAP_QUERY_TIMEOUT_MS,
+      cache: "sitemap",
+    });
     const full = await supabase
       .from("magazines")
       .select("slug, published_at, status")
@@ -222,7 +222,7 @@ async function publishedMagazines(): Promise<SitemapMagazineRow[]> {
   }
 }
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+export async function loadSitemapEntries() {
   try {
     const [articlesResult, magazinesResult] = await Promise.allSettled([
       publishedArticles(),

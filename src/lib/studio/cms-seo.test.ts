@@ -260,7 +260,7 @@ describe("sitemap article URLs", () => {
   });
 
   it("builds sitemap article URLs on www.tradeflock.net/{slug}", () => {
-    const source = readFileSync(new URL("../../app/sitemap.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../sitemap-source.ts", import.meta.url), "utf8");
     const entries = readFileSync(new URL("../sitemap-entries.ts", import.meta.url), "utf8");
     assert.match(source, /const BASE_URL = PRODUCTION_ORIGIN/);
     assert.match(source, /buildSitemap\([\s\S]*BASE_URL/);

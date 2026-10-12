@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePublishedSitemap } from "@/lib/sitemap-cache";
 import { SITE_SETTINGS_CACHE_TAG } from "@/lib/site-settings";
 import {
   excerptFromHtml,
@@ -195,7 +196,7 @@ function revalidateStoryPaths(slug: string, previousSlug?: string | null, author
   revalidatePath(`/${slug}`);
   if (previousSlug && previousSlug !== slug) revalidatePath(`/${previousSlug}`);
   if (authorSlug) revalidatePath(`/author/${authorSlug}`);
-  revalidatePath("/sitemap.xml");
+  revalidatePublishedSitemap();
 }
 
 export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftResult> {
@@ -545,7 +546,7 @@ export async function saveStudioAuthor(input: SaveAuthorInput): Promise<SaveAuth
 
     revalidatePath(`/author/${slug}`);
     if (existing.slug !== slug) revalidatePath(`/author/${existing.slug}`);
-    revalidatePath("/sitemap.xml");
+    revalidatePublishedSitemap();
     return { ok: true, id: existing.id, slug };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save this byline.";

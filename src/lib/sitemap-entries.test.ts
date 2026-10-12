@@ -8,6 +8,7 @@ import {
   sourceOrFallback,
   type SitemapMagazineRow,
 } from "./sitemap-entries.ts";
+import { renderSitemapXml } from "./sitemap-xml.ts";
 
 const ARTICLE = "apple-announces-new-ai-strategy";
 const MAGAZINE = "chips-power-new-industrial-map";
@@ -82,15 +83,81 @@ describe("sitemap entry builder", () => {
   });
 });
 
+const MISSING_FROM_FROZEN_SITEMAP = [
+  "is-starlink-available-in-india",
+  "publix-closing-stores",
+  "boston-dynamics-ceo-rohit-prasad",
+  "avient-new-ceo-mike-frank",
+  "nvidia-reflection-ai-talks",
+  "joe-rogan-spotify-deal",
+  "ccc-intelligent-solutions-sale",
+  "applied-digital-earnings-interest-expense",
+  "treasury-buyback-results-long-bonds",
+  "pacira-viatris-deal",
+  "cloudflare-acquires-deno",
+  "celeste-pizza-discontinued-conagra",
+  "jpmorgan-bond-pitch-treasury-rate-bet",
+] as const;
+
 describe("sitemap route isolation", () => {
   it("does not let getMagazines reject the route", () => {
-    const source = readFileSync(new URL("../app/sitemap.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("./sitemap-source.ts", import.meta.url), "utf8");
+    const route = readFileSync(new URL("../app/sitemap.xml/route.ts", import.meta.url), "utf8");
     assert.match(source, /Promise\.allSettled/);
     assert.doesNotMatch(source, /getMagazines/);
-    assert.match(source, /export const maxDuration = 60/);
-    assert.match(source, /export const revalidate = 900;/);
+    assert.match(route, /export const maxDuration = 60/);
     assert.match(source, /timeoutMs: SITEMAP_QUERY_TIMEOUT_MS/);
     assert.match(source, /const BASE_URL = PRODUCTION_ORIGIN/);
+    assert.match(source, /buildSitemap\([\s\S]*BASE_URL/);
     assert.doesNotMatch(source, /\$\{BASE_URL\}\/news\/\$\{/);
+    assert.doesNotMatch(`${source}\n${route}`, /export const revalidate = 900/);
+  });
+
+  it("stays a dynamic handler so the CDN cannot freeze a build-time urlset", () => {
+    const route = readFileSync(new URL("../app/sitemap.xml/route.ts", import.meta.url), "utf8");
+    const client = readFileSync(new URL("./supabase/public.ts", import.meta.url), "utf8");
+    assert.match(route, /export const dynamic = "force-dynamic"/);
+    assert.match(route, /export const revalidate = 0/);
+    assert.match(route, /Cache-Control": "private, no-store, max-age=0"/);
+    assert.match(route, /renderSitemapXml/);
+    assert.match(client, /cache: "force-cache"/);
+    assert.match(client, /tags: \[SITEMAP_CACHE_TAG\]/);
+    assert.match(client, /revalidate: false/);
+    assert.match(client, /cache === "sitemap"/);
+  });
+
+  it("expires the sitemap tag when a story is published", () => {
+    const helper = readFileSync(new URL("./sitemap-cache.ts", import.meta.url), "utf8");
+    assert.match(helper, /revalidateTag\(SITEMAP_CACHE_TAG, \{ expire: 0 \}\)/);
+    assert.match(helper, /revalidatePath\("\/sitemap\.xml"\)/);
+    for (const file of [
+      "../lib/newsroom/api.ts",
+      "../app/studio/actions.ts",
+      "../app/api/posts/[id]/route.ts",
+      "../lib/sync-magazine.ts",
+    ]) {
+      const source = readFileSync(new URL(file, import.meta.url), "utf8");
+      assert.match(source, /revalidatePublishedSitemap\(/);
+    }
+    const newsroom = readFileSync(new URL("../lib/newsroom/api.ts", import.meta.url), "utf8");
+    const publish = newsroom.slice(newsroom.indexOf("async function publishArticle"));
+    assert.match(publish, /revalidatePublishedSitemap\(/);
+  });
+});
+
+describe("stories missing from the frozen production sitemap", () => {
+  it("includes is-starlink-available-in-india after the document is rebuilt", () => {
+    const articles = MISSING_FROM_FROZEN_SITEMAP.map((slug) => ({
+      slug,
+      published_at: "2026-10-11T18:00:00.000Z",
+    }));
+    const xml = renderSitemapXml(buildSitemap(articles, []));
+    assert.match(xml, /^<\?xml version="1\.0" encoding="UTF-8"\?>\n<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+    assert.match(xml, /<\/urlset>\n$/);
+    assert.equal(xml.includes("<sitemapindex"), false);
+    for (const slug of MISSING_FROM_FROZEN_SITEMAP) {
+      assert.match(xml, new RegExp(`<loc>${PRODUCTION_ORIGIN}/${slug}</loc>`));
+    }
+    assert.match(xml, /<loc>https:\/\/www\.tradeflock\.net\/is-starlink-available-in-india<\/loc>/);
   });
 });

@@ -150,7 +150,7 @@ describe("targeted noindex from Index status.pdf", () => {
 
   it("keeps robots.txt, sitemap purpose, and studio noindex unchanged", () => {
     const robots = read("../app/robots.ts");
-    const sitemap = read("../app/sitemap.ts");
+    const sitemap = read("../app/sitemap.xml/route.ts");
     const studio = read("../app/studio/layout.tsx");
     const seo = read("./seo.ts");
 
@@ -158,7 +158,8 @@ describe("targeted noindex from Index status.pdf", () => {
     assert.match(robots, /disallow:\s*\["\/studio\/",\s*"\/api\/"\]/);
     assert.match(robots, /sitemap:\s*"https:\/\/www\.tradeflock\.net\/sitemap\.xml"/);
     assert.doesNotMatch(robots, /disallow:\s*"\/"/);
-    assert.match(sitemap, /export default async function sitemap/);
+    assert.match(sitemap, /export async function GET/);
+    assert.match(sitemap, /renderSitemapXml/);
     assert.doesNotMatch(sitemap, /targetedNoindex|noindex|TEMPORARY_SITEWIDE_NOINDEX/);
     assert.match(studio, /robots:\s*\{\s*index:\s*false,\s*follow:\s*false\s*\}/);
     assert.doesNotMatch(seo, /robots:\s*\{\s*index:\s*true/);

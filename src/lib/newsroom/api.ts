@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { revalidatePublishedSitemap } from "@/lib/sitemap-cache";
 import { NextResponse } from "next/server";
 import { newsroomDb } from "@/lib/newsroom/db";
 import { can, deskForRole, roleForToken, type NewsroomRole, type Permission } from "@/lib/newsroom/roles";
@@ -268,6 +269,7 @@ async function publishArticle(role: NewsroomRole, body: Json) {
   }
   revalidatePath("/", "layout");
   revalidatePath(`/${article.slug}`);
+  revalidatePublishedSitemap();
   return json(200, { ok: true, role, article: data });
 }
 
