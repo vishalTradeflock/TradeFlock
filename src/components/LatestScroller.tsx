@@ -96,7 +96,7 @@ function LatestCard({ article }: { article: ArticleWithRelations }) {
   const src = articleCoverSrc(article);
 
   return (
-    <Link href={articlePath(article.slug)} className="group block">
+    <Link href={articlePath(article.slug)} prefetch={false} className="group block">
       <div className="relative mb-3 aspect-[16/9] w-full overflow-hidden rounded-md bg-neutral-100">
         <SafeArticleImage
           src={src}

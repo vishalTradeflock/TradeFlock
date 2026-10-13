@@ -8,7 +8,7 @@ import { magazineExternalHref, parseFlipbookPage } from "@/lib/magazine-links";
 import { getMagazineBySlug, getMagazines } from "@/lib/magazines";
 import { magazinePageMetadata } from "@/lib/seo";
 
-export const revalidate = 120;
+export const revalidate = 86400;
 export const dynamicParams = true;
 
 type MagazineReadPageProps = {

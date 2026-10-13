@@ -48,7 +48,7 @@ export default function HeroCarousel({
       onFocusCapture={() => setIsHovered(true)}
       onBlurCapture={() => setIsHovered(false)}
     >
-      <Link href={articlePath(article.slug)} className="block">
+      <Link href={articlePath(article.slug)} prefetch={false} className="block">
         <div className="relative aspect-[16/10] overflow-hidden rounded bg-neutral-100">
           <SafeArticleImage
             key={article.id}

@@ -149,6 +149,7 @@ export default function GrowthStrategies({
             <li key={article.id}>
               <Link
                 href={articlePath(article.slug)}
+                prefetch={false}
                 className="group flex items-center gap-4 rounded-xl border border-neutral-200 bg-white p-3.5 transition duration-200 hover:border-neutral-400 hover:bg-neutral-50"
               >
                 <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg shadow-sm sm:h-20 sm:w-20">

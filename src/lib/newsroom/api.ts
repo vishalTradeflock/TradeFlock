@@ -1,4 +1,5 @@
-import { revalidatePath } from "next/cache";
+import { nestedSlug } from "@/lib/published-refresh";
+import { revalidatePublishedSitemap } from "@/lib/sitemap-cache";
 import { NextResponse } from "next/server";
 import { newsroomDb } from "@/lib/newsroom/db";
 import { can, deskForRole, roleForToken, type NewsroomRole, type Permission } from "@/lib/newsroom/roles";
@@ -246,7 +247,11 @@ async function publishArticle(role: NewsroomRole, body: Json) {
   const articleId = str(body.article_id, 64);
   if (!articleId) return json(400, { error: "article_id is required" });
   const db = newsroomDb();
-  const { data: article } = await db.from("articles").select("id, slug, status").eq("id", articleId).maybeSingle();
+  const { data: article } = await db
+    .from("articles")
+    .select("id, slug, status, category:categories(slug), author:authors(slug)")
+    .eq("id", articleId)
+    .maybeSingle();
   if (!article) return json(404, { error: "article not found" });
   if (article.status === "published") return json(409, { error: "already published" });
   // The DB editorial gate decides. This route has no override and no force path.
@@ -266,8 +271,11 @@ async function publishArticle(role: NewsroomRole, body: Json) {
       }
     }
   }
-  revalidatePath("/", "layout");
-  revalidatePath(`/${article.slug}`);
+  revalidatePublishedSitemap({
+    articleSlugs: [article.slug],
+    sectionSlugs: [nestedSlug(article.category)],
+    authorSlugs: [nestedSlug(article.author)],
+  });
   return json(200, { ok: true, role, article: data });
 }
 

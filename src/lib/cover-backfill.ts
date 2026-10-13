@@ -77,6 +77,7 @@ export async function loadBackfillRows(client: BackfillClient): Promise<Backfill
 export type BackfillChange = {
   id: string;
   slug: string | null | undefined;
+  sectionSlug?: string | null;
   title: string;
   published_at: string | null | undefined;
   reason: CoverReassignment["reason"];
@@ -221,6 +222,7 @@ export async function runCoverBackfill(
     const change: BackfillChange = {
       id: row.id,
       slug: row.slug,
+      sectionSlug: row.category?.slug ?? null,
       title: row.title,
       published_at: row.published_at,
       reason: item.reason,

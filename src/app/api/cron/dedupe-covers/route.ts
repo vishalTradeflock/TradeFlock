@@ -1,5 +1,5 @@
-import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import { revalidatePublishedSitemap } from "@/lib/sitemap-cache";
 import { runCoverBackfill } from "@/lib/cover-backfill";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -45,10 +45,10 @@ export async function GET(request: Request) {
       unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY ?? null,
     });
     if (report.applied > 0) {
-      revalidatePath("/", "layout");
-      for (const change of report.changes) {
-        if (change.applied && change.slug) revalidatePath(`/${change.slug}`);
-      }
+      revalidatePublishedSitemap({
+        articleSlugs: report.changes.map((change) => (change.applied ? change.slug : null)),
+        sectionSlugs: report.changes.map((change) => (change.applied ? change.sectionSlug : null)),
+      });
     }
     const { changes, ...summary } = report;
     return NextResponse.json({
