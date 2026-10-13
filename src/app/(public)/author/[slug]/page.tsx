@@ -13,8 +13,13 @@ import {
 import { articlePath } from "@/lib/types";
 import { formatShortDate } from "@/lib/utils";
 
-export const revalidate = 120;
+export const revalidate = 86400;
 export const dynamicParams = true;
+
+/** Empty so the first visit is cached for `revalidate`, instead of rendering every request. */
+export function generateStaticParams() {
+  return [];
+}
 
 type AuthorPageProps = {
   params: Promise<{ slug: string }>;

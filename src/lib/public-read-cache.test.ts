@@ -6,17 +6,49 @@ import {
   editorialQueryLimit,
   HOME_ARTICLE_LIMIT,
   PAGE_REVALIDATE_SECONDS,
+  PUBLISHED_AT_BUCKET_SECONDS,
   publishedAtCutoff,
 } from "./cache.ts";
 
-test("publishedAtCutoff stays stable inside one ISR window", () => {
-  const windowMs = PAGE_REVALIDATE_SECONDS * 1000;
+test("publishedAtCutoff stays stable inside one bucket and includes now", () => {
+  assert.equal(PAGE_REVALIDATE_SECONDS, 86400);
+  const windowMs = PUBLISHED_AT_BUCKET_SECONDS * 1000;
   const start = 1_780_000_000_000;
-  const bucket = Math.floor(start / windowMs) * windowMs;
-  assert.equal(publishedAtCutoff(bucket + 1), new Date(bucket).toISOString());
-  assert.equal(publishedAtCutoff(bucket + windowMs - 1), new Date(bucket).toISOString());
-  assert.equal(publishedAtCutoff(bucket + windowMs), new Date(bucket + windowMs).toISOString());
-  assert.equal(publishedAtCutoff(bucket).endsWith(".000Z"), true);
+  const bucketStart = Math.floor(start / windowMs) * windowMs;
+  const bucketEnd = bucketStart + windowMs;
+  assert.equal(publishedAtCutoff(bucketStart + 1), new Date(bucketEnd).toISOString());
+  assert.equal(publishedAtCutoff(bucketEnd - 1), new Date(bucketEnd).toISOString());
+  assert.equal(publishedAtCutoff(bucketEnd), new Date(bucketEnd).toISOString());
+  assert.equal(publishedAtCutoff(bucketEnd + 1), new Date(bucketEnd + windowMs).toISOString());
+  assert.equal(publishedAtCutoff(bucketEnd).endsWith(".000Z"), true);
+});
+
+test("public pages use the once-a-day backstop", () => {
+  const pages = [
+    "../app/(public)/page.tsx",
+    "../app/(public)/[slug]/page.tsx",
+    "../app/(public)/author/[slug]/page.tsx",
+    "../app/(public)/about/page.tsx",
+    "../app/(public)/contact/page.tsx",
+    "../app/(public)/standards/page.tsx",
+    "../app/(public)/tech/page.tsx",
+    "../app/(public)/markets/page.tsx",
+    "../app/(public)/finance/page.tsx",
+    "../app/(public)/leadership/page.tsx",
+    "../app/(public)/success-insights/page.tsx",
+    "../app/(public)/magazine/page.tsx",
+    "../app/(public)/magazine/all/page.tsx",
+    "../app/(public)/magazine/[slug]/page.tsx",
+    "../app/(public)/magazine/[slug]/read/page.tsx",
+  ];
+  for (const file of pages) {
+    const source = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.match(source, /export const revalidate = 86400/, file);
+  }
+  const sitemap = readFileSync(new URL("../app/sitemap.xml/route.ts", import.meta.url), "utf8");
+  assert.match(sitemap, /export const revalidate = 0/);
+  const author = readFileSync(new URL("../app/(public)/author/[slug]/page.tsx", import.meta.url), "utf8");
+  assert.match(author, /export function generateStaticParams\(\)/);
 });
 
 test("editorial list pad replaces the old +80 over-fetch", () => {

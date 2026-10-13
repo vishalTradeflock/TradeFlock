@@ -1,4 +1,4 @@
-import { revalidatePath } from "next/cache";
+import { nestedSlug } from "@/lib/published-refresh";
 import { revalidatePublishedSitemap } from "@/lib/sitemap-cache";
 import { NextResponse } from "next/server";
 import { canDeleteArticle } from "@/lib/studio/access";
@@ -28,7 +28,7 @@ export async function DELETE(
   const admin = createAdminClient();
   const { data: article, error: loadError } = await admin
     .from("articles")
-    .select("id, slug, status, author_id")
+    .select("id, slug, status, category:categories(slug), author:authors(slug)")
     .eq("id", id)
     .maybeSingle();
 
@@ -42,9 +42,11 @@ export async function DELETE(
   }
 
   if (article.status === "published") {
-    revalidatePath("/", "layout");
-    revalidatePath(`/${article.slug}`);
-    revalidatePublishedSitemap();
+    revalidatePublishedSitemap({
+      articleSlugs: [article.slug],
+      sectionSlugs: [nestedSlug(article.category)],
+      authorSlugs: [nestedSlug(article.author)],
+    });
   }
 
   return NextResponse.json({ ok: true, id: article.id });

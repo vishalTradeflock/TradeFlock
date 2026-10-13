@@ -45,7 +45,7 @@ function articlesForDesk(
   return [];
 }
 
-export const revalidate = 120;
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   ...publicPageMetadata({
@@ -126,7 +126,7 @@ export default async function Home() {
             {deepDiveTop.length ? (
               <div className="mb-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {deepDiveTop.map((article) => (
-                  <Link key={article.id} href={articlePath(article.slug)} className="group block">
+                  <Link key={article.id} href={articlePath(article.slug)} prefetch={false} className="group block">
                     <div className="relative mb-3 aspect-[16/10] w-full overflow-hidden rounded bg-muted">
                       <SafeArticleImage
                         src={article.cover_image_url}
@@ -159,7 +159,7 @@ export default async function Home() {
             {deepDiveSub.length ? (
               <div className="grid grid-cols-1 gap-x-5 gap-y-4 border-t border-border/60 pt-4 sm:grid-cols-2">
                 {deepDiveSub.map((article) => (
-                  <Link key={article.id} href={articlePath(article.slug)} className="group block">
+                  <Link key={article.id} href={articlePath(article.slug)} prefetch={false} className="group block">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-[#c41e3a]">
                       {article.category.name}
                     </p>
@@ -232,7 +232,7 @@ function RankedRail({
           <ol>
             {articles.map((article, index) => (
               <li key={article.id} className="py-3">
-                <Link href={articlePath(article.slug)} className="group flex gap-3">
+                <Link href={articlePath(article.slug)} prefetch={false} className="group flex gap-3">
                   <span className="font-serif text-2xl font-semibold leading-none text-[#c41e3a]">
                     {index + 1}
                   </span>
@@ -253,7 +253,7 @@ function RankedRail({
         <ol className="divide-y divide-neutral-200">
           {articles.map((article, index) => (
             <li key={article.id} className="py-3">
-              <Link href={articlePath(article.slug)} className="group flex gap-3">
+              <Link href={articlePath(article.slug)} prefetch={false} className="group flex gap-3">
                 <span className="font-serif text-2xl font-semibold leading-none text-[#c41e3a]">
                   {index + 1}
                 </span>

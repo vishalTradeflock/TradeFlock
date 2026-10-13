@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { PAGE_REVALIDATE_SECONDS } from "@/lib/cache";
-import { SITEMAP_CACHE_TAG } from "@/lib/sitemap-tag";
+import { PUBLISHED_PAGES_CACHE_TAG, SITEMAP_CACHE_TAG } from "@/lib/sitemap-tag";
 import type { Database } from "@/lib/supabase/database.types";
 
 type PublicClientOptions = {
@@ -11,9 +11,11 @@ type PublicClientOptions = {
    */
   timeoutMs?: number;
   /**
-   * `page` (default) shares the 120s public Data Cache.
+   * `page` (default) shares the daily public Data Cache under
+   * `PUBLISHED_PAGES_CACHE_TAG`. Publish paths expire that tag; the
+   * revalidate window is only the once-a-day backstop.
    * `sitemap` is force-cached under `SITEMAP_CACHE_TAG` until a publish
-   * expires the tag. It must not use the 120s window: a dynamic route
+   * expires the tag. It must not use the page window: a dynamic route
    * treats a missing cache mode as uncached, which would read Supabase
    * on every sitemap request.
    */
@@ -51,7 +53,12 @@ export function createPublicClient(options?: PublicClientOptions) {
                 cache: "force-cache",
                 next: { tags: [SITEMAP_CACHE_TAG], revalidate: false },
               }
-            : { next: { revalidate: PAGE_REVALIDATE_SECONDS } }),
+            : {
+                next: {
+                  revalidate: PAGE_REVALIDATE_SECONDS,
+                  tags: [PUBLISHED_PAGES_CACHE_TAG],
+                },
+              }),
         }),
     },
   });

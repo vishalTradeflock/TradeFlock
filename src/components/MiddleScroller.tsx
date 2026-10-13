@@ -60,6 +60,7 @@ function RailCard({ article }: { article: ArticleWithRelations }) {
   return (
     <Link
       href={articlePath(article.slug)}
+      prefetch={false}
       className="flex gap-3 border-b border-border/40 py-3 hover:[&_h3]:text-[#c41e3a]"
     >
       <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded bg-neutral-100">

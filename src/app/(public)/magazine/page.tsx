@@ -24,7 +24,7 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-export const revalidate = 120;
+export const revalidate = 86400;
 
 function issueMeta(iso: string) {
   const date = new Date(iso);

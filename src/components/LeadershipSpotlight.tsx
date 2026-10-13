@@ -62,6 +62,7 @@ export default function LeadershipSpotlight({
           <Link
             key={article.id}
             href={articlePath(article.slug)}
+            prefetch={false}
             className="group border-t border-neutral-200 pt-4"
           >
             <div className="relative aspect-[16/10] overflow-hidden bg-neutral-100">

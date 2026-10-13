@@ -8,6 +8,7 @@ import {
   sourceOrFallback,
   type SitemapMagazineRow,
 } from "./sitemap-entries.ts";
+import { publishedRefreshPaths, sectionPathsForCategory } from "./published-refresh.ts";
 import { renderSitemapXml } from "./sitemap-xml.ts";
 
 const ARTICLE = "apple-announces-new-ai-strategy";
@@ -128,8 +129,13 @@ describe("sitemap route isolation", () => {
 
   it("expires the sitemap tag when a story is published", () => {
     const helper = readFileSync(new URL("./sitemap-cache.ts", import.meta.url), "utf8");
+    const client = readFileSync(new URL("./supabase/public.ts", import.meta.url), "utf8");
     assert.match(helper, /revalidateTag\(SITEMAP_CACHE_TAG, \{ expire: 0 \}\)/);
+    assert.match(helper, /revalidateTag\(PUBLISHED_PAGES_CACHE_TAG, \{ expire: 0 \}\)/);
     assert.match(helper, /revalidatePath\("\/sitemap\.xml"\)/);
+    assert.match(helper, /publishedRefreshPaths/);
+    assert.match(client, /PUBLISHED_PAGES_CACHE_TAG/);
+    assert.match(client, /revalidate: PAGE_REVALIDATE_SECONDS/);
     for (const file of [
       "../lib/newsroom/api.ts",
       "../app/studio/actions.ts",
@@ -142,6 +148,55 @@ describe("sitemap route isolation", () => {
     const newsroom = readFileSync(new URL("../lib/newsroom/api.ts", import.meta.url), "utf8");
     const publish = newsroom.slice(newsroom.indexOf("async function publishArticle"));
     assert.match(publish, /revalidatePublishedSitemap\(/);
+    assert.doesNotMatch(publish, /revalidatePath\("\/", "layout"\)/);
+    const studio = readFileSync(new URL("../app/studio/actions.ts", import.meta.url), "utf8");
+    const save = studio.slice(studio.indexOf("export async function saveStudioDraft"));
+    const saveBody = save.slice(0, save.indexOf("export async function saveStudioAuthor"));
+    assert.match(saveBody, /existing\.status === "published" \|\| nextStatus === "published"/);
+    assert.doesNotMatch(saveBody, /revalidatePath\("\/", "layout"\)/);
+  });
+});
+
+describe("published page refresh paths", () => {
+  it("refreshes home, the story, its section, its author, and ticker pages", () => {
+    assert.deepEqual(sectionPathsForCategory("technology"), ["/tech"]);
+    assert.deepEqual(sectionPathsForCategory("success insights"), ["/success-insights"]);
+    assert.deepEqual(sectionPathsForCategory("not-a-desk"), []);
+    const paths = publishedRefreshPaths({
+      articleSlugs: ["apple-announces-new-ai-strategy", "old-slug", ""],
+      sectionSlugs: ["tech", "leadership"],
+      authorSlugs: ["elena-vasquez"],
+      magazineSlugs: ["chips-power-new-industrial-map"],
+    });
+    for (const path of [
+      "/",
+      "/about",
+      "/contact",
+      "/standards",
+      "/success-insights",
+      "/magazine",
+      "/magazine/all",
+      "/apple-announces-new-ai-strategy",
+      "/old-slug",
+      "/tech",
+      "/leadership",
+      "/author/elena-vasquez",
+      "/magazine/chips-power-new-industrial-map",
+      "/magazine/chips-power-new-industrial-map/read",
+    ]) {
+      assert.ok(paths.includes(path), path);
+    }
+    assert.equal(paths.includes("/finance"), false);
+    assert.equal(paths.includes("/markets"), false);
+  });
+
+  it("does not invent listing paths when listings are off", () => {
+    const paths = publishedRefreshPaths({
+      listings: false,
+      articleSlugs: ["apple-announces-new-ai-strategy"],
+      sectionSlugs: ["finance"],
+    });
+    assert.deepEqual(paths, ["/apple-announces-new-ai-strategy", "/finance"]);
   });
 });
 

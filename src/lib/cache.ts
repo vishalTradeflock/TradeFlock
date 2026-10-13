@@ -1,5 +1,15 @@
-/** ISR window for public pages and the cookie-free Supabase fetch cache. */
-export const PAGE_REVALIDATE_SECONDS = 120;
+/**
+ * Once-a-day backstop for public pages and the cookie-free Supabase fetch cache.
+ * Publish paths expire `published-pages` immediately; this is only the fallback.
+ */
+export const PAGE_REVALIDATE_SECONDS = 86400;
+
+/**
+ * Cache-key bucket for `published_at=lte`. Rounded up so a story published
+ * during the bucket is included on the on-demand re-render. A millisecond
+ * timestamp would make every PostgREST URL unique.
+ */
+export const PUBLISHED_AT_BUCKET_SECONDS = 60;
 
 /**
  * Rows kept past the page's own limit. The SQL filters already drop Success
@@ -13,13 +23,13 @@ export function editorialQueryLimit(limit: number) {
 }
 
 /**
- * Upper bound for `published_at=lte`, floored to the ISR window.
+ * Upper bound for `published_at=lte`, rounded up to the cache-key bucket.
  * A millisecond timestamp makes every PostgREST URL unique, so Next's
  * fetch cache misses on every render.
  */
 export function publishedAtCutoff(now = Date.now()) {
-  const windowMs = PAGE_REVALIDATE_SECONDS * 1000;
-  return new Date(Math.floor(now / windowMs) * windowMs).toISOString();
+  const windowMs = PUBLISHED_AT_BUCKET_SECONDS * 1000;
+  return new Date(Math.ceil(now / windowMs) * windowMs).toISOString();
 }
 
 /** One homepage list query. Rails are derived in memory from this set. */

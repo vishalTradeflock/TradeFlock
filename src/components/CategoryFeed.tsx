@@ -69,6 +69,7 @@ export default async function CategoryFeed({
             <section className="mt-8 grid grid-cols-1 items-center gap-8 border-b border-neutral-200 pb-10 lg:grid-cols-12">
               <Link
                 href={articlePath(featured.slug)}
+                prefetch={false}
                 className="group relative block aspect-[16/9] overflow-hidden bg-neutral-100 lg:col-span-7"
               >
                 <SafeArticleImage
@@ -90,6 +91,7 @@ export default async function CategoryFeed({
                 <h2 className="mt-2 font-serif text-3xl font-bold leading-tight tracking-tight">
                   <Link
                     href={articlePath(featured.slug)}
+                    prefetch={false}
                     className="transition hover:text-[#c41e3a]"
                   >
                     {featured.title}
@@ -113,7 +115,7 @@ export default async function CategoryFeed({
               <section className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
                 {rest.map((article) => (
                   <article key={article.id}>
-                    <Link href={articlePath(article.slug)} className="group block">
+                    <Link href={articlePath(article.slug)} prefetch={false} className="group block">
                       <div className="relative aspect-[16/9] overflow-hidden bg-neutral-100">
                         <SafeArticleImage
                           src={article.cover_image_url}

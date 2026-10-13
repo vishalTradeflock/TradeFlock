@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
+import { nestedSlug } from "@/lib/published-refresh";
 import { revalidatePublishedSitemap } from "@/lib/sitemap-cache";
 import { SITE_SETTINGS_CACHE_TAG } from "@/lib/site-settings";
 import {
@@ -191,12 +192,25 @@ async function recordPublishedSlugRedirect(
   }
 }
 
-function revalidateStoryPaths(slug: string, previousSlug?: string | null, authorSlug?: string | null) {
-  revalidatePath("/", "layout");
-  revalidatePath(`/${slug}`);
-  if (previousSlug && previousSlug !== slug) revalidatePath(`/${previousSlug}`);
-  if (authorSlug) revalidatePath(`/author/${authorSlug}`);
-  revalidatePublishedSitemap();
+async function refreshPublishedStory(
+  admin: ReturnType<typeof createAdminClient>,
+  input: {
+    articleSlugs: Array<string | null | undefined>;
+    categoryId: string;
+    previousCategory: unknown;
+    authorId: string;
+    previousAuthor: unknown;
+  },
+) {
+  const [{ data: authorRow }, { data: categoryRow }] = await Promise.all([
+    admin.from("authors").select("slug").eq("id", input.authorId).maybeSingle(),
+    admin.from("categories").select("slug").eq("id", input.categoryId).maybeSingle(),
+  ]);
+  revalidatePublishedSitemap({
+    articleSlugs: input.articleSlugs,
+    sectionSlugs: [categoryRow?.slug, nestedSlug(input.previousCategory)],
+    authorSlugs: [authorRow?.slug, nestedSlug(input.previousAuthor)],
+  });
 }
 
 export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftResult> {
@@ -231,7 +245,9 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     if (input.id) {
       const { data: existing, error: existingError } = await admin
         .from("articles")
-        .select("id, slug, status, author_id, published_at, cover_image_url, dek")
+        .select(
+          "id, slug, status, author_id, category_id, published_at, cover_image_url, dek, category:categories(slug), author:authors(slug)",
+        )
         .eq("id", input.id)
         .maybeSingle();
 
@@ -350,9 +366,14 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
         return { ok: false, error: written.error.message };
       }
 
-      const { data: authorRow } = await admin.from("authors").select("slug").eq("id", authorId).maybeSingle();
-      if (nextStatus === "published") {
-        revalidateStoryPaths(nextSlug, existing.slug, authorRow?.slug);
+      if (existing.status === "published" || nextStatus === "published") {
+        await refreshPublishedStory(admin, {
+          articleSlugs: [nextSlug, existing.slug],
+          categoryId: input.categoryId,
+          previousCategory: existing.category,
+          authorId,
+          previousAuthor: existing.author,
+        });
       }
 
       if (publishBlocked) {
@@ -453,9 +474,14 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
       return { ok: false, error: error?.message ?? "Could not save draft." };
     }
 
-    const { data: authorRow } = await admin.from("authors").select("slug").eq("id", authorId).maybeSingle();
     if (nextStatus === "published") {
-      revalidateStoryPaths(data.slug, null, authorRow?.slug);
+      await refreshPublishedStory(admin, {
+        articleSlugs: [data.slug],
+        categoryId: input.categoryId,
+        previousCategory: null,
+        authorId,
+        previousAuthor: null,
+      });
     }
 
     if (publishBlocked) {
@@ -544,9 +570,9 @@ export async function saveStudioAuthor(input: SaveAuthorInput): Promise<SaveAuth
       .eq("id", existing.id);
     if (written.error) return { ok: false, error: written.error.message };
 
-    revalidatePath(`/author/${slug}`);
-    if (existing.slug !== slug) revalidatePath(`/author/${existing.slug}`);
-    revalidatePublishedSitemap();
+    revalidatePublishedSitemap({
+      authorSlugs: [slug, existing.slug],
+    });
     return { ok: true, id: existing.id, slug };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save this byline.";

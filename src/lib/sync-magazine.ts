@@ -1,4 +1,3 @@
-import { revalidatePath } from "next/cache";
 import { revalidatePublishedSitemap } from "@/lib/sitemap-cache";
 import { fetchLegacyHonorees } from "@/lib/legacy-honorees";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -50,7 +49,12 @@ async function resolveDeskIds(admin: ReturnType<typeof createAdminClient>) {
     authors?.[0];
 
   if (!category || !author) return null;
-  return { categoryId: category.id, authorId: author.id };
+  return {
+    categoryId: category.id,
+    categorySlug: category.slug,
+    authorId: author.id,
+    authorSlug: author.slug,
+  };
 }
 
 function toInsertRows(
@@ -175,9 +179,12 @@ export async function syncMagazineFromLegacy(slug: string): Promise<SyncMagazine
     })
     .eq("id", magazine.id);
 
-  revalidatePath(`/magazine/${magazine.slug}`);
-  revalidatePath(`/magazine/${magazine.slug}/read`);
-  revalidatePublishedSitemap();
+  revalidatePublishedSitemap({
+    articleSlugs: rows.map((row) => row.slug),
+    sectionSlugs: [desk.categorySlug],
+    authorSlugs: [desk.authorSlug],
+    magazineSlugs: [magazine.slug],
+  });
 
   return {
     ok: true,

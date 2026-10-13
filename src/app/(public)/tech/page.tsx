@@ -9,7 +9,7 @@ export const metadata: Metadata = publicPageMetadata({
   path: "/tech",
 });
 
-export const revalidate = 120;
+export const revalidate = 86400;
 
 export default function TechPage() {
   return (
