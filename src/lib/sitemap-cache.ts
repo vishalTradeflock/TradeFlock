@@ -8,6 +8,11 @@ export type { PublishedRefreshTarget };
 /**
  * Drop cached public pages and the sitemap after published content changes.
  * Callers pass the slugs they already have. This does not query Supabase.
+ *
+ * `revalidateTag(..., { expire: 0 })` expires tagged reads so the next
+ * render cannot reuse them. `revalidatePath("/sitemap.xml")` deletes the
+ * ISR response. On Vercel that delete purges the CDN entry for the path,
+ * which is how a publish beats `s-maxage`.
  */
 export function revalidatePublishedSitemap(target?: PublishedRefreshTarget) {
   revalidateTag(SITEMAP_CACHE_TAG, { expire: 0 });

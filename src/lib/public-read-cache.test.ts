@@ -46,7 +46,9 @@ test("public pages use the once-a-day backstop", () => {
     assert.match(source, /export const revalidate = 86400/, file);
   }
   const sitemap = readFileSync(new URL("../app/sitemap.xml/route.ts", import.meta.url), "utf8");
-  assert.match(sitemap, /export const revalidate = 0/);
+  assert.match(sitemap, /export const revalidate = 86400/);
+  assert.match(sitemap, /s-maxage=\$\{PAGE_REVALIDATE_SECONDS\}/);
+  assert.doesNotMatch(sitemap, /export const revalidate = 0/);
   const author = readFileSync(new URL("../app/(public)/author/[slug]/page.tsx", import.meta.url), "utf8");
   assert.match(author, /export function generateStaticParams\(\)/);
 });
