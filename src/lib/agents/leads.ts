@@ -1,18 +1,24 @@
 import { pickBalancedLeads } from "@/lib/agents/desk-balance";
 import { resolveNewsFeeds, type NewsFeed } from "@/lib/agents/feeds";
 import {
-  intakeSkipReason,
-  isUsableLeadItem,
-  titlesAreNearDuplicate,
-  TOPIC_DEDUPE_WINDOW_MS,
-  topicsShareEntities,
-} from "@/lib/agents/lead-filters";
+  articleDedupeSignals,
+  isTaken,
+  normalizeTitleKey,
+  normalizeUrl,
+  slugPrefix,
+  type RecentTopic,
+  type TakenKeys,
+} from "@/lib/agents/lead-dedupe";
+import { intakeSkipReason, isUsableLeadItem, topicsShareEntities } from "@/lib/agents/lead-filters";
 import type { NewsLead } from "@/lib/agents/pipeline";
 import { resolveWriterDesk, type WriterDesk } from "@/lib/agents/prompts";
 import { parseFeedItems } from "@/lib/agents/rss";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { newsroomDb } from "@/lib/newsroom/db";
-import { classifyEvent, clusterKeyFor, extractEntities } from "@/lib/newsroom/signals";
+import { clusterKeyFor } from "@/lib/newsroom/signals";
+
+export { articleDedupeSignals, isTaken, normalizeTitleKey, normalizeUrl, slugPrefix };
+export type { ArticleDedupeRow } from "@/lib/agents/lead-dedupe";
 
 const FEED_TIMEOUT_MS = 12_000;
 const SUMMARY_LIMIT = 700;
@@ -65,20 +71,6 @@ type Candidate = {
   supplementUrl?: string;
 };
 
-type RecentTopic = {
-  title: string;
-  at: number;
-};
-
-type TakenKeys = {
-  /** entity|event_type keys with an open story_claims owner (Phase 1). */
-  claimedClusters?: Set<string>;
-  titleKeys: Set<string>;
-  urls: Set<string>;
-  slugs: string[];
-  recentTopics: RecentTopic[];
-};
-
 function envInt(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();
   if (!raw) return fallback;
@@ -103,39 +95,6 @@ const MAX_SOURCE_POOL = 40;
 export function leadSourcePoolSize(): number {
   const size = envInt("NEWS_LEAD_SOURCE_POOL", Math.max(DEFAULT_SOURCE_POOL, leadBatchSize() * 6));
   return Math.min(MAX_SOURCE_POOL, Math.max(leadBatchSize(), size));
-}
-
-export function normalizeTitleKey(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
-}
-
-export function slugPrefix(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
-}
-
-export function normalizeUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.hash = "";
-    for (const key of [...parsed.searchParams.keys()]) {
-      if (/^(utm_|fbclid|gclid|mc_)/i.test(key) || key === "ref") {
-        parsed.searchParams.delete(key);
-      }
-    }
-    parsed.hostname = parsed.hostname.replace(/^www\./, "");
-    return parsed.toString().replace(/\/$/, "");
-  } catch {
-    return url.trim();
-  }
 }
 
 function refineDesk(desk: WriterDesk, title: string, summary: string): WriterDesk {
@@ -266,7 +225,7 @@ async function loadTakenKeys(sinceIso: string): Promise<TakenKeys> {
 
   const articles = await admin
     .from("articles")
-    .select("title, slug, body, excerpt, created_at")
+    .select("title, slug, canonical_url, created_at")
     .gte("created_at", sinceIso)
     .order("created_at", { ascending: false })
     .limit(400);
@@ -276,14 +235,11 @@ async function loadTakenKeys(sinceIso: string): Promise<TakenKeys> {
   }
 
   for (const row of articles.data ?? []) {
-    titleKeys.add(normalizeTitleKey(row.title));
-    slugs.push(row.slug);
-    const at = Date.parse(row.created_at);
-    if (row.title && Number.isFinite(at)) recentTopics.push({ title: row.title, at });
-    const haystack = `${row.body}\n${row.excerpt}`;
-    for (const match of haystack.matchAll(/https?:\/\/[^\s"'<>]+/g)) {
-      urls.add(normalizeUrl(match[0]));
-    }
+    const signals = articleDedupeSignals(row);
+    titleKeys.add(signals.titleKey);
+    slugs.push(signals.slug);
+    if (signals.topic) recentTopics.push(signals.topic);
+    for (const url of signals.urls) urls.add(url);
   }
 
   const processed = await admin
@@ -331,34 +287,6 @@ async function loadTakenKeys(sinceIso: string): Promise<TakenKeys> {
   return { titleKeys, urls, slugs, recentTopics, claimedClusters };
 }
 
-function isTaken(candidate: Candidate, taken: TakenKeys): boolean {
-  if (taken.claimedClusters?.size) {
-    const text = `${candidate.title}. ${candidate.summary}`;
-    const entity = extractEntities(text)[0] ?? null;
-    const key = clusterKeyFor(entity, classifyEvent(text), candidate.titleKey);
-    if (taken.claimedClusters.has(key)) return true;
-  }
-  if (taken.titleKeys.has(candidate.titleKey)) return true;
-  if (taken.urls.has(candidate.normalizedUrl)) return true;
-
-  const prefix = slugPrefix(candidate.title);
-  if (prefix.length >= 12 && taken.slugs.some((slug) => slug.startsWith(prefix))) {
-    return true;
-  }
-
-  for (const key of taken.titleKeys) {
-    if (titlesAreNearDuplicate(candidate.titleKey, key)) return true;
-  }
-
-  const topicCutoff = Date.now() - TOPIC_DEDUPE_WINDOW_MS;
-  for (const topic of taken.recentTopics) {
-    if (topic.at < topicCutoff) continue;
-    if (topicsShareEntities(candidate.title, topic.title)) return true;
-  }
-
-  return false;
-}
-
 export async function leadWasRecentlySeen(lead: IncomingLead): Promise<boolean> {
   const since = new Date(
     Date.now() - envInt("NEWS_LEAD_DEDUPE_DAYS", DEFAULT_DEDUPE_DAYS) * 24 * 60 * 60 * 1000,
@@ -367,14 +295,9 @@ export async function leadWasRecentlySeen(lead: IncomingLead): Promise<boolean> 
   return isTaken(
     {
       title: lead.topic,
-      link: lead.sourceUrl,
       summary: "",
-      publishedAt: 0,
-      sourceName: lead.sourceName,
-      desk: resolveWriterDesk(lead.category),
       titleKey: lead.titleKey,
       normalizedUrl: normalizeUrl(lead.sourceUrl),
-      imageUrl: lead.imageUrl ?? null,
     },
     taken,
   );

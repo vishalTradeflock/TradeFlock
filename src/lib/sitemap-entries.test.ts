@@ -114,16 +114,23 @@ describe("sitemap route isolation", () => {
     assert.doesNotMatch(`${source}\n${route}`, /export const revalidate = 900/);
   });
 
-  it("stays a dynamic handler so the CDN cannot freeze a build-time urlset", () => {
+  it("caches the route handler for a day without freezing a metadata file", () => {
     const route = readFileSync(new URL("../app/sitemap.xml/route.ts", import.meta.url), "utf8");
     const client = readFileSync(new URL("./supabase/public.ts", import.meta.url), "utf8");
-    assert.match(route, /export const dynamic = "force-dynamic"/);
-    assert.match(route, /export const revalidate = 0/);
-    assert.match(route, /Cache-Control": "private, no-store, max-age=0"/);
+    assert.throws(() => readFileSync(new URL("../app/sitemap.ts", import.meta.url), "utf8"));
+    assert.match(route, /export const revalidate = 86400/);
+    assert.doesNotMatch(route, /export const dynamic = "force-dynamic"/);
+    assert.doesNotMatch(route, /export const dynamic = "force-static"/);
+    assert.doesNotMatch(route, /private, no-store/);
+    assert.match(
+      route,
+      /public, max-age=0, s-maxage=\$\{PAGE_REVALIDATE_SECONDS\}, stale-while-revalidate=\$\{PAGE_REVALIDATE_SECONDS\}/,
+    );
     assert.match(route, /renderSitemapXml/);
-    assert.match(client, /cache: "force-cache"/);
+    assert.match(route, /revalidatePath\("\/sitemap\.xml"\)|revalidatePublishedSitemap/);
     assert.match(client, /tags: \[SITEMAP_CACHE_TAG\]/);
-    assert.match(client, /revalidate: false/);
+    assert.match(client, /revalidate: PAGE_REVALIDATE_SECONDS/);
+    assert.doesNotMatch(client, /revalidate: false/);
     assert.match(client, /cache === "sitemap"/);
   });
 

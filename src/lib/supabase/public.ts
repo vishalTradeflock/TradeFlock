@@ -14,10 +14,10 @@ type PublicClientOptions = {
    * `page` (default) shares the daily public Data Cache under
    * `PUBLISHED_PAGES_CACHE_TAG`. Publish paths expire that tag; the
    * revalidate window is only the once-a-day backstop.
-   * `sitemap` is force-cached under `SITEMAP_CACHE_TAG` until a publish
-   * expires the tag. It must not use the page window: a dynamic route
-   * treats a missing cache mode as uncached, which would read Supabase
-   * on every sitemap request.
+   * `sitemap` uses the same one-day window under `SITEMAP_CACHE_TAG`.
+   * Publish expires that tag immediately (`expire: 0`). The window is the
+   * backstop so a missed publish still refetches. The revalidate value has
+   * to be set: a route handler treats a missing cache mode as uncached.
    */
   cache?: "page" | "sitemap";
 };
@@ -50,8 +50,10 @@ export function createPublicClient(options?: PublicClientOptions) {
           ...init,
           ...(sitemapCache
             ? {
-                cache: "force-cache",
-                next: { tags: [SITEMAP_CACHE_TAG], revalidate: false },
+                next: {
+                  revalidate: PAGE_REVALIDATE_SECONDS,
+                  tags: [SITEMAP_CACHE_TAG],
+                },
               }
             : {
                 next: {
