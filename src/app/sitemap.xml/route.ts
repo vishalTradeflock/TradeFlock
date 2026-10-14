@@ -1,36 +1,43 @@
 import { PAGE_REVALIDATE_SECONDS } from "@/lib/cache";
+import { SITEMAP_CACHE_TAG } from "@/lib/sitemap-tag";
 import { loadSitemapEntries } from "@/lib/sitemap-source";
 import { renderSitemapXml } from "@/lib/sitemap-xml";
 
 /**
- * ISR route handler. Do not move this back to `app/sitemap.ts`.
+ * Dynamic route handler. Do not move this back to `app/sitemap.ts`, and do
+ * not set `revalidate` or `force-static`.
  *
- * A prerendered metadata sitemap is emitted as a static file. The CDN then
- * keeps the build snapshot, and neither the revalidate window nor
- * `revalidatePath` runs the route again. This file stays a route handler so
- * the response lives in the Full Route Cache with a one-day revalidate.
+ * A prerendered metadata sitemap is a static file. The CDN keeps the build
+ * snapshot, and neither a revalidate window nor `revalidatePath` runs the
+ * route again.
  *
- * Publish reaches the CDN copy through `revalidatePublishedSitemap()`:
- * `revalidateTag(sitemap, { expire: 0 })` drops the tagged PostgREST reads,
- * and `revalidatePath("/sitemap.xml")` deletes the cached response. On Vercel
- * that path delete purges the CDN entry, so the next crawler regenerates
- * instead of sitting out `s-maxage`. The cache header is only the backstop.
+ * PR #43 cached this handler with `Cache-Control: s-maxage=86400` and
+ * `export const revalidate = 86400`. Vercel then stored the XML as a CDN
+ * entry for that TTL. `revalidatePath("/sitemap.xml")` only expires Next's
+ * path tag. `revalidateTag("sitemap")` only expired the tagged PostgREST
+ * read. Neither tag was on the HTTP response, so the edge kept serving the
+ * HIT until `s-maxage` elapsed. ISR also drops raw response headers, so a
+ * `Vercel-Cache-Tag` set on a revalidated handler would not stick.
  *
- * `revalidate` must be a numeric literal. Next does not evaluate expressions
- * when it records the prerender window. Keep it equal to
- * `PAGE_REVALIDATE_SECONDS`.
+ * This handler stays dynamic so the headers reach the CDN. The CDN caches
+ * the body for a day. Browsers get `max-age=0`. The response carries the
+ * `sitemap` tag that `revalidatePublishedSitemap()` already deletes with
+ * `revalidateTag(..., { expire: 0 })`. On Next.js 16 that delete purges the
+ * CDN entry, so the next request regenerates. The one-day TTL is the backstop.
  */
-export const revalidate = 86400;
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const SITEMAP_CACHE_CONTROL = `public, max-age=0, s-maxage=${PAGE_REVALIDATE_SECONDS}, stale-while-revalidate=${PAGE_REVALIDATE_SECONDS}`;
+const SITEMAP_CDN_CACHE_CONTROL = `public, s-maxage=${PAGE_REVALIDATE_SECONDS}, stale-while-revalidate=${PAGE_REVALIDATE_SECONDS}`;
 
 export async function GET() {
   const xml = renderSitemapXml(await loadSitemapEntries());
   return new Response(xml, {
     headers: {
       "Content-Type": "application/xml",
-      "Cache-Control": SITEMAP_CACHE_CONTROL,
+      "Cache-Control": "public, max-age=0",
+      "Vercel-CDN-Cache-Control": SITEMAP_CDN_CACHE_CONTROL,
+      "Vercel-Cache-Tag": SITEMAP_CACHE_TAG,
     },
   });
 }
