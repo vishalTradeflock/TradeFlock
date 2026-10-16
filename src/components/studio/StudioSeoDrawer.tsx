@@ -6,9 +6,10 @@ import { ALT_TEXT_MAX } from "@/lib/studio/head-meta";
 import {
   SEO_DESCRIPTION_LIMIT,
   SEO_TITLE_LIMIT,
+  TITLE_BRAND_SUFFIX_MAX,
+  articleDocumentTitle,
   previewSlug,
   resolveSeoDescription,
-  resolveSeoTitle,
 } from "@/lib/studio/seo";
 import { getSiteHost } from "@/lib/site-url";
 import { cn } from "@/lib/utils";
@@ -68,7 +69,7 @@ export function StudioSeoDrawer({
 
   if (!open) return null;
 
-  const previewTitle = resolveSeoTitle(metaTitle, title);
+  const previewTitle = articleDocumentTitle(metaTitle, title);
   const previewDescription = resolveSeoDescription(metaDescription, opening);
   const pathSlug = previewSlug(slug, title);
   const displayUrl = `${getSiteHost()} › news › ${pathSlug}`;
@@ -210,6 +211,8 @@ export function StudioSeoDrawer({
               />
               <p className="mt-1 text-xs text-neutral-500">
                 Leave blank to use the post title. Aim for about {SEO_TITLE_LIMIT} characters.
+                The TradeFlock USA suffix is added only when the title is {TITLE_BRAND_SUFFIX_MAX}{" "}
+                characters or fewer.
               </p>
             </label>
 
@@ -240,7 +243,7 @@ export function StudioSeoDrawer({
               <div className="mt-2 border border-neutral-200 bg-white px-3 py-3">
                 <p className="truncate text-[13px] text-[#006621]">{displayUrl}</p>
                 <p className="mt-1 font-serif text-xl leading-6 text-[#1a0dab]">
-                  {serpsTruncate(`${previewTitle} | TradeFlock USA`, SEO_TITLE_LIMIT + 18)}
+                  {previewTitle}
                 </p>
                 <p className="mt-1 text-sm leading-5 text-[#4d5156]">
                   {serpsTruncate(

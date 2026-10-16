@@ -11,7 +11,7 @@ import { firstPartyMediaUrl } from "@/lib/media-proxy";
 import { ogImageSource } from "@/lib/responsive-cover";
 import { PRODUCTION_ORIGIN, getBaseUrl } from "@/lib/site-url";
 import { faqAnswerPlainText } from "@/lib/studio/faqs";
-import { publicStoryPath, resolveSeoDescription, resolveSeoTitle } from "@/lib/studio/seo";
+import { articleDocumentTitle, publicStoryPath, resolveSeoDescription } from "@/lib/studio/seo";
 import { targetedNoindexMetadata } from "@/lib/targeted-noindex";
 import { articlePath, sectionPath, type ArticleWithRelations, type Magazine } from "@/lib/types";
 
@@ -277,13 +277,13 @@ export function publicPageMetadata({
 }
 
 export function articlePageMetadata(article: ArticleWithRelations): Metadata {
-  const title = resolveSeoTitle(article.meta_title, article.title);
+  const title = articleDocumentTitle(article.meta_title, article.title);
   const description = resolveSeoDescription(article.meta_description, article.excerpt);
   const url = newsArticleUrl(article.slug);
   const image = getOgImage(storyShareImage(article));
   const authorMeta = articleAuthorMetadata(article.author, getCanonicalUrl);
   return {
-    title,
+    title: { absolute: title },
     description,
     authors: [authorMeta],
     alternates: { canonical: url },
