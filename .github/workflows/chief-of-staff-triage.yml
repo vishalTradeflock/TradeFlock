@@ -4,10 +4,6 @@ name: Chief of Staff Triage
 # America/New_York (cron is UTC and set for EDT; runs an hour earlier in EST).
 # Never writes or publishes articles.
 on:
-  schedule:
-    - cron: "0 12 * * *"
-    - cron: "30 16 * * *"
-    - cron: "30 20 * * *"
   workflow_dispatch:
 
 jobs:

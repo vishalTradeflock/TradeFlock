@@ -3,8 +3,6 @@ name: Signal Desk
 # Ingests RSS + primary sources (SEC EDGAR 8-K, Federal Reserve) into
 # story_signals. Never writes or publishes articles.
 on:
-  schedule:
-    - cron: "7,37 * * * *"
   workflow_dispatch:
 
 jobs:
