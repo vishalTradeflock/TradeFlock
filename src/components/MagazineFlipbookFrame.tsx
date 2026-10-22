@@ -1,26 +1,25 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { magazineEmbedSrc, parseFlipbookHash } from "@/lib/magazine-links";
+import { magazineEmbedSrc, parseFlipbookHash, parseFlipbookPage } from "@/lib/magazine-links";
 import type { Magazine } from "@/lib/types";
 
-export function MagazineFlipbookFrame({
-  magazine,
-  queryPage,
-}: {
-  magazine: Magazine;
-  queryPage: number;
-}) {
+export function MagazineFlipbookFrame({ magazine }: { magazine: Magazine }) {
   const [page, setPage] = useState<number | null>(null);
 
   useEffect(() => {
     function readLocation() {
-      setPage(parseFlipbookHash(window.location.hash) ?? queryPage);
+      const query = new URLSearchParams(window.location.search).get("page") ?? undefined;
+      setPage(parseFlipbookHash(window.location.hash) ?? parseFlipbookPage(query));
     }
     readLocation();
     window.addEventListener("hashchange", readLocation);
-    return () => window.removeEventListener("hashchange", readLocation);
-  }, [queryPage]);
+    window.addEventListener("popstate", readLocation);
+    return () => {
+      window.removeEventListener("hashchange", readLocation);
+      window.removeEventListener("popstate", readLocation);
+    };
+  }, []);
 
   const src = useMemo(
     () => (page ? magazineEmbedSrc(magazine, page) : null),

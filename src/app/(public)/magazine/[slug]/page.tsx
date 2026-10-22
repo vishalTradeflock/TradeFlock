@@ -9,7 +9,7 @@ import { directoryHonoreesForIssue } from "@/lib/magazine-honorees";
 import { getMagazineBySlug, getMagazines } from "@/lib/magazines";
 import { magazinePageMetadata, magazineStructuredData, magazineIssueUrl } from "@/lib/seo";
 
-export const revalidate = 60;
+export const revalidate = 3600;
 export const dynamicParams = true;
 
 type MagazineOverviewPageProps = {

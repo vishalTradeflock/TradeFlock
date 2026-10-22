@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { PAGE_REVALIDATE_SECONDS } from "@/lib/cache";
+import { ARTICLE_REVALIDATE_SECONDS } from "@/lib/cache";
 import type { Database } from "@/lib/supabase/database.types";
 
 type PublicClientOptions = {
@@ -9,6 +9,10 @@ type PublicClientOptions = {
    * function until the platform kills it.
    */
   timeoutMs?: number;
+  /** Seconds for the Next fetch cache. Defaults to the article window so a shared read cannot pull every route down to the listing interval. */
+  revalidate?: number;
+  /** Narrow cache tags. Do not put a tag here that is also used by every article page. */
+  tags?: string[];
 };
 
 /**
@@ -25,6 +29,8 @@ export function createPublicClient(options?: PublicClientOptions) {
 
   const timeoutMs = options?.timeoutMs;
   const timed = typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs > 0;
+  const revalidate = options?.revalidate ?? ARTICLE_REVALIDATE_SECONDS;
+  const tags = options?.tags?.map((tag) => tag.trim()).filter(Boolean);
 
   return createClient<Database>(url, anonKey, {
     auth: {
@@ -36,7 +42,10 @@ export function createPublicClient(options?: PublicClientOptions) {
       fetch: (input, init) =>
         fetch(input, {
           ...init,
-          next: { revalidate: PAGE_REVALIDATE_SECONDS },
+          next: {
+            revalidate,
+            ...(tags?.length ? { tags } : {}),
+          },
         }),
     },
   });

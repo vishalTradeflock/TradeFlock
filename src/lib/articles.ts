@@ -2,9 +2,16 @@ import { cache } from "react";
 import { exactRequestedArticleSlug } from "@/lib/article-slug-request";
 import {
   BIG_TAKE_LIMIT,
+  articleReadCache,
   editorialQueryLimit,
   HOME_ARTICLE_LIMIT,
+  magazineReadCache,
+  publicReadCache,
   publishedAtCutoff,
+  sitemapReadCache,
+  slugRedirectReadCache,
+  successInsightsReadCache,
+  type PublicReadScope,
 } from "@/lib/cache";
 import { SEED_ARTICLES } from "@/lib/data/seed";
 import { assignDistinctCovers, articleCoverSrc, portraitImageUrl } from "@/lib/images";
@@ -113,6 +120,12 @@ type ListQuery = {
   breaking?: boolean;
   order?: "published_at" | "view_count";
   limit?: number;
+  /**
+   * `listing` is invalidated when a story is published.
+   * `embedded` is the ticker and related rail on story pages — left untagged
+   * so one publish does not regenerate every story.
+   */
+  scope?: PublicReadScope;
 };
 
 function dedupeArticles(articles: ArticleWithRelations[]) {
@@ -239,11 +252,23 @@ function filterSeed(options: ListQuery) {
   return rows.slice(0, options.limit ?? LIST_LIMIT);
 }
 
+function deskSlugForCache(options: ListQuery) {
+  if (options.scope === "embedded" || options.scope === "author") return undefined;
+  if (options.categorySlug?.trim()) return options.categorySlug;
+  const name = options.categoryName?.trim().toLowerCase() ?? "";
+  if (name === "tech" || name === "technology") return "tech";
+  if (name === "markets" || name === "finance" || name === "leadership") return name;
+  if (isSuccessInsightsDesk(name)) return "success-insights";
+  return undefined;
+}
+
 async function queryList(options: ListQuery): Promise<ArticleWithRelations[] | null> {
   if (!isSupabaseConfigured()) return null;
 
   try {
-    const supabase = createPublicClient();
+    const supabase = createPublicClient(
+      publicReadCache(options.scope ?? "listing", options.authorId, deskSlugForCache(options)),
+    );
     const limit = options.limit ?? LIST_LIMIT;
     const order = options.order ?? "published_at";
     const needsCategoryInner =
@@ -336,19 +361,23 @@ const getSuccessInsightsCategoryIds = cache(async () => {
   }
 });
 
-export const getEditorialArticles = cache(async (limit = HOME_ARTICLE_LIMIT) => {
+export const getEditorialArticles = cache(async (
+  limit = HOME_ARTICLE_LIMIT,
+  scope: PublicReadScope = "listing",
+) => {
   const siIds = await getSuccessInsightsCategoryIds();
   const fetchLimit = editorialQueryLimit(limit);
   const queried = await queryList({
     excludeCategoryIds: siIds.length ? siIds : undefined,
     excludeSuccessInsights: true,
     limit: fetchLimit,
+    scope,
   });
   if (queried) {
     return withListCovers(withoutSuccessInsights(queried).slice(0, limit));
   }
   if (isSupabaseConfigured()) {
-    const fallback = withoutSuccessInsights((await queryList({ limit: fetchLimit })) ?? []);
+    const fallback = withoutSuccessInsights((await queryList({ limit: fetchLimit, scope })) ?? []);
     return withListCovers(fallback.slice(0, limit));
   }
   return withListCovers(filterSeed({ excludeSuccessInsights: true, limit }));
@@ -362,6 +391,7 @@ export const getArticles = cache(async (categorySlug?: string, limit = LIST_LIMI
       categorySlug,
       excludeSuccessInsights,
       limit: fetchLimit,
+      scope: "listing",
     })) ?? filterSeed({ categorySlug, excludeSuccessInsights, limit: fetchLimit });
   const filtered = excludeSuccessInsights ? withoutSuccessInsights(rows) : rows;
   return withListCovers(filtered.slice(0, limit));
@@ -370,7 +400,7 @@ export const getArticles = cache(async (categorySlug?: string, limit = LIST_LIMI
 export const getPublishedArticlesByAuthorId = cache(async (authorId: string, limit = 60) => {
   if (!authorId) return [];
   const rows =
-    (await queryList({ authorId, limit })) ??
+    (await queryList({ authorId, limit, scope: "author" })) ??
     filterSeed({ limit }).filter((article) => article.author.id === authorId);
   return withListCovers(rows);
 });
@@ -380,7 +410,7 @@ export async function resolvePublishedSlugRedirect(oldSlug: string) {
   if (!clean || !isSupabaseConfigured()) return null;
 
   try {
-    const supabase = createPublicClient();
+    const supabase = createPublicClient(slugRedirectReadCache(clean));
     const { data, error } = await supabase
       .from("article_slug_redirects")
       .select("article_id")
@@ -483,7 +513,7 @@ export const getArticlesLinkedToMagazine = cache(async (magazine: {
   }
 
   try {
-    const supabase = createPublicClient();
+    const supabase = createPublicClient(magazineReadCache());
     const rows = await articlesLinkedByMagazineId(supabase, magazineId, publishedAtCutoff());
     return sortMagazineHonorees(mapMagazineArticles(rows));
   } catch {
@@ -504,7 +534,7 @@ export const getArticlesByMagazineId = cache(async (magazine: {
   }
 
   try {
-    const supabase = createPublicClient();
+    const supabase = createPublicClient(magazineReadCache());
     const now = publishedAtCutoff();
     const byId = new Map<string, unknown>();
 
@@ -744,6 +774,7 @@ export const getCategoryDesk = cache(async (slugOrName: string, limit = LIST_LIM
       categoryName: name,
       excludeSuccessInsights,
       limit: fetchLimit,
+      scope: "listing",
     });
     if (fromDb) {
       const dbRows = excludeSuccessInsights ? withoutSuccessInsights(fromDb) : fromDb;
@@ -768,7 +799,7 @@ export async function getArticleSlugs() {
   }
 
   try {
-    const supabase = createPublicClient();
+    const supabase = createPublicClient(sitemapReadCache());
     const { data, error } = await supabase
       .from("articles")
       .select("slug")
@@ -790,7 +821,7 @@ async function fetchArticleBySlugFromSupabase(cleanSlug: string) {
   if (!isSupabaseConfigured()) return null;
 
   try {
-    const supabase = createPublicClient();
+    const supabase = createPublicClient(articleReadCache(cleanSlug));
     const now = publishedAtCutoff();
 
     const exact = await supabase
@@ -866,19 +897,19 @@ export const getArticleBySlug = cache(async (slug: string) => {
 
 export const getSuccessInsightsArticles = cache(async (limit = 20) => {
   const byName =
-    (await queryList({ categoryName: SUCCESS_INSIGHTS_NAME, limit })) ?? [];
+    (await queryList({ categoryName: SUCCESS_INSIGHTS_NAME, limit, scope: "listing" })) ?? [];
   const merged = dedupeArticles(byName);
 
   if (merged.length < limit) {
     const bySlug =
-      (await queryList({ categorySlug: SUCCESS_INSIGHTS_SLUG, limit })) ?? [];
+      (await queryList({ categorySlug: SUCCESS_INSIGHTS_SLUG, limit, scope: "listing" })) ?? [];
     merged.push(...bySlug.filter((article) => !merged.some((row) => row.id === article.id)));
   }
 
   if (merged.length < limit) {
     const ids = await getSuccessInsightsCategoryIds();
     if (ids.length) {
-      const byId = (await queryList({ categoryIds: ids, limit })) ?? [];
+      const byId = (await queryList({ categoryIds: ids, limit, scope: "listing" })) ?? [];
       merged.push(...byId.filter((article) => !merged.some((row) => row.id === article.id)));
     }
   }
@@ -924,7 +955,7 @@ export const getSuccessInsightsArchive = cache(async () => {
   if (!isSupabaseConfigured()) return seedRows();
 
   try {
-    const supabase = createPublicClient();
+    const supabase = createPublicClient(successInsightsReadCache());
     const now = publishedAtCutoff();
     const { data, error } = await supabase
       .from("articles")
@@ -982,7 +1013,7 @@ export const getSuccessInsightsArchive = cache(async () => {
  * is already excluded by `getEditorialArticles`.
  */
 export const getBreakingArticles = cache(async () => {
-  return getEditorialArticles(8);
+  return getEditorialArticles(8, "embedded");
 });
 
 export function toArticleListCard(article: ArticleWithRelations): ArticleListCard {
@@ -1007,6 +1038,7 @@ export const getRelatedArticles = cache(async (article: ArticleWithRelations, li
       categoryId: article.category_id,
       excludeSuccessInsights,
       limit: fetchLimit,
+      scope: "embedded",
     })) ??
     filterSeed({
       categoryId: article.category_id,
@@ -1023,6 +1055,7 @@ export const getRelatedArticles = cache(async (article: ArticleWithRelations, li
     (await queryList({
       excludeSuccessInsights,
       limit: fetchLimit,
+      scope: "embedded",
     })) ??
     filterSeed({
       excludeId: article.id,

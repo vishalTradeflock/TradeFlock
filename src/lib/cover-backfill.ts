@@ -86,6 +86,7 @@ export type BackfillChange = {
   oldKey: string;
   newCover: string | null; // null = not picked (dry run without Unsplash key, or skipped)
   newSource: "unsplash" | "neutral-card" | "source_photo" | null;
+  categorySlug?: string | null;
   /** Topic alt for a source photo. Personal names are already stripped from queries. */
   alt?: string;
   sourceUrl?: string;
@@ -232,6 +233,7 @@ export async function runCoverBackfill(
       newSource: null,
       queries,
       applied: false,
+      categorySlug: row.category?.slug ?? null,
     };
 
     const page = sourcePageFor(row);

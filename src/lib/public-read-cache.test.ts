@@ -9,14 +9,16 @@ import {
   publishedAtCutoff,
 } from "./cache.ts";
 
-test("publishedAtCutoff stays stable inside one ISR window", () => {
+test("publishedAtCutoff stays stable inside one ISR window and includes stories published during it", () => {
   const windowMs = PAGE_REVALIDATE_SECONDS * 1000;
   const start = 1_780_000_000_000;
   const bucket = Math.floor(start / windowMs) * windowMs;
-  assert.equal(publishedAtCutoff(bucket + 1), new Date(bucket).toISOString());
-  assert.equal(publishedAtCutoff(bucket + windowMs - 1), new Date(bucket).toISOString());
-  assert.equal(publishedAtCutoff(bucket + windowMs), new Date(bucket + windowMs).toISOString());
+  const end = new Date(bucket + windowMs).toISOString();
+  assert.equal(publishedAtCutoff(bucket + 1), end);
+  assert.equal(publishedAtCutoff(bucket + windowMs - 1), end);
+  assert.equal(publishedAtCutoff(bucket + windowMs), new Date(bucket + 2 * windowMs).toISOString());
   assert.equal(publishedAtCutoff(bucket).endsWith(".000Z"), true);
+  assert.ok(new Date(bucket + 1).toISOString() <= publishedAtCutoff(bucket + 1));
 });
 
 test("editorial list pad replaces the old +80 over-fetch", () => {

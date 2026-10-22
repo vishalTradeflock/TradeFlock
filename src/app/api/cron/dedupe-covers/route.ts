@@ -1,5 +1,5 @@
-import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import { revalidatePublishedArticles } from "@/lib/revalidate-public";
 import { runCoverBackfill } from "@/lib/cover-backfill";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -45,10 +45,12 @@ export async function GET(request: Request) {
       unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY ?? null,
     });
     if (report.applied > 0) {
-      revalidatePath("/", "layout");
-      for (const change of report.changes) {
-        if (change.applied && change.slug) revalidatePath(`/${change.slug}`);
-      }
+      const articles = report.changes.flatMap((change) =>
+        change.applied && change.slug
+          ? [{ slug: change.slug, categorySlug: change.categorySlug }]
+          : [],
+      );
+      revalidatePublishedArticles(articles, "handler");
     }
     const { changes, ...summary } = report;
     return NextResponse.json({

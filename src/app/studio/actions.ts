@@ -1,6 +1,13 @@
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
+import {
+  EDITORIAL_LISTINGS_TAG,
+  SITEMAP_CACHE_TAG,
+  authorProfileTag,
+  authorArticlesTag,
+} from "@/lib/cache";
+import { revalidatePublishedArticles } from "@/lib/revalidate-public";
 import { SITE_SETTINGS_CACHE_TAG } from "@/lib/site-settings";
 import {
   excerptFromHtml,
@@ -190,12 +197,52 @@ async function recordPublishedSlugRedirect(
   }
 }
 
-function revalidateStoryPaths(slug: string, previousSlug?: string | null, authorSlug?: string | null) {
-  revalidatePath("/", "layout");
-  revalidatePath(`/${slug}`);
-  if (previousSlug && previousSlug !== slug) revalidatePath(`/${previousSlug}`);
-  if (authorSlug) revalidatePath(`/author/${authorSlug}`);
-  revalidatePath("/sitemap.xml");
+async function slugForId(
+  admin: ReturnType<typeof createAdminClient>,
+  table: "categories" | "authors",
+  id: string | null | undefined,
+) {
+  if (!id) return null;
+  const { data } = await admin.from(table).select("slug").eq("id", id).maybeSingle();
+  return data?.slug ?? null;
+}
+
+async function revalidatePublishedStory(
+  admin: ReturnType<typeof createAdminClient>,
+  input: {
+    slug: string;
+    previousSlug?: string | null;
+    categoryId?: string | null;
+    previousCategoryId?: string | null;
+    authorId?: string | null;
+    previousAuthorId?: string | null;
+    authorSlug?: string | null;
+  },
+) {
+  const [categorySlug, previousCategorySlug, previousAuthorSlug] = await Promise.all([
+    slugForId(admin, "categories", input.categoryId),
+    input.previousCategoryId && input.previousCategoryId !== input.categoryId
+      ? slugForId(admin, "categories", input.previousCategoryId)
+      : Promise.resolve(null),
+    input.previousAuthorId && input.previousAuthorId !== input.authorId
+      ? slugForId(admin, "authors", input.previousAuthorId)
+      : Promise.resolve(null),
+  ]);
+  revalidatePublishedArticles(
+    [
+      {
+        slug: input.slug,
+        previousSlug: input.previousSlug,
+        categorySlug,
+        previousCategorySlug,
+        authorSlug: input.authorSlug,
+        previousAuthorSlug,
+        authorId: input.authorId,
+        previousAuthorId: input.previousAuthorId,
+      },
+    ],
+    "action",
+  );
 }
 
 export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftResult> {
@@ -230,7 +277,7 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
     if (input.id) {
       const { data: existing, error: existingError } = await admin
         .from("articles")
-        .select("id, slug, status, author_id, published_at, cover_image_url, dek")
+        .select("id, slug, status, author_id, category_id, published_at, cover_image_url, dek")
         .eq("id", input.id)
         .maybeSingle();
 
@@ -350,8 +397,16 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
       }
 
       const { data: authorRow } = await admin.from("authors").select("slug").eq("id", authorId).maybeSingle();
-      if (nextStatus === "published") {
-        revalidateStoryPaths(nextSlug, existing.slug, authorRow?.slug);
+      if (nextStatus === "published" || existing.status === "published") {
+        await revalidatePublishedStory(admin, {
+          slug: nextSlug,
+          previousSlug: existing.slug,
+          categoryId: input.categoryId,
+          previousCategoryId: existing.category_id,
+          authorId,
+          previousAuthorId: existing.author_id,
+          authorSlug: authorRow?.slug,
+        });
       }
 
       if (publishBlocked) {
@@ -454,7 +509,12 @@ export async function saveStudioDraft(input: SaveDraftInput): Promise<SaveDraftR
 
     const { data: authorRow } = await admin.from("authors").select("slug").eq("id", authorId).maybeSingle();
     if (nextStatus === "published") {
-      revalidateStoryPaths(data.slug, null, authorRow?.slug);
+      await revalidatePublishedStory(admin, {
+        slug: data.slug,
+        categoryId: input.categoryId,
+        authorId,
+        authorSlug: authorRow?.slug,
+      });
     }
 
     if (publishBlocked) {
@@ -543,9 +603,15 @@ export async function saveStudioAuthor(input: SaveAuthorInput): Promise<SaveAuth
       .eq("id", existing.id);
     if (written.error) return { ok: false, error: written.error.message };
 
+    revalidatePath("/");
     revalidatePath(`/author/${slug}`);
     if (existing.slug !== slug) revalidatePath(`/author/${existing.slug}`);
     revalidatePath("/sitemap.xml");
+    updateTag(authorProfileTag(slug));
+    if (existing.slug !== slug) updateTag(authorProfileTag(existing.slug));
+    updateTag(authorArticlesTag(existing.id));
+    updateTag(EDITORIAL_LISTINGS_TAG);
+    updateTag(SITEMAP_CACHE_TAG);
     return { ok: true, id: existing.id, slug };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save this byline.";
@@ -592,6 +658,8 @@ export async function saveSiteVerification(
     if (written.error) return { ok: false, error: written.error.message };
 
     updateTag(SITE_SETTINGS_CACHE_TAG);
+    // Verification tags render in the shared public layout, so this rare edit
+    // refreshes every cached page. Story publishes must not use this.
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (error) {
@@ -629,6 +697,7 @@ export async function saveGlobalHeadCode(input: {
     if (written.error) return { ok: false, error: written.error.message };
 
     updateTag(SITE_SETTINGS_CACHE_TAG);
+    // Executable head snippets are in the shared public layout.
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (error) {

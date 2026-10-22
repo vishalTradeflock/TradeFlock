@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { authorProfileReadCache, publishedAtCutoff } from "@/lib/cache";
 import { SEED_ARTICLES, SEED_AUTHORS } from "@/lib/data/seed";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { Author } from "@/lib/types";
@@ -15,7 +16,7 @@ export const getAuthorBySlug = cache(async (slug: string): Promise<Author | null
 
   if (isSupabaseConfigured()) {
     try {
-      const supabase = createPublicClient();
+      const supabase = createPublicClient(authorProfileReadCache(clean));
       const { data, error } = await supabase
         .from("authors")
         .select("id, name, slug, bio, title, avatar_url")
@@ -34,7 +35,7 @@ export async function listPublicAuthorSlugs() {
   if (isSupabaseConfigured()) {
     try {
       const supabase = createPublicClient();
-      const now = new Date().toISOString();
+      const now = publishedAtCutoff();
       const authorIds = new Set<string>();
       let from = 0;
       const pageSize = 1000;

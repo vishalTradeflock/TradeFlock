@@ -13,7 +13,7 @@ export const metadata: Metadata = publicPageMetadata({
   ogTitle: "Magazine Archive | TradeFlock USA",
 });
 
-export const revalidate = 120;
+export const revalidate = 3600;
 
 export default async function MagazineArchivePage() {
   const magazines = await getMagazines();

@@ -15,7 +15,7 @@ export const metadata: Metadata = publicPageMetadata({
   ogTitle: "Success Insights | TradeFlock USA",
 });
 
-export const revalidate = 120;
+export const revalidate = 3600;
 
 export default async function SuccessInsightsPage() {
   const insights = await getSuccessInsightsArchive();

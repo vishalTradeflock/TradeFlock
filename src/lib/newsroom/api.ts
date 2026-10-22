@@ -1,5 +1,6 @@
-import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import { revalidatePublishedArticles } from "@/lib/revalidate-public";
+import { embeddedSlug } from "@/lib/revalidate-paths";
 import { newsroomDb } from "@/lib/newsroom/db";
 import { can, deskForRole, roleForToken, type NewsroomRole, type Permission } from "@/lib/newsroom/roles";
 import { checkVerdict, DECISIONS, type Decision, type Scores } from "@/lib/newsroom/scorecard";
@@ -243,7 +244,11 @@ async function publishArticle(role: NewsroomRole, body: Json) {
   const articleId = str(body.article_id, 64);
   if (!articleId) return json(400, { error: "article_id is required" });
   const db = newsroomDb();
-  const { data: article } = await db.from("articles").select("id, slug, status").eq("id", articleId).maybeSingle();
+  const { data: article } = await db
+    .from("articles")
+    .select("id, slug, status, author_id, category:categories(slug), author:authors(slug)")
+    .eq("id", articleId)
+    .maybeSingle();
   if (!article) return json(404, { error: "article not found" });
   if (article.status === "published") return json(409, { error: "already published" });
   // The DB editorial gate decides. This route has no override and no force path.
@@ -263,8 +268,23 @@ async function publishArticle(role: NewsroomRole, body: Json) {
       }
     }
   }
-  revalidatePath("/", "layout");
-  revalidatePath(`/${article.slug}`);
+  const record = article as {
+    slug?: string | null;
+    author_id?: string | null;
+    category?: unknown;
+    author?: unknown;
+  };
+  revalidatePublishedArticles(
+    [
+      {
+        slug: record.slug ?? article.slug,
+        categorySlug: embeddedSlug(record.category),
+        authorSlug: embeddedSlug(record.author),
+        authorId: record.author_id,
+      },
+    ],
+    "handler",
+  );
   return json(200, { ok: true, role, article: data });
 }
 

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { cache } from "react";
+import { magazineReadCache } from "@/lib/cache";
 import { SEED_MAGAZINES } from "@/lib/data/seed-magazines";
 import { parseMagazineHonorees } from "@/lib/magazine-honorees";
 import { usableHttpUrl } from "@/lib/magazine-links";
@@ -87,7 +88,7 @@ async function queryMagazines(slug?: string): Promise<{
   data: MagazineRow[] | MagazineRow | null;
   failed: boolean;
 }> {
-  const supabase = createPublicClient();
+  const supabase = createPublicClient(magazineReadCache());
   const selects = ["*,honorees,cover_image,cover_image_url", "*,honorees", "*"];
 
   for (const select of selects) {

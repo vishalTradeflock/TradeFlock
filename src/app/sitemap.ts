@@ -9,6 +9,7 @@ import {
   type SitemapArticleRow,
   type SitemapMagazineRow,
 } from "@/lib/sitemap-entries";
+import { sitemapReadCache } from "@/lib/cache";
 import { PRODUCTION_ORIGIN } from "@/lib/site-url";
 import { createPublicClient } from "@/lib/supabase/public";
 import { isSupabaseConfigured } from "@/lib/utils";
@@ -137,7 +138,7 @@ async function fetchArticlePage(
  * extra queries that can run past the function limit.
  */
 async function paginatePublishedArticles(): Promise<{ rows: SitemapArticleRow[]; failed: boolean }> {
-  const supabase = createPublicClient({ timeoutMs: SITEMAP_QUERY_TIMEOUT_MS });
+  const supabase = createPublicClient({ timeoutMs: SITEMAP_QUERY_TIMEOUT_MS, ...sitemapReadCache() });
   const rows: SitemapArticleRow[] = [];
   let from = 0;
   let selectMode: SelectMode = "full";
@@ -184,7 +185,7 @@ async function publishedArticles(): Promise<SitemapArticleRow[]> {
 async function publishedMagazines(): Promise<SitemapMagazineRow[]> {
   if (!isSupabaseConfigured()) return seedMagazines();
   try {
-    const supabase = createPublicClient({ timeoutMs: SITEMAP_QUERY_TIMEOUT_MS });
+    const supabase = createPublicClient({ timeoutMs: SITEMAP_QUERY_TIMEOUT_MS, ...sitemapReadCache() });
     const full = await supabase
       .from("magazines")
       .select("slug, published_at, status")

@@ -80,6 +80,26 @@ describe("sitemap entry builder", () => {
     assert.equal(isUndefinedColumn({ code: "", message: "TypeError: fetch failed" }), false);
     assert.equal(isUndefinedColumn(null), false);
   });
+
+  it("stays byte-stable when the article set has not changed", () => {
+    const articles = [
+      { slug: ARTICLE, published_at: "2026-01-02T00:00:00.000Z", updated_at: "2026-02-01T00:00:00.000Z" },
+    ];
+    const magazines = [{ slug: MAGAZINE, published_at: "2026-07-06T10:00:00.000Z", status: "published" }];
+    const first = buildSitemap(articles, magazines);
+    const second = buildSitemap(articles, magazines);
+    assert.deepEqual(first, second);
+    const home = first.find((entry) => entry.url === PRODUCTION_ORIGIN);
+    assert.equal(home?.lastModified, "2026-07-06T10:00:00.000Z");
+  });
+
+  it("does not stamp invalid dates with the current time", () => {
+    const first = buildSitemap([{ slug: ARTICLE, updated_at: "not-a-date" }], []);
+    const second = buildSitemap([{ slug: ARTICLE, updated_at: "not-a-date" }], []);
+    assert.deepEqual(first, second);
+    assert.equal(first.find((entry) => entry.url === PRODUCTION_ORIGIN)?.lastModified, undefined);
+    assert.equal(first.find((entry) => entry.url === `${PRODUCTION_ORIGIN}/${ARTICLE}`)?.lastModified, undefined);
+  });
 });
 
 describe("sitemap route isolation", () => {

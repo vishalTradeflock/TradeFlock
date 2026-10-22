@@ -11,7 +11,7 @@ export const metadata: Metadata = publicPageMetadata({
   ogTitle: "Contact Us | TradeFlock USA",
 });
 
-export const revalidate = 120;
+export const revalidate = 86400;
 
 export default function ContactPage() {
   return (

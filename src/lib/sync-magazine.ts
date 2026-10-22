@@ -1,4 +1,5 @@
-import { revalidatePath } from "next/cache";
+import { MAGAZINES_CACHE_TAG } from "@/lib/cache";
+import { revalidatePublishedArticles } from "@/lib/revalidate-public";
 import { fetchLegacyHonorees } from "@/lib/legacy-honorees";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
@@ -49,7 +50,12 @@ async function resolveDeskIds(admin: ReturnType<typeof createAdminClient>) {
     authors?.[0];
 
   if (!category || !author) return null;
-  return { categoryId: category.id, authorId: author.id };
+  return {
+    categoryId: category.id,
+    authorId: author.id,
+    categorySlug: category.slug,
+    authorSlug: author.slug,
+  };
 }
 
 function toInsertRows(
@@ -174,8 +180,25 @@ export async function syncMagazineFromLegacy(slug: string): Promise<SyncMagazine
     })
     .eq("id", magazine.id);
 
-  revalidatePath(`/magazine/${magazine.slug}`);
-  revalidatePath(`/magazine/${magazine.slug}/read`);
+  const slugs = rows.flatMap((row) => (row.slug ? [row.slug] : []));
+  revalidatePublishedArticles(
+    slugs.map((slug) => ({
+      slug,
+      categorySlug: desk.categorySlug,
+      authorSlug: desk.authorSlug,
+      authorId: desk.authorId,
+    })),
+    "handler",
+    {
+      paths: [
+        "/magazine",
+        "/magazine/all",
+        `/magazine/${magazine.slug}`,
+        `/magazine/${magazine.slug}/read`,
+      ],
+      tags: [MAGAZINES_CACHE_TAG],
+    },
+  );
 
   return {
     ok: true,

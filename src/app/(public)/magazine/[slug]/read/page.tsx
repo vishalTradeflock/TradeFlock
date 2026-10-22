@@ -4,16 +4,15 @@ import { notFound } from "next/navigation";
 import { ExternalLink } from "lucide-react";
 import { IssueShareButton } from "@/components/IssueShareButton";
 import { MagazineFlipbookFrame } from "@/components/MagazineFlipbookFrame";
-import { magazineExternalHref, parseFlipbookPage } from "@/lib/magazine-links";
+import { magazineExternalHref } from "@/lib/magazine-links";
 import { getMagazineBySlug, getMagazines } from "@/lib/magazines";
 import { magazinePageMetadata } from "@/lib/seo";
 
-export const revalidate = 120;
+export const revalidate = 86400;
 export const dynamicParams = true;
 
 type MagazineReadPageProps = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ page?: string | string[] }>;
 };
 
 export async function generateStaticParams() {
@@ -46,16 +45,11 @@ export async function generateMetadata({
   });
 }
 
-export default async function MagazineReadPage({
-  params,
-  searchParams,
-}: MagazineReadPageProps) {
+export default async function MagazineReadPage({ params }: MagazineReadPageProps) {
   const { slug } = await params;
-  const query = await searchParams;
   const magazine = await getMagazineBySlug(slug);
   if (!magazine) notFound();
 
-  const page = parseFlipbookPage(query.page);
   const externalHref = magazineExternalHref(magazine);
 
   return (
@@ -90,7 +84,7 @@ export default async function MagazineReadPage({
       </header>
 
       <div className="flex h-[calc(100vh-3.5rem)] w-full items-center justify-center bg-neutral-900">
-        <MagazineFlipbookFrame magazine={magazine} queryPage={page} />
+        <MagazineFlipbookFrame magazine={magazine} />
       </div>
     </div>
   );

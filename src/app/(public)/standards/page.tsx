@@ -9,7 +9,7 @@ export const metadata: Metadata = publicPageMetadata({
   path: "/standards",
 });
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 const SECTIONS: { title: string; body: string[] }[] = [
   {

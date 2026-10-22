@@ -1,5 +1,5 @@
-import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import { revalidatePublishedArticles } from "@/lib/revalidate-public";
 import { canDeleteArticle } from "@/lib/studio/access";
 import { getStudioSession } from "@/lib/studio/session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -27,7 +27,7 @@ export async function DELETE(
   const admin = createAdminClient();
   const { data: article, error: loadError } = await admin
     .from("articles")
-    .select("id, slug, status, author_id")
+    .select("id, slug, status, author_id, category_id")
     .eq("id", id)
     .maybeSingle();
 
@@ -41,8 +41,25 @@ export async function DELETE(
   }
 
   if (article.status === "published") {
-    revalidatePath("/", "layout");
-    revalidatePath(`/${article.slug}`);
+    const [category, author] = await Promise.all([
+      article.category_id
+        ? admin.from("categories").select("slug").eq("id", article.category_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      article.author_id
+        ? admin.from("authors").select("slug").eq("id", article.author_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    revalidatePublishedArticles(
+      [
+        {
+          slug: article.slug,
+          categorySlug: category.data?.slug,
+          authorSlug: author.data?.slug,
+          authorId: article.author_id,
+        },
+      ],
+      "handler",
+    );
   }
 
   return NextResponse.json({ ok: true, id: article.id });

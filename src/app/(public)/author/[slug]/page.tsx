@@ -13,7 +13,7 @@ import {
 import { articlePath } from "@/lib/types";
 import { formatShortDate } from "@/lib/utils";
 
-export const revalidate = 120;
+export const revalidate = 3600;
 export const dynamicParams = true;
 
 type AuthorPageProps = {

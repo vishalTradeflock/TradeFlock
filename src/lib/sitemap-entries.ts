@@ -46,10 +46,11 @@ export function isUndefinedColumn(
   return /column/i.test(message) && /does not exist|schema cache/i.test(message);
 }
 
-function toIso(value?: string | Date | null) {
-  if (!value) return new Date().toISOString();
+function toIso(value?: string | Date | null): string | undefined {
+  if (value == null || value === "") return undefined;
   const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
 }
 
 function absoluteUrl(origin: string, path: string) {
@@ -67,27 +68,70 @@ export function isPublicSitemapUrl(origin: string, value: string) {
   }
 }
 
-function staticPages(origin: string): MetadataRoute.Sitemap {
-  const nowIso = toIso(new Date());
+function contentLastModified(
+  articles: SitemapArticleRow[] | null | undefined,
+  magazines: SitemapMagazineRow[] | null | undefined,
+): string | undefined {
+  let best = 0;
+  let iso: string | undefined;
+  const consider = (value?: string | null) => {
+    const next = toIso(value);
+    if (!next) return;
+    const time = Date.parse(next);
+    if (Number.isNaN(time) || time < best) return;
+    best = time;
+    iso = next;
+  };
+  for (const article of articles ?? []) {
+    if (!article) continue;
+    consider(article.updated_at || article.published_at);
+  }
+  for (const magazine of magazines ?? []) {
+    if (!magazine || magazine.status === "draft") continue;
+    consider(magazine.published_at);
+  }
+  return iso;
+}
+
+function withLastModified<T extends { url: string }>(
+  entry: T,
+  lastModified: string | undefined,
+): T & { lastModified?: string } {
+  return lastModified ? { ...entry, lastModified } : entry;
+}
+
+function staticPages(origin: string, lastModified?: string): MetadataRoute.Sitemap {
   return [
-    ...DAILY_PATHS.map((path) => ({
-      url: absoluteUrl(origin, path),
-      lastModified: nowIso,
-      changeFrequency: "daily" as const,
-      priority: path === "/" ? 1.0 : 0.8,
-    })),
-    ...WEEKLY_PATHS.map((path) => ({
-      url: absoluteUrl(origin, path),
-      lastModified: nowIso,
-      changeFrequency: "weekly" as const,
-      priority: 0.8,
-    })),
-    ...MONTHLY_PATHS.map((path) => ({
-      url: absoluteUrl(origin, path),
-      lastModified: nowIso,
-      changeFrequency: "monthly" as const,
-      priority: 0.4,
-    })),
+    ...DAILY_PATHS.map((path) =>
+      withLastModified(
+        {
+          url: absoluteUrl(origin, path),
+          changeFrequency: "daily" as const,
+          priority: path === "/" ? 1.0 : 0.8,
+        },
+        lastModified,
+      ),
+    ),
+    ...WEEKLY_PATHS.map((path) =>
+      withLastModified(
+        {
+          url: absoluteUrl(origin, path),
+          changeFrequency: "weekly" as const,
+          priority: 0.8,
+        },
+        lastModified,
+      ),
+    ),
+    ...MONTHLY_PATHS.map((path) =>
+      withLastModified(
+        {
+          url: absoluteUrl(origin, path),
+          changeFrequency: "monthly" as const,
+          priority: 0.4,
+        },
+        lastModified,
+      ),
+    ),
   ];
 }
 
@@ -104,9 +148,10 @@ function articleEntries(
       if (!path || path !== `/${article.slug}`) continue;
       const url = `${origin}/${article.slug}`;
       if (!isPublicSitemapUrl(origin, url)) continue;
+      const lastModified = toIso(article.updated_at || article.published_at);
       entries.push({
         url,
-        lastModified: toIso(article.updated_at || article.published_at),
+        ...(lastModified ? { lastModified } : {}),
         changeFrequency: "weekly",
         priority: 0.7,
       });
@@ -130,9 +175,10 @@ function magazineEntries(
       if (!MAGAZINE_SLUG.test(magazine.slug)) continue;
       const url = `${origin}/magazine/${magazine.slug}`;
       if (!isPublicSitemapUrl(origin, url)) continue;
+      const lastModified = toIso(magazine.published_at);
       entries.push({
         url,
-        lastModified: toIso(magazine.published_at),
+        ...(lastModified ? { lastModified } : {}),
         changeFrequency: "weekly",
         priority: 0.7,
       });
@@ -149,10 +195,12 @@ export function buildSitemap(
   origin = PRODUCTION_ORIGIN,
 ): MetadataRoute.Sitemap {
   try {
-    return [...staticPages(origin), ...articleEntries(origin, articles), ...magazineEntries(origin, magazines)].slice(
-      0,
-      SITEMAP_MAX_URLS,
-    );
+    const lastModified = contentLastModified(articles, magazines);
+    return [
+      ...staticPages(origin, lastModified),
+      ...articleEntries(origin, articles),
+      ...magazineEntries(origin, magazines),
+    ].slice(0, SITEMAP_MAX_URLS);
   } catch {
     return staticPages(origin);
   }

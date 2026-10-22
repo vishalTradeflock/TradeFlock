@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
-import { PAGE_REVALIDATE_SECONDS } from "@/lib/cache";
+import { ARTICLE_REVALIDATE_SECONDS } from "@/lib/cache";
 import { prepareGlobalHeadCode } from "@/lib/public-head";
 import { sanitizeVerificationToken } from "@/lib/studio/head-meta";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -104,7 +104,7 @@ const readSiteSettingsRow = unstable_cache(
     };
   },
   ["site-settings-row"],
-  { revalidate: PAGE_REVALIDATE_SECONDS, tags: [SITE_SETTINGS_CACHE_TAG] },
+  { revalidate: ARTICLE_REVALIDATE_SECONDS, tags: [SITE_SETTINGS_CACHE_TAG] },
 );
 
 const loadSiteSettingsRow = cache(readSiteSettingsRow);

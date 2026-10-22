@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import HeroCarousel from "@/components/HeroCarousel";
 import LatestScroller from "@/components/LatestScroller";
 import MiddleScroller from "@/components/MiddleScroller";
+import { RelativeTime } from "@/components/RelativeTime";
 import SafeArticleImage from "@/components/SafeArticleImage";
 import { LATEST_SCROLLER_LIMIT } from "@/lib/cache";
 import { DEEP_DIVE_SIZES, DEEP_DIVE_WIDTHS } from "@/lib/image-optimization";
@@ -11,7 +12,7 @@ import { getCategoryDesk, getHomeLayout, getSuccessInsightsArticles } from "@/li
 import { publicPageMetadata } from "@/lib/seo";
 import { isSuccessInsightsArticle, successInsightsOnly } from "@/lib/success-insights";
 import { NAV_CATEGORIES, articlePath, type ArticleWithRelations } from "@/lib/types";
-import { formatShortDate, formatTimeAgo } from "@/lib/utils";
+import { formatShortDate } from "@/lib/utils";
 
 const DESK_SCROLLER_LIMIT = 12;
 const MIDDLE_RAIL_LIMIT = 20;
@@ -45,7 +46,7 @@ function articlesForDesk(
   return [];
 }
 
-export const revalidate = 120;
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
   ...publicPageMetadata({
@@ -167,7 +168,7 @@ export default async function Home() {
                       {article.title}
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {formatTimeAgo(article.published_at)}
+                      <RelativeTime iso={article.published_at} />
                     </p>
                   </Link>
                 ))}

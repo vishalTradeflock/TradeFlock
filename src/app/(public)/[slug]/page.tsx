@@ -37,7 +37,7 @@ import {
 import { articlePath, sectionPath, RESERVED_ROOT_SLUGS } from "@/lib/types";
 import { aiDisclosureText } from "@/lib/newsroom/authorship";
 
-export const revalidate = 120;
+export const revalidate = 86400;
 export const dynamicParams = true;
 
 export async function generateStaticParams() {

@@ -9,7 +9,7 @@ export const metadata: Metadata = publicPageMetadata({
   path: "/markets",
 });
 
-export const revalidate = 120;
+export const revalidate = 3600;
 
 export default function MarketsPage() {
   return (

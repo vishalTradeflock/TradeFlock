@@ -289,7 +289,7 @@ describe("newsTickerArticles", () => {
     const source = readFileSync(root, "utf8");
     const match = source.match(/export const getBreakingArticles = cache\(async \(\) => \{[\s\S]*?\n\}\);/);
     assert.ok(match, "getBreakingArticles");
-    assert.match(match[0], /getEditorialArticles\(8\)/);
+    assert.match(match[0], /getEditorialArticles\(8,\s*"embedded"\)/);
     assert.doesNotMatch(match[0], /breaking:\s*true|is_breaking/);
   });
 });
