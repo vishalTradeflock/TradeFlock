@@ -34,6 +34,7 @@ import {
   newsArticleUrl,
   storyShareImage,
 } from "@/lib/seo";
+import { isRoutableArticleSlug } from "@/lib/public-slug";
 import { articlePath, sectionPath, RESERVED_ROOT_SLUGS } from "@/lib/types";
 
 export const revalidate = 86400;
@@ -53,6 +54,9 @@ type ArticlePageProps = {
 
 async function loadPublishedArticleOrRedirect(slug: string) {
   const requested = normalizeArticleSlug(slug);
+  if (!isRoutableArticleSlug(requested)) {
+    notFound();
+  }
   if (RESERVED_ROOT_SLUGS.has(requested.toLowerCase())) {
     return null;
   }

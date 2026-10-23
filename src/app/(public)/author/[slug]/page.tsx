@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import { JsonLd } from "@/components/JsonLd";
 import { getPublishedArticlesByAuthorId } from "@/lib/articles";
 import { authorPath, getAuthorBySlug } from "@/lib/authors";
+import { PERSONA_AUTHOR_SLUGS } from "@/lib/newsroom/authorship";
 import {
   authorPersonStructuredData,
   publicPageMetadata,
@@ -14,11 +15,10 @@ import { articlePath } from "@/lib/types";
 import { formatShortDate } from "@/lib/utils";
 
 export const revalidate = 86400;
-export const dynamicParams = true;
+export const dynamicParams = false;
 
-/** Empty so the first visit is cached for `revalidate`, instead of rendering every request. */
 export function generateStaticParams() {
-  return [];
+  return [...PERSONA_AUTHOR_SLUGS].map((slug) => ({ slug }));
 }
 
 type AuthorPageProps = {

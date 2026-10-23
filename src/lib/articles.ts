@@ -17,6 +17,7 @@ import {
   SUCCESS_INSIGHTS_SLUG,
   withoutSuccessInsights,
 } from "@/lib/success-insights";
+import { articleCacheTag } from "@/lib/sitemap-tag";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { ArticleListCard, ArticleWithRelations, Author, Category } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/utils";
@@ -375,12 +376,17 @@ export const getPublishedArticlesByAuthorId = cache(async (authorId: string, lim
   return withListCovers(rows);
 });
 
+function publicArticleClient(slug: string) {
+  const tag = articleCacheTag(slug);
+  return createPublicClient(tag ? { tags: [tag] } : undefined);
+}
+
 export async function resolvePublishedSlugRedirect(oldSlug: string) {
   const clean = exactRequestedArticleSlug(oldSlug);
   if (!clean || !isSupabaseConfigured()) return null;
 
   try {
-    const supabase = createPublicClient();
+    const supabase = publicArticleClient(clean);
     const { data, error } = await supabase
       .from("article_slug_redirects")
       .select("article_id")
@@ -790,7 +796,7 @@ async function fetchArticleBySlugFromSupabase(cleanSlug: string) {
   if (!isSupabaseConfigured()) return null;
 
   try {
-    const supabase = createPublicClient();
+    const supabase = publicArticleClient(cleanSlug);
     const now = publishedAtCutoff();
 
     const exact = await supabase

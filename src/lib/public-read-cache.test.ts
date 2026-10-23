@@ -9,6 +9,9 @@ import {
   PUBLISHED_AT_BUCKET_SECONDS,
   publishedAtCutoff,
 } from "./cache.ts";
+import { articleCacheTag } from "./sitemap-tag.ts";
+import { isRoutableArticleSlug, isRoutableMagazineSlug } from "./public-slug.ts";
+import { PERSONA_AUTHOR_SLUGS } from "./newsroom/authorship.ts";
 
 test("publishedAtCutoff stays stable inside one bucket and includes now", () => {
   assert.equal(PAGE_REVALIDATE_SECONDS, 86400);
@@ -52,7 +55,65 @@ test("public pages use the once-a-day backstop", () => {
   assert.match(sitemap, /Vercel-Cache-Tag/);
   assert.match(sitemap, /Vercel-CDN-Cache-Control/);
   const author = readFileSync(new URL("../app/(public)/author/[slug]/page.tsx", import.meta.url), "utf8");
+  assert.match(author, /export const dynamicParams = false/);
+  assert.match(author, /PERSONA_AUTHOR_SLUGS/);
   assert.match(author, /export function generateStaticParams\(\)/);
+  assert.doesNotMatch(author, /export const dynamicParams = true/);
+
+  const article = readFileSync(new URL("../app/(public)/[slug]/page.tsx", import.meta.url), "utf8");
+  const loaderStart = article.indexOf("async function loadPublishedArticleOrRedirect");
+  const loaderEnd = article.indexOf("export async function generateMetadata");
+  const loader = article.slice(loaderStart, loaderEnd);
+  const guardAt = loader.indexOf("isRoutableArticleSlug");
+  const redirectAt = loader.indexOf("resolvePublishedSlugRedirect");
+  assert.ok(guardAt >= 0 && redirectAt > guardAt);
+  assert.match(loader, /if \(!isRoutableArticleSlug\(requested\)\) \{\s*notFound\(\);/);
+
+  for (const file of [
+    "../app/(public)/magazine/[slug]/page.tsx",
+    "../app/(public)/magazine/[slug]/read/page.tsx",
+    "../app/api/magazine/[slug]/download/route.ts",
+  ]) {
+    const source = readFileSync(new URL(file, import.meta.url), "utf8");
+    const guard = source.indexOf("isRoutableMagazineSlug(slug)");
+    const read = source.indexOf("getMagazineBySlug(slug)");
+    assert.ok(guard >= 0 && read > guard, file);
+  }
+});
+
+test("junk URLs are rejected before a database read", () => {
+  assert.equal(isRoutableArticleSlug("apple-announces-new-ai-strategy"), true);
+  assert.equal(isRoutableArticleSlug("40-under-40-usa-2025"), true);
+  assert.equal(
+    isRoutableArticleSlug("american-airlines-new-coo-inherits-a-pilot-training-bottleneck-into-the-"),
+    true,
+  );
+  assert.equal(
+    isRoutableArticleSlug("networking-silicon-not-gpus-is-the-hidden-bill-in-every--ipcqqu"),
+    true,
+  );
+  assert.equal(isRoutableArticleSlug("Apple-Announces-New-AI-Strategy"), true);
+  assert.equal(isRoutableArticleSlug("wp-login.php"), false);
+  assert.equal(isRoutableArticleSlug(".env"), false);
+  assert.equal(isRoutableArticleSlug("xmlrpc.php"), false);
+  assert.equal(isRoutableArticleSlug("foo/bar"), false);
+  assert.equal(isRoutableArticleSlug(""), false);
+  assert.equal(isRoutableArticleSlug("a".repeat(161)), false);
+  assert.equal(isRoutableMagazineSlug("chips-power-new-industrial-map"), true);
+  assert.equal(isRoutableMagazineSlug("wp-login.php"), false);
+  assert.equal(isRoutableMagazineSlug(".env"), false);
+  assert.equal(isRoutableMagazineSlug("xmlrpc.php"), false);
+});
+
+test("article cache tags stay on one story", () => {
+  assert.equal(articleCacheTag("Apple-Announces-New-AI-Strategy"), "article:apple-announces-new-ai-strategy");
+  assert.equal(articleCacheTag("/old-slug/"), "article:old-slug");
+  assert.equal(articleCacheTag(""), null);
+  assert.equal(articleCacheTag("foo/bar"), null);
+  assert.equal(articleCacheTag("a".repeat(300)), null);
+  for (const slug of PERSONA_AUTHOR_SLUGS) {
+    assert.equal(/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug), true, slug);
+  }
 });
 
 test("editorial list pad replaces the old +80 over-fetch", () => {
