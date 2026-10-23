@@ -139,12 +139,18 @@ describe("sitemap route isolation", () => {
   it("expires the sitemap tag when a story is published", () => {
     const helper = readFileSync(new URL("./sitemap-cache.ts", import.meta.url), "utf8");
     const client = readFileSync(new URL("./supabase/public.ts", import.meta.url), "utf8");
+    const articles = readFileSync(new URL("./articles.ts", import.meta.url), "utf8");
     assert.match(helper, /revalidateTag\(SITEMAP_CACHE_TAG, \{ expire: 0 \}\)/);
-    assert.match(helper, /revalidateTag\(PUBLISHED_PAGES_CACHE_TAG, \{ expire: 0 \}\)/);
+    assert.doesNotMatch(helper, /PUBLISHED_PAGES_CACHE_TAG|published-pages/);
+    assert.match(helper, /articleCacheTag/);
+    assert.match(helper, /revalidateTag\(tag, \{ expire: 0 \}\)/);
     assert.match(helper, /revalidatePath\("\/sitemap\.xml"\)/);
     assert.match(helper, /publishedRefreshPaths/);
-    assert.match(client, /PUBLISHED_PAGES_CACHE_TAG/);
+    assert.doesNotMatch(client, /PUBLISHED_PAGES_CACHE_TAG|published-pages/);
     assert.match(client, /revalidate: PAGE_REVALIDATE_SECONDS/);
+    assert.match(articles, /articleCacheTag\(slug\)/);
+    assert.match(articles, /publicArticleClient\(cleanSlug\)/);
+    assert.match(articles, /publicArticleClient\(clean\)/);
     for (const file of [
       "../lib/newsroom/api.ts",
       "../app/studio/actions.ts",

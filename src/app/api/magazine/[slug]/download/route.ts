@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { magazineDownloadFilename } from "@/lib/magazine-download";
 import { getMagazineBySlug } from "@/lib/magazines";
 import { isAllowedPdfHost } from "@/lib/pdf-proxy";
+import { isRoutableMagazineSlug } from "@/lib/public-slug";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -28,6 +29,9 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
+  if (!isRoutableMagazineSlug(slug)) {
+    return new NextResponse("Magazine PDF not found", { status: 404 });
+  }
   const magazine = await getMagazineBySlug(slug);
   if (!magazine?.pdf_url) {
     return new NextResponse("Magazine PDF not found", { status: 404 });

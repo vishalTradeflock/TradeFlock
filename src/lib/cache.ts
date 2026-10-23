@@ -1,6 +1,6 @@
 /**
  * Once-a-day backstop for public pages and the cookie-free Supabase fetch cache.
- * Publish paths expire `published-pages` immediately; this is only the fallback.
+ * Publish paths revalidate the specific page immediately; this is only the fallback.
  */
 export const PAGE_REVALIDATE_SECONDS = 86400;
 

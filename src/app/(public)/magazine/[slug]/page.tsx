@@ -7,6 +7,7 @@ import { JsonLd } from "@/components/JsonLd";
 import { getArticlesByMagazineId } from "@/lib/articles";
 import { directoryHonoreesForIssue } from "@/lib/magazine-honorees";
 import { getMagazineBySlug, getMagazines } from "@/lib/magazines";
+import { isRoutableMagazineSlug } from "@/lib/public-slug";
 import { magazinePageMetadata, magazineStructuredData, magazineIssueUrl } from "@/lib/seo";
 
 export const revalidate = 86400;
@@ -25,6 +26,7 @@ export async function generateMetadata({
   params,
 }: MagazineOverviewPageProps): Promise<Metadata> {
   const { slug } = await params;
+  if (!isRoutableMagazineSlug(slug)) notFound();
   const magazine = await getMagazineBySlug(slug);
   if (!magazine) {
     return { title: "Edition not found" };
@@ -50,6 +52,7 @@ export default async function MagazineOverviewPage({
   params,
 }: MagazineOverviewPageProps) {
   const { slug } = await params;
+  if (!isRoutableMagazineSlug(slug)) notFound();
   const magazine = await getMagazineBySlug(slug);
   if (!magazine) notFound();
 

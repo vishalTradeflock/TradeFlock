@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { PAGE_REVALIDATE_SECONDS } from "@/lib/cache";
-import { PUBLISHED_PAGES_CACHE_TAG, SITEMAP_CACHE_TAG } from "@/lib/sitemap-tag";
+import { SITEMAP_CACHE_TAG } from "@/lib/sitemap-tag";
 import type { Database } from "@/lib/supabase/database.types";
 
 type PublicClientOptions = {
@@ -11,15 +11,17 @@ type PublicClientOptions = {
    */
   timeoutMs?: number;
   /**
-   * `page` (default) shares the daily public Data Cache under
-   * `PUBLISHED_PAGES_CACHE_TAG`. Publish paths expire that tag; the
-   * revalidate window is only the once-a-day backstop.
+   * `page` (default) caches for the once-a-day backstop. Pass `tags` for a
+   * single story (`article:<slug>`). Do not attach a tag shared by every
+   * public page: expiring it rewrites the archive.
    * `sitemap` uses the same one-day window under `SITEMAP_CACHE_TAG`.
    * Publish expires that tag immediately (`expire: 0`). The window is the
    * backstop so a missed publish still refetches. The revalidate value has
    * to be set: a route handler treats a missing cache mode as uncached.
    */
   cache?: "page" | "sitemap";
+  /** Extra Data Cache tags for a page read. Ignored for the sitemap client. */
+  tags?: readonly string[];
 };
 
 /**
@@ -37,6 +39,7 @@ export function createPublicClient(options?: PublicClientOptions) {
   const timeoutMs = options?.timeoutMs;
   const timed = typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs > 0;
   const sitemapCache = options?.cache === "sitemap";
+  const pageTags = (options?.tags ?? []).filter((tag) => tag.length > 0 && tag.length <= 256);
 
   return createClient<Database>(url, anonKey, {
     auth: {
@@ -48,19 +51,19 @@ export function createPublicClient(options?: PublicClientOptions) {
       fetch: (input, init) =>
         fetch(input, {
           ...init,
-          ...(sitemapCache
+          next: sitemapCache
             ? {
-                next: {
-                  revalidate: PAGE_REVALIDATE_SECONDS,
-                  tags: [SITEMAP_CACHE_TAG],
-                },
+                revalidate: PAGE_REVALIDATE_SECONDS,
+                tags: [SITEMAP_CACHE_TAG],
               }
-            : {
-                next: {
+            : pageTags.length
+              ? {
                   revalidate: PAGE_REVALIDATE_SECONDS,
-                  tags: [PUBLISHED_PAGES_CACHE_TAG],
+                  tags: [...pageTags],
+                }
+              : {
+                  revalidate: PAGE_REVALIDATE_SECONDS,
                 },
-              }),
         }),
     },
   });

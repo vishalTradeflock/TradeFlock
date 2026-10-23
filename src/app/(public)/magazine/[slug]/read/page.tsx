@@ -6,6 +6,7 @@ import { IssueShareButton } from "@/components/IssueShareButton";
 import { MagazineFlipbookFrame } from "@/components/MagazineFlipbookFrame";
 import { magazineExternalHref, parseFlipbookPage } from "@/lib/magazine-links";
 import { getMagazineBySlug, getMagazines } from "@/lib/magazines";
+import { isRoutableMagazineSlug } from "@/lib/public-slug";
 import { magazinePageMetadata } from "@/lib/seo";
 
 export const revalidate = 86400;
@@ -25,6 +26,7 @@ export async function generateMetadata({
   params,
 }: MagazineReadPageProps): Promise<Metadata> {
   const { slug } = await params;
+  if (!isRoutableMagazineSlug(slug)) notFound();
   const magazine = await getMagazineBySlug(slug);
   if (!magazine) {
     return { title: "Edition not found" };
@@ -51,6 +53,7 @@ export default async function MagazineReadPage({
   searchParams,
 }: MagazineReadPageProps) {
   const { slug } = await params;
+  if (!isRoutableMagazineSlug(slug)) notFound();
   const query = await searchParams;
   const magazine = await getMagazineBySlug(slug);
   if (!magazine) notFound();
